@@ -1,15 +1,21 @@
 package com.lazyapps.wifianalyzer.ui.screens.channel
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -22,70 +28,98 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.lazyapps.wifianalyzer.R
-import com.lazyapps.wifianalyzer.model.ChannelUsage
+import com.lazyapps.wifianalyzer.model.ChannelOccupancy
+import com.lazyapps.wifianalyzer.model.ScanState
 import com.lazyapps.wifianalyzer.model.WifiBand
-import com.lazyapps.wifianalyzer.sampledata.SampleData
 import com.lazyapps.wifianalyzer.ui.components.BandSelector
-import com.lazyapps.wifianalyzer.ui.components.RegisteredBadge
+import com.lazyapps.wifianalyzer.ui.components.ScanStatusCard
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
+import com.lazyapps.wifianalyzer.ui.scan.ScanUiState
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 import com.lazyapps.wifianalyzer.ui.theme.ThemeMode
 import com.lazyapps.wifianalyzer.ui.theme.WifiAnalyzerTheme
 
 @Composable
-fun ChannelScreen() {
+fun ChannelScreen(
+    state: ScanUiState,
+    onRefresh: () -> Unit,
+    onRequestPermission: () -> Unit,
+    onOpenSettings: (ScanState) -> Unit,
+    onSelectAccessPoint: (String) -> Unit,
+) {
     var band by remember { mutableStateOf(WifiBand.BAND_24) }
+    val occupancy = state.occupancyFor(band)
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = AppSpacing.xLarge),
+        contentPadding = PaddingValues(bottom = AppSpacing.xLarge),
         verticalArrangement = Arrangement.spacedBy(AppSpacing.medium),
     ) {
-        item { ScreenHeader(stringResource(R.string.screen_channel)) }
+        item {
+            ScreenHeader(stringResource(R.string.screen_channel), stringResource(R.string.estimated_congestion)) {
+                IconButton(onClick = onRefresh) { Icon(Icons.Rounded.Refresh, stringResource(R.string.refresh_scan)) }
+            }
+        }
         item { BandSelector(band, { band = it }, Modifier.padding(horizontal = AppSpacing.large)) }
         item {
+            ScanStatusCard(
+                state.scanState, state.accessPoints.isNotEmpty(), onRequestPermission, onOpenSettings, onRefresh,
+                Modifier.padding(horizontal = AppSpacing.large),
+            )
+        }
+        item {
             Row(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(stringResource(R.string.occupancy_legend_free), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                Text("${stringResource(R.string.estimated_congestion)}: ${stringResource(R.string.occupancy_legend_free)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 Text(stringResource(R.string.occupancy_legend_busy), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
             }
         }
-        items(SampleData.channelUsage, key = { it.channel }) { usage ->
-            ChannelCard(usage, Modifier.padding(horizontal = AppSpacing.large))
+        if (occupancy.isEmpty() && state.scanState in setOf(ScanState.READY, ScanState.THROTTLED, ScanState.SCANNING)) {
+            item { Text(stringResource(R.string.band_empty, band.label), Modifier.padding(horizontal = AppSpacing.large), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        items(occupancy, key = { it.channel }) { usage ->
+            ChannelCard(usage, onSelectAccessPoint, Modifier.padding(horizontal = AppSpacing.large))
         }
     }
 }
 
 @Composable
-private fun ChannelCard(usage: ChannelUsage, modifier: Modifier = Modifier) {
+private fun ChannelCard(usage: ChannelOccupancy, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
     val barColor = when {
-        usage.occupancy >= .8f -> MaterialTheme.colorScheme.error
-        usage.occupancy >= .55f -> MaterialTheme.colorScheme.tertiary
+        usage.estimatedCongestion >= .8f -> MaterialTheme.colorScheme.error
+        usage.estimatedCongestion >= .55f -> MaterialTheme.colorScheme.tertiary
         else -> MaterialTheme.colorScheme.primary
     }
     Card(modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
         Column(Modifier.padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                 Text(stringResource(R.string.channel_format, usage.channel), style = MaterialTheme.typography.titleLarge)
-                Text("  ${stringResource(R.string.frequency_format, usage.frequencyMhz)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                Text(stringResource(R.string.occupancy_percent, (usage.occupancy * 100).toInt()), color = barColor, fontWeight = FontWeight.Bold)
+                Text("  ${usage.frequencyMhz} MHz", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Text("${stringResource(R.string.estimated_congestion)} ${(usage.estimatedCongestion * 100).toInt()}%", color = barColor, fontWeight = FontWeight.Bold)
             }
             LinearProgressIndicator(
-                progress = { usage.occupancy },
+                progress = { usage.estimatedCongestion },
                 modifier = Modifier.fillMaxWidth(),
                 color = barColor,
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 gapSize = 0.dp,
                 drawStopIndicator = {},
             )
-            Text(stringResource(R.string.network_count, usage.networks.size), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            usage.networks.forEach { network ->
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-                    Text(network.ssid, modifier = Modifier.weight(1f), maxLines = 1, style = MaterialTheme.typography.bodyMedium)
-                    if (network.registered) RegisteredBadge()
-                    Text(stringResource(R.string.signal_dbm, network.dbm), style = MaterialTheme.typography.labelMedium)
-                    Text(network.distance, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.network_count, usage.accessPoints.size), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            usage.accessPoints.forEach { accessPoint ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { onSelect(accessPoint.bssid) }.padding(vertical = AppSpacing.small),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.small),
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(accessPoint.ssid, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                        Text(accessPoint.bssid, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text("${accessPoint.rssi} dBm", style = MaterialTheme.typography.labelMedium)
+                    Text("推定 ${accessPoint.distanceRange.label}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -94,4 +128,6 @@ private fun ChannelCard(usage: ChannelUsage, modifier: Modifier = Modifier) {
 
 @Preview(showBackground = true, backgroundColor = 0xFF07111F)
 @Composable
-private fun ChannelPreview() = WifiAnalyzerTheme(mode = ThemeMode.DARK) { ChannelScreen() }
+private fun ChannelPreview() = WifiAnalyzerTheme(mode = ThemeMode.DARK) {
+    ChannelScreen(ScanUiState(scanState = ScanState.EMPTY), {}, {}, {}, {})
+}
