@@ -74,6 +74,10 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
         )
     }
 
+    fun startNew(input: DeviceInput) {
+        _uiState.value = _uiState.value.copy(draft = input, errorMessage = null)
+    }
+
     fun startEdit(deviceId: Long) {
         val device = _uiState.value.devices.firstOrNull { it.id == deviceId } ?: return
         _uiState.value = _uiState.value.copy(

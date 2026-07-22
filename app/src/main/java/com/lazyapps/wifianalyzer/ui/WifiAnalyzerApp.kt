@@ -44,12 +44,14 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.lazyapps.wifianalyzer.ui.navigation.AppDestination
 import com.lazyapps.wifianalyzer.ui.navigation.REGISTRATION_ROUTE
+import com.lazyapps.wifianalyzer.ui.navigation.OCR_REGISTRATION_ROUTE
 import com.lazyapps.wifianalyzer.ui.navigation.DEVICE_DETAIL_ROUTE
 import com.lazyapps.wifianalyzer.ui.navigation.deviceDetailRoute
 import com.lazyapps.wifianalyzer.ui.screens.channel.ChannelScreen
 import com.lazyapps.wifianalyzer.ui.screens.devices.DevicesScreen
 import com.lazyapps.wifianalyzer.ui.screens.devices.DeviceRegistrationScreen
 import com.lazyapps.wifianalyzer.ui.screens.devices.DeviceDetailScreen
+import com.lazyapps.wifianalyzer.ui.screens.devices.OcrRegistrationScreen
 import com.lazyapps.wifianalyzer.ui.screens.home.HomeScreen
 import com.lazyapps.wifianalyzer.ui.screens.monitor.MonitorScreen
 import com.lazyapps.wifianalyzer.ui.screens.settings.SettingsScreen
@@ -204,6 +206,7 @@ fun WifiAnalyzerApp(
                         groups = registryState.groups,
                         errorMessage = registryState.errorMessage,
                         onAddDevice = { registryViewModel.startNew(); navController.navigate(REGISTRATION_ROUTE) },
+                        onScanLabel = { navController.navigate(OCR_REGISTRATION_ROUTE) },
                         onOpenDevice = { navController.navigate(deviceDetailRoute(it)) },
                         onDeleteDevice = registryViewModel::deleteDevice,
                         onCreateGroup = registryViewModel::createGroup,
@@ -232,6 +235,24 @@ fun WifiAnalyzerApp(
                                 navController.navigate(deviceDetailRoute(id)) {
                                     popUpTo(REGISTRATION_ROUTE) { inclusive = true }
                                 }
+                            }
+                        },
+                    )
+                }
+                composable(OCR_REGISTRATION_ROUTE) {
+                    OcrRegistrationScreen(
+                        nearby = enrichedScanState.accessPoints,
+                        onBack = { navController.popBackStack() },
+                        onUseDraft = { draft ->
+                            registryViewModel.startNew(draft)
+                            navController.navigate(REGISTRATION_ROUTE) {
+                                popUpTo(OCR_REGISTRATION_ROUTE) { inclusive = true }
+                            }
+                        },
+                        onManual = {
+                            registryViewModel.startNew()
+                            navController.navigate(REGISTRATION_ROUTE) {
+                                popUpTo(OCR_REGISTRATION_ROUTE) { inclusive = true }
                             }
                         },
                     )
