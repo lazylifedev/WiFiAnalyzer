@@ -24,12 +24,18 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 data class RegistryUiState(
+    val currentWorkspaceId: Long = 0,
     val devices: List<RegisteredDevice> = emptyList(),
     val groups: List<DeviceGroup> = emptyList(),
     val draft: DeviceInput = DeviceInput(displayName = "", bssids = listOf(DeviceBssidInput("", "2.4 GHz"))),
     val errorMessage: String? = null,
     val busy: Boolean = false,
     val editBaseline: DeviceInput? = null,
+    val formGroups: List<DeviceGroup> = emptyList(),
+    val groupCreateDialogVisible: Boolean = false,
+    val newGroupName: String = "",
+    val groupNameValidationError: String? = null,
+    val isCreatingGroup: Boolean = false,
 )
 
 class RegistryViewModel(application: Application) : AndroidViewModel(application) {
@@ -43,7 +49,13 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             workspaceRepository.ensureUsable()
             repository.snapshot.collectLatest { snapshot ->
-                _uiState.value = _uiState.value.copy(devices = snapshot.devices, groups = snapshot.groups)
+                val state = _uiState.value
+                _uiState.value = state.copy(
+                    currentWorkspaceId = snapshot.workspaceId,
+                    devices = snapshot.devices,
+                    groups = snapshot.groups,
+                    formGroups = if (state.draft.workspaceId == snapshot.workspaceId) snapshot.groups else state.formGroups,
+                )
             }
         }
     }
@@ -67,10 +79,10 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun startNew(accessPoint: WifiAccessPoint? = null) {
-        val workspaceId = _uiState.value.devices.firstOrNull()?.workspaceId ?: _uiState.value.groups.firstOrNull()?.workspaceId ?: 0L
+        val workspaceId = _uiState.value.currentWorkspaceId
         _uiState.value = _uiState.value.copy(
             draft = if (accessPoint == null) {
-                DeviceInput(displayName = "", bssids = listOf(DeviceBssidInput("", "2.4 GHz")))
+                DeviceInput(displayName = "", bssids = listOf(DeviceBssidInput("", "2.4 GHz")), workspaceId = workspaceId)
             } else {
                 DeviceInput(
                     displayName = accessPoint.ssid.takeUnless { it == "非公開ネットワーク" }.orEmpty(),
@@ -83,14 +95,17 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
             },
             errorMessage = null,
             editBaseline = null,
+            formGroups = _uiState.value.groups,
         )
     }
 
     fun startNew(input: DeviceInput) {
+        val pinnedInput = input.copy(workspaceId = input.workspaceId.takeIf { it != 0L } ?: _uiState.value.currentWorkspaceId)
         _uiState.value = _uiState.value.copy(
-            draft = input,
+            draft = pinnedInput,
             errorMessage = null,
-            editBaseline = _uiState.value.editBaseline?.takeIf { it.id == input.id && input.id != 0L },
+            editBaseline = _uiState.value.editBaseline?.takeIf { it.id == pinnedInput.id && pinnedInput.id != 0L },
+            formGroups = _uiState.value.groups.takeIf { pinnedInput.workspaceId == _uiState.value.currentWorkspaceId } ?: _uiState.value.formGroups,
         )
     }
 
@@ -115,6 +130,7 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
             draft = draft,
             editBaseline = draft,
             errorMessage = null,
+            formGroups = _uiState.value.groups.takeIf { device.workspaceId == _uiState.value.currentWorkspaceId } ?: emptyList(),
         )
     }
 
@@ -135,6 +151,25 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun createGroup(name: String) = launchAction { repository.createGroup(name) }
+    fun showGroupCreateDialog() { _uiState.value = _uiState.value.copy(groupCreateDialogVisible = true, newGroupName = "", groupNameValidationError = null) }
+    fun hideGroupCreateDialog() { if (!_uiState.value.isCreatingGroup) _uiState.value = _uiState.value.copy(groupCreateDialogVisible = false, groupNameValidationError = null) }
+    fun updateNewGroupName(name: String) { _uiState.value = _uiState.value.copy(newGroupName = name, groupNameValidationError = null) }
+    fun createGroupForDraft(onCreated: (Long) -> Unit) {
+        val state = _uiState.value
+        if (state.isCreatingGroup) return
+        _uiState.value = state.copy(isCreatingGroup = true, groupNameValidationError = null)
+        viewModelScope.launch {
+            try {
+                val id = repository.createGroup(state.draft.workspaceId, state.newGroupName)
+                val normalizedName = java.text.Normalizer.normalize(state.newGroupName.trim(), java.text.Normalizer.Form.NFKC)
+                val group = DeviceGroup(id, normalizedName, (state.formGroups.maxOfOrNull { it.sortOrder } ?: -1) + 1, state.draft.workspaceId)
+                _uiState.value = _uiState.value.copy(formGroups = _uiState.value.formGroups + group, groupCreateDialogVisible = false, newGroupName = "", isCreatingGroup = false)
+                onCreated(id)
+            } catch (error: Exception) {
+                _uiState.value = _uiState.value.copy(isCreatingGroup = false, groupNameValidationError = error.message ?: "グループを作成できませんでした")
+            }
+        }
+    }
     fun renameGroup(group: DeviceGroup, name: String) = launchAction { repository.renameGroup(group, name) }
     fun deleteGroup(group: DeviceGroup) = launchAction { repository.deleteGroup(group) }
     fun moveGroup(group: DeviceGroup, direction: Int) = launchAction { repository.moveGroup(group, direction) }

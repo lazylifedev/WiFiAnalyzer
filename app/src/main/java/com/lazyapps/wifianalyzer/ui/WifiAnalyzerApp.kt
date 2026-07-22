@@ -257,7 +257,7 @@ fun WifiAnalyzerApp(
                 composable(REGISTRATION_ROUTE) {
                     DeviceRegistrationScreen(
                         initial = registryState.draft,
-                        groups = registryState.groups,
+                        groups = registryState.formGroups,
                         errorMessage = registryState.errorMessage,
                         busy = registryState.busy,
                         onBack = { navController.popBackStack() },
@@ -269,6 +269,14 @@ fun WifiAnalyzerApp(
                             }
                         },
                         baseline = registryState.editBaseline,
+                        groupCreateDialogVisible = registryState.groupCreateDialogVisible,
+                        newGroupName = registryState.newGroupName,
+                        groupNameValidationError = registryState.groupNameValidationError,
+                        isCreatingGroup = registryState.isCreatingGroup,
+                        onShowGroupCreate = registryViewModel::showGroupCreateDialog,
+                        onDismissGroupCreate = registryViewModel::hideGroupCreateDialog,
+                        onNewGroupNameChange = registryViewModel::updateNewGroupName,
+                        onCreateGroup = registryViewModel::createGroupForDraft,
                     )
                 }
                 composable(OCR_REGISTRATION_ROUTE) {

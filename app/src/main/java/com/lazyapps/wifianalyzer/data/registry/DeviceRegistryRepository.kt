@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
 
 data class RegistrySnapshot(
+    val workspaceId: Long = 0,
     val devices: List<RegisteredDevice> = emptyList(),
     val groups: List<DeviceGroup> = emptyList(),
 )
@@ -35,6 +36,7 @@ class DeviceRegistryRepository(private val context: Context, private val databas
         val groupMap = groups.associateBy { it.id }
         val bssidMap = bssids.groupBy { it.deviceId }
         RegistrySnapshot(
+            workspaceId = workspace.selectedId,
             devices = devices.map { entity ->
                 RegisteredDevice(
                     id = entity.id,
@@ -64,7 +66,7 @@ class DeviceRegistryRepository(private val context: Context, private val databas
     suspend fun save(input: DeviceInput): Long = database.withTransaction {
         val selectedWorkspaceId = workspaceRepository.snapshot.first().selectedId
         val workspaceId = input.workspaceId.takeIf { it != 0L } ?: selectedWorkspaceId
-        if (workspaceId != selectedWorkspaceId || dao.getWorkspace(workspaceId) == null) throw RegistryValidationException("対象ワークスペースが変更または削除されました")
+        if (dao.getWorkspace(workspaceId) == null) throw RegistryValidationException("対象ワークスペースが削除されました")
         val displayName = input.displayName.trim()
         if (displayName.isBlank()) throw RegistryValidationException("機器名を入力してください")
         if (input.bssids.isEmpty()) throw RegistryValidationException("BSSIDを1件以上入力してください")
@@ -78,6 +80,9 @@ class DeviceRegistryRepository(private val context: Context, private val databas
         }
         val conflicts = dao.findBssids(workspaceId, normalized.map { it.bssid }).filter { it.deviceId != input.id }
         if (conflicts.isNotEmpty()) throw RegistryValidationException("BSSID ${conflicts.first().bssid} は別の機器に登録済みです")
+        if (input.groupId != null && snapshotOnceGroups(workspaceId).none { it.id == input.groupId }) {
+            throw RegistryValidationException("選択したグループは対象ワークスペースに存在しません")
+        }
 
         val now = System.currentTimeMillis()
         val existing = input.id.takeIf { it != 0L }?.let { dao.getDevice(it) }
@@ -120,15 +125,18 @@ class DeviceRegistryRepository(private val context: Context, private val databas
         paths.forEach { path -> val file = java.io.File(context.filesDir, path); if (!file.exists() || file.delete()) dao.deletePendingDeletion(path) }
     }
 
-    suspend fun createGroup(name: String): Long {
-        val workspaceId = workspaceRepository.snapshot.first().selectedId
-        val trimmed = name.trim()
+    suspend fun createGroup(name: String): Long = createGroup(workspaceRepository.snapshot.first().selectedId, name)
+
+    suspend fun createGroup(workspaceId: Long, name: String): Long = database.withTransaction {
+        if (dao.getWorkspace(workspaceId) == null) throw RegistryValidationException("対象ワークスペースが削除されました")
+        val trimmed = java.text.Normalizer.normalize(name.trim(), java.text.Normalizer.Form.NFKC)
         val normalized = GroupNameFormat.normalize(name)
         if (normalized.isBlank()) throw RegistryValidationException("グループ名を入力してください")
+        if (trimmed.length > 50) throw RegistryValidationException("グループ名は50文字以内で入力してください")
         val current = snapshotOnceGroups(workspaceId)
         if (current.any { it.normalizedName == normalized }) throw RegistryValidationException("同名のグループが既にあります")
         val now = System.currentTimeMillis()
-        return dao.insertGroup(WifiDeviceGroupEntity(name = trimmed, normalizedName = normalized, sortOrder = (current.maxOfOrNull { it.sortOrder } ?: -1) + 1, createdAt = now, updatedAt = now, workspaceId = workspaceId))
+        dao.insertGroup(WifiDeviceGroupEntity(name = trimmed, normalizedName = normalized, sortOrder = (current.maxOfOrNull { it.sortOrder } ?: -1) + 1, createdAt = now, updatedAt = now, workspaceId = workspaceId))
     }
 
     suspend fun renameGroup(group: DeviceGroup, name: String) {

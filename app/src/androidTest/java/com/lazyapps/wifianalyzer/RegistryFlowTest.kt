@@ -25,20 +25,15 @@ class RegistryFlowTest {
         val secondBssid = "02:10:20:31:${suffix.take(2)}:${suffix.takeLast(2)}"
 
         composeRule.onNodeWithTag("nav_devices").performClick()
-        composeRule.onNodeWithContentDescription("その他").performClick()
-        composeRule.onNodeWithText("グループ管理").performClick()
-        composeRule.onNodeWithTag("group_name_input").performTextInput(groupName)
-        composeRule.onNodeWithTag("group_create").performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithText(groupName).fetchSemanticsNodes().isNotEmpty()
-        }
-        composeRule.onNodeWithText("閉じる").performClick()
-
         composeRule.onNodeWithTag("add_device").performClick()
         composeRule.onNodeWithTag("add_manually").performClick()
         composeRule.onNodeWithTag("device_name").performTextInput(deviceName)
         composeRule.onNodeWithTag("registration_list").performScrollToIndex(2)
-        composeRule.onNodeWithText(groupName).performClick()
+        composeRule.onNodeWithTag("group_picker").performClick()
+        composeRule.onNodeWithTag("create_group_from_form").performClick()
+        composeRule.onNodeWithTag("new_group_name").performTextInput(groupName)
+        composeRule.onNodeWithTag("confirm_create_group").performClick()
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText(groupName).fetchSemanticsNodes().isNotEmpty() }
         composeRule.onNodeWithTag("registration_list").performScrollToIndex(5)
         composeRule.onNodeWithTag("bssid_0").performTextInput(firstBssid)
         composeRule.onNodeWithTag("add_bssid").performClick()
@@ -72,7 +67,7 @@ class RegistryFlowTest {
         composeRule.onNodeWithText("機器を削除しますか？").assertIsDisplayed()
         composeRule.onNodeWithText("削除").performClick()
         composeRule.waitUntil(5_000) {
-            runCatching { composeRule.onNodeWithText("登録済みデバイス").fetchSemanticsNode() }.isSuccess
+            runCatching { composeRule.onNodeWithText("登録済み機器").fetchSemanticsNode() }.isSuccess
         }
         composeRule.onNodeWithText(editedName).assertDoesNotExist()
     }

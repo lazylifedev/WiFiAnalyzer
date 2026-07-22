@@ -114,7 +114,7 @@ fun DevicesScreen(
         verticalArrangement = Arrangement.spacedBy(AppSpacing.small),
     ) {
         item {
-            ScreenHeader("登録済みデバイス", listOfNotNull(workspaceName, "${devices.size}台").joinToString(" ・ "), action = {
+            ScreenHeader("登録済み機器", listOfNotNull(workspaceName, "${devices.size}台").joinToString(" ・ "), autoSizeTitle = true, action = {
                 Row {
                     IconButton(onClick = { searchVisible = true }, modifier = Modifier.testTag("show_device_search")) { Icon(Icons.Rounded.Search, "検索") }
                     IconButton(onClick = { showAddMethods = true }, modifier = Modifier.testTag("add_device")) { Icon(Icons.Rounded.Add, "機器を新規登録") }

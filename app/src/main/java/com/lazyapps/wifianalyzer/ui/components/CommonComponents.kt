@@ -3,6 +3,7 @@ package com.lazyapps.wifianalyzer.ui.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -17,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -24,13 +26,19 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.model.WifiBand
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 
 @Composable
-fun ScreenHeader(title: String, supporting: String? = null, action: (@Composable () -> Unit)? = null) {
+fun ScreenHeader(title: String, supporting: String? = null, autoSizeTitle: Boolean = false, action: (@Composable () -> Unit)? = null) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large, vertical = AppSpacing.medium),
         verticalAlignment = Alignment.CenterVertically,
@@ -43,10 +51,26 @@ fun ScreenHeader(title: String, supporting: String? = null, action: (@Composable
             modifier = Modifier.size(30.dp),
         )
         androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (autoSizeTitle) AutoSizeSingleLineText(title, MaterialTheme.typography.titleLarge, 22.sp)
+            else Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             supporting?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
         action?.invoke()
+    }
+}
+
+@Composable
+fun AutoSizeSingleLineText(text: String, style: TextStyle, minimumFontSize: TextUnit, modifier: Modifier = Modifier) {
+    val measurer = rememberTextMeasurer()
+    BoxWithConstraints(modifier.semantics { contentDescription = text }) {
+        val max = style.fontSize
+        val sizes = remember(max, minimumFontSize) {
+            generateSequence(max.value) { previous -> (previous - 1f).takeIf { it >= minimumFontSize.value } }.map { it.sp }.toList()
+        }
+        val selected = sizes.firstOrNull { size ->
+            measurer.measure(AnnotatedString(text), style = style.copy(fontSize = size), maxLines = 1, softWrap = false, constraints = Constraints(maxWidth = constraints.maxWidth)).size.width <= constraints.maxWidth
+        } ?: minimumFontSize
+        Text(text, style = style.copy(fontSize = selected), maxLines = 1, softWrap = false, overflow = TextOverflow.Visible)
     }
 }
 
