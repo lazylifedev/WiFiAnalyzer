@@ -44,6 +44,8 @@ data class DeviceInput(
     val bssids: List<DeviceBssidInput>,
     val initialLastSeenAt: Long? = null,
     val initialLastSeenRssi: Int? = null,
+    val workspaceId: Long = 0,
+    val pendingPhotoPath: String? = null,
 )
 
 data class RegisteredDevice(
@@ -63,12 +65,14 @@ data class RegisteredDevice(
     val lastSeenRssi: Int?,
     val isEnabled: Boolean,
     val bssids: List<RegisteredBssid>,
+    val workspaceId: Long = 0,
+    val photoCount: Int = 0,
 ) {
     val primaryBssid: String get() = bssids.firstOrNull()?.bssid.orEmpty()
 }
 
 data class RegisteredBssid(val id: Long, val bssid: String, val band: String, val label: String)
-data class DeviceGroup(val id: Long, val name: String, val sortOrder: Int)
+data class DeviceGroup(val id: Long, val name: String, val sortOrder: Int, val workspaceId: Long = 0)
 
 data class RegisteredMatch(
     val deviceId: Long,

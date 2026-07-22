@@ -62,6 +62,7 @@ fun HomeScreen(
     onOpenSettings: (ScanState) -> Unit,
     onSelectAccessPoint: (String) -> Unit,
     onRegisterAccessPoint: (WifiAccessPoint) -> Unit,
+    workspaceName: String? = null,
 ) {
     var band by remember { mutableStateOf(WifiBand.BAND_24) }
     val accessPoints = state.accessPointsFor(band)
@@ -81,7 +82,7 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(AppSpacing.small),
     ) {
         item {
-            ScreenHeader(stringResource(R.string.screen_home), updated) {
+            ScreenHeader(stringResource(R.string.screen_home), listOfNotNull(workspaceName, updated).joinToString(" ・ ")) {
                 IconButton(onClick = onRefresh) { Icon(Icons.Rounded.Refresh, stringResource(R.string.refresh_scan)) }
             }
         }

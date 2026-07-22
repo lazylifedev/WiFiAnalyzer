@@ -66,6 +66,7 @@ fun DevicesScreen(
     onMoveGroup: (DeviceGroup, Int) -> Unit,
     isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {},
+    workspaceName: String? = null,
 ) {
     var query by remember { mutableStateOf("") }
     var selectedGroup by remember { mutableStateOf<Long?>(null) }
@@ -92,7 +93,7 @@ fun DevicesScreen(
         verticalArrangement = Arrangement.spacedBy(AppSpacing.small),
     ) {
         item {
-            ScreenHeader("登録済みデバイス", "${devices.size}台", action = {
+            ScreenHeader("登録済みデバイス", listOfNotNull(workspaceName, "${devices.size}台").joinToString(" ・ "), action = {
                 Row {
                     IconButton(onClick = { showGroups = true }) { Icon(Icons.Rounded.Settings, "グループ管理") }
                     Button(onClick = { showAddMethods = true }, modifier = Modifier.testTag("add_device")) {

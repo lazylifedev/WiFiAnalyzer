@@ -158,7 +158,10 @@ fun OcrRegistrationScreen(
                 onUpdate = ocrViewModel::updateCandidate,
                 onRetake = ocrViewModel::retake,
                 existingDevice = existingDraft != null,
-                onContinue = { mode -> onUseDraft(existingDraft?.let { ocrViewModel.updateDraft(it, mode) } ?: ocrViewModel.registrationDraft()) },
+                onContinue = { mode, savePhoto ->
+                    val recognized = ocrViewModel.registrationDraft(savePhoto)
+                    onUseDraft(existingDraft?.let { com.lazyapps.wifianalyzer.domain.ocr.OcrDeviceUpdateMerger.merge(it, recognized, mode).copy(pendingPhotoPath = recognized.pendingPhotoPath) } ?: recognized)
+                },
                 onManual = onManual,
             )
         }
@@ -300,11 +303,12 @@ internal fun ResultConfirmation(
     result: ParsedDeviceLabel,
     onUpdate: (ParsedFieldCandidate, ParsedFieldCandidate) -> Unit,
     onRetake: () -> Unit,
-    onContinue: (OcrUpdateMode) -> Unit,
+    onContinue: (OcrUpdateMode, Boolean) -> Unit,
     onManual: () -> Unit,
     existingDevice: Boolean = false,
 ) {
     var updateMode by rememberSaveable { mutableStateOf(OcrUpdateMode.FILL_BLANKS) }
+    var savePhoto by rememberSaveable { mutableStateOf(false) }
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("ocr_result_list"),
         verticalArrangement = Arrangement.spacedBy(AppSpacing.small),
@@ -337,6 +341,14 @@ internal fun ResultConfirmation(
             SensitiveSection(result.managementCandidates, onUpdate)
         }
         item {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+                Column(Modifier.fillMaxWidth().padding(AppSpacing.medium)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(savePhoto, { savePhoto = it }, modifier = Modifier.testTag("save_ocr_photo")); Text("撮影したラベル画像を機器写真に保存") }
+                    Text("初期値はOFFです。ラベル画像には初期パスワードや暗号化キーが含まれる場合があります。保存する前に内容を確認してください。写真は9枚上限に含まれます。", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        item {
             Card(border = CardDefaults.outlinedCardBorder()) {
                 Column(Modifier.fillMaxWidth().padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
                     Text("OCR全文", style = MaterialTheme.typography.titleMedium)
@@ -348,7 +360,7 @@ internal fun ResultConfirmation(
             FlowRow(horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
                 OutlinedButton(onClick = onRetake, modifier = Modifier.testTag("retake")) { Text("再撮影") }
                 TextButton(onClick = onManual) { Text("手動で入力") }
-                Button(onClick = { onContinue(updateMode) }, modifier = Modifier.testTag("use_ocr_result")) { Text(if (existingDevice) "差分を確認" else "登録フォームへ進む") }
+                Button(onClick = { onContinue(updateMode, savePhoto) }, modifier = Modifier.testTag("use_ocr_result")) { Text(if (existingDevice) "差分を確認" else "登録フォームへ進む") }
             }
         }
     }

@@ -36,10 +36,14 @@ class OcrRegistrationViewModel(application: Application) : AndroidViewModel(appl
     private val _uiState = MutableStateFlow(OcrResultUiState())
     val uiState: StateFlow<OcrResultUiState> = _uiState.asStateFlow()
     private var processingJob: Job? = null
+    private var capturedFile: File? = null
+    private var handedOff = false
 
     fun process(file: File, nearby: List<WifiAccessPoint>) {
         if (processingJob?.isActive == true) return
         _uiState.value = OcrResultUiState(OcrProcessingState.PROCESSING)
+        capturedFile?.takeIf { it != file }?.delete()
+        capturedFile = file
         processingJob = viewModelScope.launch {
             try {
                 val parsed = withContext(Dispatchers.Default) {
@@ -51,14 +55,13 @@ class OcrRegistrationViewModel(application: Application) : AndroidViewModel(appl
                 _uiState.value = OcrResultUiState()
             } catch (_: Exception) {
                 _uiState.value = OcrResultUiState(OcrProcessingState.ERROR, errorMessage = "認識処理を完了できませんでした")
-            } finally {
-                file.delete()
-            }
+            } finally { }
         }
     }
 
     fun retake() {
         processingJob?.cancel()
+        capturedFile?.delete(); capturedFile = null
         _uiState.value = OcrResultUiState()
     }
 
@@ -82,14 +85,16 @@ class OcrRegistrationViewModel(application: Application) : AndroidViewModel(appl
         ))
     }
 
-    fun registrationDraft(): DeviceInput {
-        return OcrRegistrationDraftFactory.create(_uiState.value.result ?: ParsedDeviceLabel())
+    fun registrationDraft(saveCapturedPhoto: Boolean = false): DeviceInput {
+        val draft = OcrRegistrationDraftFactory.create(_uiState.value.result ?: ParsedDeviceLabel())
+        return if (saveCapturedPhoto) { handedOff = true; draft.copy(pendingPhotoPath = capturedFile?.absolutePath) } else { capturedFile?.delete(); capturedFile = null; draft }
     }
 
     fun updateDraft(current: DeviceInput, mode: OcrUpdateMode): DeviceInput =
         OcrDeviceUpdateMerger.merge(current, registrationDraft(), mode)
 
     override fun onCleared() {
+        if (!handedOff) capturedFile?.delete()
         recognizer.close()
         super.onCleared()
     }

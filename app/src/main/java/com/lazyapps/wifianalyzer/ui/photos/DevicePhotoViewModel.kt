@@ -1,0 +1,33 @@
+package com.lazyapps.wifianalyzer.ui.photos
+
+import android.app.Application
+import android.net.Uri
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.lazyapps.wifianalyzer.data.photos.PhotoRepository
+import com.lazyapps.wifianalyzer.data.registry.RegistryValidationException
+import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
+import com.lazyapps.wifianalyzer.domain.DevicePhoto
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+
+data class DevicePhotoUiState(val photos: List<DevicePhoto> = emptyList(), val busy: Boolean = false, val error: String? = null)
+
+class DevicePhotoViewModel(application: Application) : AndroidViewModel(application) {
+    val repository = PhotoRepository(application, WifiAnalyzerDatabase.get(application))
+    private val _state = MutableStateFlow(DevicePhotoUiState())
+    val state: StateFlow<DevicePhotoUiState> = _state.asStateFlow()
+    private var deviceId = 0L; private var workspaceId = 0L; private var observeJob: Job? = null
+    init { viewModelScope.launch { repository.retryPending() } }
+    fun bind(deviceId: Long, workspaceId: Long) { if (this.deviceId == deviceId && this.workspaceId == workspaceId) return; this.deviceId = deviceId; this.workspaceId = workspaceId; observeJob?.cancel(); observeJob = viewModelScope.launch { repository.observe(deviceId).collectLatest { _state.value = _state.value.copy(photos = it) } } }
+    fun add(uris: List<Uri>) = action { uris.take(9 - _state.value.photos.size).forEach { uri -> try { repository.save(deviceId, workspaceId, uri) } finally { if (uri.scheme == "file") uri.path?.let { java.io.File(it).delete() } } } }
+    fun delete(id: Long) = action { repository.delete(id) }
+    fun primary(id: Long) = action { repository.setPrimary(id) }
+    fun caption(id: Long, value: String) = action { repository.caption(id, value) }
+    fun move(id: Long, direction: Int) = action { repository.move(id, direction) }
+    private fun action(block: suspend () -> Unit) { if (_state.value.busy) return; _state.value = _state.value.copy(busy = true, error = null); viewModelScope.launch { try { block(); _state.value = _state.value.copy(busy = false) } catch (e: RegistryValidationException) { _state.value = _state.value.copy(busy = false, error = e.message) } catch (e: Exception) { _state.value = _state.value.copy(busy = false, error = e.message ?: "写真操作に失敗しました") } } }
+}
