@@ -18,6 +18,8 @@ import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -76,20 +78,23 @@ fun DeviceDetailScreen(
             })
         }
         item { DevicePhotoGallery(device.id, device.workspaceId) }
-        if (detectedAccessPoints.isNotEmpty()) {
-            item {
-                Button(onClick = {
-                    if (detectedAccessPoints.size == 1) onMonitor(detectedAccessPoints.first().bssid) else chooseMonitor = true
-                }, modifier = Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large)) {
-                    Icon(Icons.Rounded.ShowChart, null)
-                    Text("シグナルモニターを開く")
-                }
-            }
-        }
         item {
-            Button(onClick = onOcrUpdate, modifier = Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large).testTag("ocr_update_device")) {
-                Icon(Icons.Rounded.CameraAlt, null)
-                Text("ラベルから情報を読み取る")
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large),
+                horizontalArrangement = Arrangement.spacedBy(AppSpacing.small),
+            ) {
+                if (detectedAccessPoints.isNotEmpty()) {
+                    FilledTonalButton(onClick = {
+                        if (detectedAccessPoints.size == 1) onMonitor(detectedAccessPoints.first().bssid) else chooseMonitor = true
+                    }, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Rounded.ShowChart, null)
+                        Text("モニター", maxLines = 1)
+                    }
+                }
+                OutlinedButton(onClick = onOcrUpdate, modifier = Modifier.weight(1f).testTag("ocr_update_device")) {
+                    Icon(Icons.Rounded.CameraAlt, null)
+                    Text("ラベル読取", maxLines = 1)
+                }
             }
         }
         item {

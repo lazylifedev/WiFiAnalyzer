@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.nativeCanvas
@@ -200,7 +201,7 @@ internal fun SignalChart(history: List<SignalSample>, modifier: Modifier = Modif
     var selected by remember { mutableStateOf<SignalSample?>(null) }
     val transformState = rememberTransformableState { zoomChange, panChange, _ ->
         zoom = (zoom * zoomChange).coerceIn(1f, 8f)
-        panFraction = (panFraction - panChange.x / 800f).coerceIn(0f, 1f - 1f / zoom)
+        panFraction = (panFraction + panChange.x / 800f).coerceIn(0f, 1f - 1f / zoom)
     }
     val latest = history.maxOfOrNull { it.timestampMillis } ?: System.currentTimeMillis()
     val rangeStart = latest - range.millis
@@ -209,6 +210,7 @@ internal fun SignalChart(history: List<SignalSample>, modifier: Modifier = Modif
     val visibleEnd = latest - (range.millis * panFraction).toLong()
     val visibleStart = visibleEnd - visibleDuration
     val visible = rangeSamples.filter { it.timestampMillis in visibleStart..visibleEnd }
+    val yAxis = SignalHistoryPolicy.adaptiveYAxis(visible)
     val max = rangeSamples.maxOfOrNull { it.rssi }
     val min = rangeSamples.minOfOrNull { it.rssi }
     val average = rangeSamples.takeIf { it.isNotEmpty() }?.map { it.rssi }?.average()
@@ -228,10 +230,10 @@ internal fun SignalChart(history: List<SignalSample>, modifier: Modifier = Modif
                 Text("平均 ${average?.let { "%.1f dBm".format(it) } ?: "—"}", style = MaterialTheme.typography.labelMedium)
                 Text("最小 ${min?.let { "$it dBm" } ?: "—"}", style = MaterialTheme.typography.labelMedium)
             }
-            selected?.let { Text("${it.rssi} dBm・${((latest - it.timestampMillis) / 1000L)}秒前", color = MaterialTheme.colorScheme.primary) }
+            selected?.let { Text("${android.text.format.DateFormat.format("HH:mm:ss", it.timestampMillis)}  ${it.rssi} dBm", color = MaterialTheme.colorScheme.primary) }
             Canvas(
                 Modifier.fillMaxWidth().aspectRatio(1.9f)
-                    .semantics { contentDescription = "信号履歴グラフ。縦軸はdBm、横軸は時間。ピンチで拡大、ドラッグで移動、ダブルタップでリセット" }
+                    .semantics { contentDescription = selected?.let { "選択値 ${it.rssi} dBm、${android.text.format.DateFormat.format("HH:mm:ss", it.timestampMillis)}" } ?: "信号履歴グラフ。縦軸はdBm、横軸は時間。ピンチで拡大、ドラッグで移動、ダブルタップでリセット" }
                     .transformable(transformState)
                     .pointerInput(visible, visibleStart, visibleDuration) {
                         detectTapGestures(
@@ -244,8 +246,9 @@ internal fun SignalChart(history: List<SignalSample>, modifier: Modifier = Modif
                     }
             ) {
                 val labelPaint = android.graphics.Paint().apply { color = labelColor.toArgb(); textSize = 11.sp.toPx() }
-                listOf(-40, -60, -80, -100).forEach { dbm ->
-                    val y = size.height * ((-40 - dbm) / 60f)
+                val tickStep = if (yAxis.span <= 30) 5 else 10
+                (yAxis.lower..yAxis.upper step tickStep).forEach { dbm ->
+                    val y = size.height * ((yAxis.upper - dbm) / yAxis.span.toFloat())
                     drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
                     drawContext.canvas.nativeCanvas.drawText("$dbm", 2.dp.toPx(), (y - 2.dp.toPx()).coerceAtLeast(12.dp.toPx()), labelPaint)
                 }
@@ -261,11 +264,18 @@ internal fun SignalChart(history: List<SignalSample>, modifier: Modifier = Modif
                     val path = Path()
                     segment.forEachIndexed { index, sample ->
                         val x = size.width * ((sample.timestampMillis - visibleStart).coerceIn(0, visibleDuration) / visibleDuration.toFloat())
-                        val y = size.height * ((-40 - sample.rssi.coerceIn(-100, -40)) / 60f)
+                        val y = size.height * ((yAxis.upper - sample.rssi.coerceIn(yAxis.lower, yAxis.upper)) / yAxis.span.toFloat())
                         if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
                         if (segment.size == 1) drawCircle(lineColor, 4.dp.toPx(), Offset(x, y))
                     }
                     if (segment.size > 1) drawPath(path, lineColor, style = Stroke(width = 3.dp.toPx()))
+                }
+                selected?.takeIf { it in visible }?.let { sample ->
+                    val x = size.width * ((sample.timestampMillis - visibleStart).coerceIn(0, visibleDuration) / visibleDuration.toFloat())
+                    val y = size.height * ((yAxis.upper - sample.rssi.coerceIn(yAxis.lower, yAxis.upper)) / yAxis.span.toFloat())
+                    drawLine(lineColor.copy(alpha = .5f), Offset(x, 0f), Offset(x, size.height), strokeWidth = 1.dp.toPx())
+                    drawCircle(Color.White, 7.dp.toPx(), Offset(x, y))
+                    drawCircle(lineColor, 4.dp.toPx(), Offset(x, y))
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
