@@ -39,6 +39,8 @@ import com.lazyapps.wifianalyzer.model.SignalQuality
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import com.lazyapps.wifianalyzer.model.WifiBand
 import com.lazyapps.wifianalyzer.model.WifiStandard
+import com.lazyapps.wifianalyzer.model.displayLabel
+import com.lazyapps.wifianalyzer.data.DistanceUnitPreference
 import com.lazyapps.wifianalyzer.ui.components.BandSelector
 import com.lazyapps.wifianalyzer.ui.components.ScanStatusCard
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
@@ -73,7 +75,7 @@ fun HomeScreen(
         ScreenHeader(stringResource(R.string.screen_home), listOfNotNull(workspaceName, updated).joinToString(" ・ ")) {
             IconButton(onClick = onRefresh) { Icon(Icons.Rounded.Refresh, stringResource(R.string.refresh_scan)) }
         }
-        BandSelector(band, onBandSelected, Modifier.padding(horizontal = AppSpacing.large))
+        BandSelector(band, onBandSelected, Modifier.padding(horizontal = AppSpacing.large), state.visibleBands)
         RefreshProgress(state)
         PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
         LazyColumn(
@@ -107,7 +109,7 @@ fun HomeScreen(
             }
         }
         items(accessPoints, key = { it.bssid }) { accessPoint ->
-            AccessPointRow(accessPoint, onSelectAccessPoint, onRegisterAccessPoint, Modifier.padding(horizontal = AppSpacing.large))
+            AccessPointRow(accessPoint, onSelectAccessPoint, onRegisterAccessPoint, state.distanceUnit == DistanceUnitPreference.FEET, Modifier.padding(horizontal = AppSpacing.large))
         }
         }
         }
@@ -115,7 +117,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Unit, onRegister: (WifiAccessPoint) -> Unit, modifier: Modifier = Modifier) {
+private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Unit, onRegister: (WifiAccessPoint) -> Unit, feet: Boolean, modifier: Modifier = Modifier) {
     val signalColor = when (accessPoint.signalQuality) {
         SignalQuality.EXCELLENT, SignalQuality.GOOD -> MaterialTheme.colorScheme.primary
         SignalQuality.FAIR -> MaterialTheme.colorScheme.tertiary
@@ -161,7 +163,7 @@ private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Un
             Column(horizontalAlignment = Alignment.End) {
                 Text("${accessPoint.rssi} dBm", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = signalColor)
                 Text(accessPoint.signalQuality.label, style = MaterialTheme.typography.labelSmall, color = signalColor)
-                Text(stringResource(R.string.estimated_prefix, accessPoint.distanceRange.label), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.estimated_prefix, accessPoint.distanceRange.displayLabel(feet)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

@@ -25,7 +25,8 @@ class RegistryFlowTest {
         val secondBssid = "02:10:20:31:${suffix.take(2)}:${suffix.takeLast(2)}"
 
         composeRule.onNodeWithTag("nav_devices").performClick()
-        composeRule.onNodeWithContentDescription("グループ管理").performClick()
+        composeRule.onNodeWithContentDescription("その他").performClick()
+        composeRule.onNodeWithText("グループ管理").performClick()
         composeRule.onNodeWithTag("group_name_input").performTextInput(groupName)
         composeRule.onNodeWithTag("group_create").performClick()
         composeRule.waitUntil(5_000) {

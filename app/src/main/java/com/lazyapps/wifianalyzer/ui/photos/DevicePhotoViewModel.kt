@@ -15,7 +15,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-data class DevicePhotoUiState(val photos: List<DevicePhoto> = emptyList(), val busy: Boolean = false, val error: String? = null)
+data class DevicePhotoUiState(
+    val photos: List<DevicePhoto> = emptyList(), val busy: Boolean = false, val error: String? = null,
+    val selectedPhotoIds: Set<Long> = emptySet(), val selectionMode: Boolean = false, val reorderMode: Boolean = false,
+)
 
 class DevicePhotoViewModel(application: Application) : AndroidViewModel(application) {
     val repository = PhotoRepository(application, WifiAnalyzerDatabase.get(application))
@@ -26,6 +29,12 @@ class DevicePhotoViewModel(application: Application) : AndroidViewModel(applicat
     fun bind(deviceId: Long, workspaceId: Long) { if (this.deviceId == deviceId && this.workspaceId == workspaceId) return; this.deviceId = deviceId; this.workspaceId = workspaceId; observeJob?.cancel(); observeJob = viewModelScope.launch { repository.observe(deviceId).collectLatest { _state.value = _state.value.copy(photos = it) } } }
     fun add(uris: List<Uri>) = action { uris.take(9 - _state.value.photos.size).forEach { uri -> try { repository.save(deviceId, workspaceId, uri) } finally { if (uri.scheme == "file") uri.path?.let { java.io.File(it).delete() } } } }
     fun delete(id: Long) = action { repository.delete(id) }
+    fun deleteSelected() = action { repository.delete(_state.value.selectedPhotoIds); _state.value = _state.value.copy(selectedPhotoIds = emptySet(), selectionMode = false) }
+    fun enterSelection(id: Long) { _state.value = _state.value.copy(selectionMode = true, reorderMode = false, selectedPhotoIds = setOf(id)) }
+    fun toggleSelection(id: Long) { val next = _state.value.selectedPhotoIds.toMutableSet().apply { if (!add(id)) remove(id) }; _state.value = _state.value.copy(selectedPhotoIds = next, selectionMode = next.isNotEmpty()) }
+    fun clearSelection() { _state.value = _state.value.copy(selectedPhotoIds = emptySet(), selectionMode = false) }
+    fun selectAll() { _state.value = _state.value.copy(selectedPhotoIds = _state.value.photos.map { it.id }.toSet(), selectionMode = true) }
+    fun setReorderMode(enabled: Boolean) { _state.value = _state.value.copy(reorderMode = enabled, selectionMode = false, selectedPhotoIds = emptySet()) }
     fun primary(id: Long) = action { repository.setPrimary(id) }
     fun caption(id: Long, value: String) = action { repository.caption(id, value) }
     fun move(id: Long, direction: Int) = action { repository.move(id, direction) }

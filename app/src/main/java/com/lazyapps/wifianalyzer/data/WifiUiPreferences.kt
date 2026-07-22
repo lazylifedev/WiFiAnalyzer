@@ -15,17 +15,33 @@ data class WifiUiPreferences(
     val homeBand: WifiBand = WifiBand.BAND_24,
     val channelBand: WifiBand = WifiBand.BAND_24,
     val refreshIntervalMillis: Long = WifiUiPreferencesRepository.DEFAULT_REFRESH_INTERVAL_MILLIS,
+    val distanceUnit: DistanceUnitPreference = DistanceUnitPreference.METERS,
+    val visibleBands: Set<WifiBand> = WifiBand.entries.toSet(),
 )
+
+enum class DistanceUnitPreference { METERS, FEET }
 
 class WifiUiPreferencesRepository(private val context: Context) {
     val preferences: Flow<WifiUiPreferences> = context.wifiUiDataStore.data.map { values ->
+        val visibleBands = values[VISIBLE_BANDS]
+            ?.split(',')
+            ?.mapNotNull { it.toWifiBand() }
+            ?.toSet()
+            ?.takeIf { it.isNotEmpty() }
+            ?: WifiBand.entries.toSet()
+        val firstVisible = WifiBand.entries.first { it in visibleBands }
         WifiUiPreferences(
-            homeBand = values[HOME_BAND]?.toWifiBand() ?: WifiBand.BAND_24,
-            channelBand = values[CHANNEL_BAND]?.toWifiBand() ?: WifiBand.BAND_24,
+            homeBand = values[HOME_BAND]?.toWifiBand()?.takeIf { it in visibleBands } ?: firstVisible,
+            channelBand = values[CHANNEL_BAND]?.toWifiBand()?.takeIf { it in visibleBands } ?: firstVisible,
             refreshIntervalMillis = values[REFRESH_SECONDS]
+                ?.let(::normalizeRefreshSeconds)
                 ?.takeIf { it in REFRESH_INTERVAL_SECONDS }
                 ?.times(1_000L)
                 ?: DEFAULT_REFRESH_INTERVAL_MILLIS,
+            distanceUnit = values[DISTANCE_UNIT]
+                ?.let { runCatching { DistanceUnitPreference.valueOf(it) }.getOrNull() }
+                ?: DistanceUnitPreference.METERS,
+            visibleBands = visibleBands,
         )
     }
 
@@ -36,14 +52,27 @@ class WifiUiPreferencesRepository(private val context: Context) {
         require(seconds in REFRESH_INTERVAL_SECONDS)
         context.wifiUiDataStore.edit { it[REFRESH_SECONDS] = seconds }
     }
+    suspend fun setDistanceUnit(unit: DistanceUnitPreference) = context.wifiUiDataStore.edit { it[DISTANCE_UNIT] = unit.name }
+    suspend fun setVisibleBands(bands: Set<WifiBand>) {
+        require(bands.isNotEmpty())
+        context.wifiUiDataStore.edit { values ->
+            values[VISIBLE_BANDS] = WifiBand.entries.filter { it in bands }.joinToString(",") { it.name }
+            val first = WifiBand.entries.first { it in bands }
+            if (values[HOME_BAND]?.toWifiBand() !in bands) values[HOME_BAND] = first.name
+            if (values[CHANNEL_BAND]?.toWifiBand() !in bands) values[CHANNEL_BAND] = first.name
+        }
+    }
 
     private fun String.toWifiBand(): WifiBand? = WifiBand.entries.firstOrNull { it.name == this }
 
     companion object {
-        val REFRESH_INTERVAL_SECONDS = listOf(18, 30, 60, 120, 300)
-        const val DEFAULT_REFRESH_INTERVAL_MILLIS = 18_000L
+        val REFRESH_INTERVAL_SECONDS = listOf(10, 15, 20, 30, 60, 120, 300)
+        const val DEFAULT_REFRESH_INTERVAL_MILLIS = 20_000L
+        fun normalizeRefreshSeconds(seconds: Int): Int = if (seconds == 18) 20 else seconds
         private val HOME_BAND = stringPreferencesKey("home_band")
         private val CHANNEL_BAND = stringPreferencesKey("channel_band")
         private val REFRESH_SECONDS = intPreferencesKey("refresh_interval_seconds")
+        private val DISTANCE_UNIT = stringPreferencesKey("distance_unit")
+        private val VISIBLE_BANDS = stringPreferencesKey("visible_bands")
     }
 }

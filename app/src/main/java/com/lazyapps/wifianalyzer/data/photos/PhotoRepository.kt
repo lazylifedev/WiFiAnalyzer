@@ -50,15 +50,19 @@ class PhotoRepository(private val context: Context, private val database: WifiAn
         } finally { temp.delete() }
     }
 
-    suspend fun delete(photoId: Long) = withContext(Dispatchers.IO) {
-        val photo = dao.getPhoto(photoId) ?: return@withContext
-        val path = relative(photo)
+    suspend fun delete(photoId: Long) = delete(setOf(photoId))
+    suspend fun delete(photoIds: Set<Long>) = withContext(Dispatchers.IO) {
+        val photos = photoIds.mapNotNull { dao.getPhoto(it) }
+        if (photos.isEmpty()) return@withContext
+        val deviceIds = photos.map { it.deviceId }.toSet()
         database.withTransaction {
-            dao.insertPendingDeletion(PendingFileDeletionEntity(path, System.currentTimeMillis()))
-            dao.deletePhoto(photoId)
-            dao.getPhotos(photo.deviceId).forEachIndexed { index, item -> dao.updatePhotoOrder(item.id, index, System.currentTimeMillis()) }
+            photos.forEach { photo ->
+                dao.insertPendingDeletion(PendingFileDeletionEntity(relative(photo), System.currentTimeMillis()))
+                dao.deletePhoto(photo.id)
+            }
+            deviceIds.forEach { deviceId -> dao.getPhotos(deviceId).forEachIndexed { index, item -> dao.updatePhotoOrder(item.id, index, System.currentTimeMillis()) } }
         }
-        deletePending(path)
+        photos.forEach { deletePending(relative(it)) }
     }
 
     suspend fun setPrimary(photoId: Long) { val photo = dao.getPhoto(photoId) ?: return; dao.setPrimaryPhoto(photo.deviceId, photoId, System.currentTimeMillis()) }

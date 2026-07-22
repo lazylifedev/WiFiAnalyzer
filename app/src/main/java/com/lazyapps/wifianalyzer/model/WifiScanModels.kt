@@ -35,6 +35,13 @@ enum class DistanceRange(val label: String) {
     TWENTY_PLUS("約20m以上"),
 }
 
+fun DistanceRange.displayLabel(feet: Boolean): String = if (!feet) label else when (this) {
+    DistanceRange.ONE_TO_THREE -> "約3～10ft"
+    DistanceRange.THREE_TO_EIGHT -> "約10～26ft"
+    DistanceRange.EIGHT_TO_TWENTY -> "約26～66ft"
+    DistanceRange.TWENTY_PLUS -> "約66ft以上"
+}
+
 data class WifiAccessPoint(
     val ssid: String,
     val bssid: String,

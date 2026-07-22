@@ -4,6 +4,7 @@ import android.text.format.DateUtils
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,6 +19,9 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.AlertDialog
@@ -32,15 +36,23 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lazyapps.wifianalyzer.domain.DetectionPolicy
@@ -49,7 +61,7 @@ import com.lazyapps.wifianalyzer.domain.RegisteredDevice
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 
-private enum class DeviceSort { NAME, RECENT, RSSI }
+private enum class DeviceSort { NAME, RECENT, RSSI, REGISTERED }
 
 @Composable
 fun DevicesScreen(
@@ -68,21 +80,30 @@ fun DevicesScreen(
     onRefresh: () -> Unit = {},
     workspaceName: String? = null,
 ) {
-    var query by remember { mutableStateOf("") }
-    var selectedGroup by remember { mutableStateOf<Long?>(null) }
-    var uncategorizedOnly by remember { mutableStateOf(false) }
-    var sort by remember { mutableStateOf(DeviceSort.NAME) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var searchVisible by rememberSaveable { mutableStateOf(false) }
+    var selectedGroup by rememberSaveable { mutableStateOf<Long?>(null) }
+    var uncategorizedOnly by rememberSaveable { mutableStateOf(false) }
+    var sortName by rememberSaveable { mutableStateOf(DeviceSort.NAME.name) }
+    val sort = DeviceSort.valueOf(sortName)
     var deleteTarget by remember { mutableStateOf<RegisteredDevice?>(null) }
     var showGroups by remember { mutableStateOf(false) }
     var showAddMethods by remember { mutableStateOf(false) }
+    var showGroupFilter by remember { mutableStateOf(false) }
+    var showMore by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(searchVisible) { if (searchVisible) { focusRequester.requestFocus(); keyboard?.show() } }
+    BackHandler(searchVisible) { searchVisible = false; query = ""; keyboard?.hide() }
     val visible = devices.asSequence()
         .filter { !uncategorizedOnly && selectedGroup == null || uncategorizedOnly && it.groupId == null || selectedGroup == it.groupId }
-        .filter { query.isBlank() || listOf(it.displayName, it.manufacturer, it.model, it.ssid, it.primaryBssid).any { value -> value.contains(query, true) } }
+        .filter { query.isBlank() || listOf(it.displayName, it.manufacturer, it.model, it.ssid, it.primaryBssid, it.groupName.orEmpty()).any { value -> value.contains(query, true) } }
         .let { sequence ->
             when (sort) {
                 DeviceSort.NAME -> sequence.sortedBy { it.displayName.lowercase() }
                 DeviceSort.RECENT -> sequence.sortedByDescending { it.lastSeenAt ?: 0L }
                 DeviceSort.RSSI -> sequence.sortedByDescending { it.lastSeenRssi ?: Int.MIN_VALUE }
+                DeviceSort.REGISTERED -> sequence.sortedByDescending { it.createdAt }
             }
         }.toList()
 
@@ -95,10 +116,13 @@ fun DevicesScreen(
         item {
             ScreenHeader("登録済みデバイス", listOfNotNull(workspaceName, "${devices.size}台").joinToString(" ・ "), action = {
                 Row {
-                    IconButton(onClick = { showGroups = true }) { Icon(Icons.Rounded.Settings, "グループ管理") }
-                    Button(onClick = { showAddMethods = true }, modifier = Modifier.testTag("add_device")) {
-                        Icon(Icons.Rounded.Add, null)
-                        Text("新規登録")
+                    IconButton(onClick = { searchVisible = true }, modifier = Modifier.testTag("show_device_search")) { Icon(Icons.Rounded.Search, "検索") }
+                    IconButton(onClick = { showAddMethods = true }, modifier = Modifier.testTag("add_device")) { Icon(Icons.Rounded.Add, "機器を新規登録") }
+                    IconButton(onClick = { showMore = true }) { Icon(Icons.Rounded.MoreVert, "その他") }
+                    DropdownMenu(showMore, { showMore = false }) {
+                        DropdownMenuItem({ Text("グループで絞り込み") }, { showMore = false; showGroupFilter = true }, leadingIcon = { Icon(Icons.Rounded.FilterList, null) })
+                        DeviceSort.entries.forEach { option -> DropdownMenuItem({ Text("並び順: ${sortLabel(option)}") }, { sortName = option.name; showMore = false }, leadingIcon = { if (sort == option) Icon(Icons.Rounded.SwapVert, null) }) }
+                        DropdownMenuItem({ Text("グループ管理") }, { showMore = false; showGroups = true }, leadingIcon = { Icon(Icons.Rounded.Settings, null) })
                     }
                 }
             })
@@ -111,35 +135,25 @@ fun DevicesScreen(
                 ) { Text(message, Modifier.padding(AppSpacing.medium), color = MaterialTheme.colorScheme.onErrorContainer) }
             }
         }
-        item {
+        if (searchVisible) item {
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large).focusRequester(focusRequester).testTag("device_search"),
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Rounded.Search, null) },
                 placeholder = { Text("機器名、SSID、BSSIDを検索", maxLines = 1) },
+                trailingIcon = { IconButton(onClick = { query = ""; searchVisible = false; keyboard?.hide() }) { Icon(Icons.Rounded.Close, "検索を閉じる") } },
             )
         }
-        item {
-            FlowRow(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large),
-                horizontalArrangement = Arrangement.spacedBy(AppSpacing.small),
-            ) {
-                FilterChip(selected = selectedGroup == null && !uncategorizedOnly, onClick = { selectedGroup = null; uncategorizedOnly = false }, label = { Text("すべて") })
-                FilterChip(selected = uncategorizedOnly, onClick = { selectedGroup = null; uncategorizedOnly = true }, label = { Text("未分類") })
-                groups.forEach { group ->
-                    FilterChip(selected = selectedGroup == group.id, onClick = { selectedGroup = group.id; uncategorizedOnly = false }, label = { Text(group.name, maxLines = 1) })
-                }
-            }
-        }
-        item {
-            Row(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.SwapVert, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                TextButton(onClick = { sort = DeviceSort.entries[(sort.ordinal + 1) % DeviceSort.entries.size] }) {
-                    Text("並び順: ${when (sort) { DeviceSort.NAME -> "名前"; DeviceSort.RECENT -> "最終検出"; DeviceSort.RSSI -> "RSSI" }}")
-                }
-            }
+        if (selectedGroup != null || uncategorizedOnly) item {
+            FilterChip(
+                selected = true,
+                onClick = { selectedGroup = null; uncategorizedOnly = false },
+                label = { Text(if (uncategorizedOnly) "未分類" else groups.firstOrNull { it.id == selectedGroup }?.name.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                trailingIcon = { Icon(Icons.Rounded.Close, "絞り込みを解除") },
+                modifier = Modifier.padding(horizontal = AppSpacing.large),
+            )
         }
         if (visible.isEmpty()) {
             item { Text("条件に一致する登録機器はありません", Modifier.padding(AppSpacing.large), color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -162,6 +176,16 @@ fun DevicesScreen(
     if (showGroups) {
         GroupManagementDialog(groups, onCreateGroup, onRenameGroup, onDeleteGroup, onMoveGroup) { showGroups = false }
     }
+    if (showGroupFilter) AlertDialog(
+        onDismissRequest = { showGroupFilter = false },
+        title = { Text("グループで絞り込み") },
+        text = { Column {
+            FilterChip(selectedGroup == null && !uncategorizedOnly, { selectedGroup = null; uncategorizedOnly = false; showGroupFilter = false }, { Text("すべて (${devices.size})") })
+            FilterChip(uncategorizedOnly, { selectedGroup = null; uncategorizedOnly = true; showGroupFilter = false }, { Text("未分類 (${devices.count { it.groupId == null }})") })
+            groups.forEach { group -> FilterChip(selectedGroup == group.id, { selectedGroup = group.id; uncategorizedOnly = false; showGroupFilter = false }, { Text("${group.name} (${devices.count { it.groupId == group.id }})", maxLines = 1, overflow = TextOverflow.Ellipsis) }) }
+        } },
+        confirmButton = { TextButton(onClick = { showGroupFilter = false }) { Text("閉じる") } },
+    )
     if (showAddMethods) {
         AlertDialog(
             onDismissRequest = { showAddMethods = false },
@@ -184,9 +208,17 @@ fun DevicesScreen(
     }
 }
 
+private fun sortLabel(sort: DeviceSort): String = when (sort) {
+    DeviceSort.NAME -> "名前"
+    DeviceSort.RECENT -> "最終検出"
+    DeviceSort.RSSI -> "RSSI"
+    DeviceSort.REGISTERED -> "登録日時"
+}
+
 @Composable
 private fun DeviceRow(device: RegisteredDevice, onOpen: () -> Unit, onDelete: () -> Unit, modifier: Modifier = Modifier) {
     val detected = DetectionPolicy.isDetected(device.lastSeenAt, System.currentTimeMillis())
+    var menu by remember { mutableStateOf(false) }
     Card(
         modifier.fillMaxWidth().clickable(onClick = onOpen),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -195,7 +227,7 @@ private fun DeviceRow(device: RegisteredDevice, onOpen: () -> Unit, onDelete: ()
         Row(Modifier.fillMaxWidth().padding(AppSpacing.medium), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppSpacing.medium)) {
             Icon(Icons.Rounded.Wifi, null, tint = if (detected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             Column(Modifier.weight(1f)) {
-                Text(device.displayName, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(device.displayName, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val makerModel = listOf(device.manufacturer, device.model).filter { it.isNotBlank() }.joinToString(" / ")
                 if (makerModel.isNotBlank()) Text(makerModel, style = MaterialTheme.typography.bodySmall)
                 if (device.ssid.isNotBlank()) Text("SSID: ${device.ssid}", maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
@@ -203,7 +235,13 @@ private fun DeviceRow(device: RegisteredDevice, onOpen: () -> Unit, onDelete: ()
                 Text("${device.groupName ?: "未分類"} · ${if (detected) "現在検出中" else "未検出"}", style = MaterialTheme.typography.labelSmall, color = if (detected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("${device.lastSeenRssi?.let { "$it dBm" } ?: "RSSI —"} · ${relativeTime(device.lastSeenAt)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            IconButton(onClick = onDelete) { Icon(Icons.Rounded.Delete, "削除") }
+            Box {
+                IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "機器メニュー") }
+                DropdownMenu(menu, { menu = false }) {
+                    DropdownMenuItem({ Text("詳細を開く") }, { menu = false; onOpen() })
+                    DropdownMenuItem({ Text("削除") }, { menu = false; onDelete() }, leadingIcon = { Icon(Icons.Rounded.Delete, null) })
+                }
+            }
         }
     }
 }

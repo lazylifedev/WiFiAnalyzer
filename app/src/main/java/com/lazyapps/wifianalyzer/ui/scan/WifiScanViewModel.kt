@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lazyapps.wifianalyzer.data.WifiScanRepository
 import com.lazyapps.wifianalyzer.data.WifiUiPreferencesRepository
+import com.lazyapps.wifianalyzer.data.DistanceUnitPreference
 import com.lazyapps.wifianalyzer.domain.WifiAnalysis
 import com.lazyapps.wifianalyzer.model.ChannelOccupancy
 import com.lazyapps.wifianalyzer.model.ScanState
@@ -34,6 +35,9 @@ data class ScanUiState(
     val homeBand: WifiBand = WifiBand.BAND_24,
     val channelBand: WifiBand = WifiBand.BAND_24,
     val refreshIntervalMillis: Long = WifiUiPreferencesRepository.DEFAULT_REFRESH_INTERVAL_MILLIS,
+    val distanceUnit: DistanceUnitPreference = DistanceUnitPreference.METERS,
+    val visibleBands: Set<WifiBand> = WifiBand.entries.toSet(),
+    val signalHistoryRangeMillis: Long = 30_000L,
 ) {
     fun accessPointsFor(band: WifiBand): List<WifiAccessPoint> = accessPoints.filter { it.band == band }
     fun occupancyFor(band: WifiBand): List<ChannelOccupancy> = WifiAnalysis.channelOccupancy(accessPoints, band)
@@ -57,6 +61,8 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
                     homeBand = value.homeBand,
                     channelBand = value.channelBand,
                     refreshIntervalMillis = value.refreshIntervalMillis,
+                    distanceUnit = value.distanceUnit,
+                    visibleBands = value.visibleBands,
                 )
                 if (intervalChanged) scheduleAutoRefresh()
             }
@@ -141,6 +147,24 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
 
     fun setRefreshInterval(milliseconds: Long) {
         viewModelScope.launch { preferences.setRefreshInterval(milliseconds) }
+    }
+    fun setDistanceUnit(unit: DistanceUnitPreference) {
+        _uiState.value = _uiState.value.copy(distanceUnit = unit)
+        viewModelScope.launch { preferences.setDistanceUnit(unit) }
+    }
+    fun setVisibleBands(bands: Set<WifiBand>) {
+        if (bands.isEmpty()) return
+        val first = WifiBand.entries.first { it in bands }
+        _uiState.value = _uiState.value.copy(
+            visibleBands = bands,
+            homeBand = _uiState.value.homeBand.takeIf { it in bands } ?: first,
+            channelBand = _uiState.value.channelBand.takeIf { it in bands } ?: first,
+        )
+        viewModelScope.launch { preferences.setVisibleBands(bands) }
+    }
+    fun setSignalHistoryRange(milliseconds: Long) {
+        require(milliseconds in setOf(30_000L, 60_000L, 300_000L, 900_000L))
+        _uiState.value = _uiState.value.copy(signalHistoryRangeMillis = milliseconds)
     }
 
     fun setForeground(isForeground: Boolean) {
