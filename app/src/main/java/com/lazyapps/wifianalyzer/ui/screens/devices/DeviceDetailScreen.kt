@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.ShowChart
+import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -47,6 +48,7 @@ fun DeviceDetailScreen(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onMonitor: (String) -> Unit,
+    onOcrUpdate: () -> Unit,
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
     var chooseMonitor by remember { mutableStateOf(false) }
@@ -80,6 +82,12 @@ fun DeviceDetailScreen(
                     Icon(Icons.Rounded.ShowChart, null)
                     Text("シグナルモニターを開く")
                 }
+            }
+        }
+        item {
+            Button(onClick = onOcrUpdate, modifier = Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large).testTag("ocr_update_device")) {
+                Icon(Icons.Rounded.CameraAlt, null)
+                Text("ラベルから情報を読み取る")
             }
         }
         item {

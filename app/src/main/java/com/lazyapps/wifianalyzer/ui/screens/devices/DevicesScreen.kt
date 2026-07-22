@@ -32,6 +32,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -63,6 +64,8 @@ fun DevicesScreen(
     onRenameGroup: (DeviceGroup, String) -> Unit,
     onDeleteGroup: (DeviceGroup) -> Unit,
     onMoveGroup: (DeviceGroup, Int) -> Unit,
+    isRefreshing: Boolean = false,
+    onRefresh: () -> Unit = {},
 ) {
     var query by remember { mutableStateOf("") }
     var selectedGroup by remember { mutableStateOf<Long?>(null) }
@@ -82,6 +85,7 @@ fun DevicesScreen(
             }
         }.toList()
 
+    PullToRefreshBox(isRefreshing = isRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = AppSpacing.xLarge),
@@ -142,6 +146,7 @@ fun DevicesScreen(
         items(visible, key = { it.id }) { device ->
             DeviceRow(device, { onOpenDevice(device.id) }, { deleteTarget = device }, Modifier.padding(horizontal = AppSpacing.large))
         }
+    }
     }
 
     deleteTarget?.let { device ->

@@ -11,6 +11,8 @@ import com.lazyapps.wifianalyzer.domain.ocr.DeviceLabelParser
 import com.lazyapps.wifianalyzer.domain.ocr.ParsedDeviceLabel
 import com.lazyapps.wifianalyzer.domain.ocr.ParsedFieldCandidate
 import com.lazyapps.wifianalyzer.domain.ocr.OcrRegistrationDraftFactory
+import com.lazyapps.wifianalyzer.domain.ocr.OcrDeviceUpdateMerger
+import com.lazyapps.wifianalyzer.domain.ocr.OcrUpdateMode
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -83,6 +85,9 @@ class OcrRegistrationViewModel(application: Application) : AndroidViewModel(appl
     fun registrationDraft(): DeviceInput {
         return OcrRegistrationDraftFactory.create(_uiState.value.result ?: ParsedDeviceLabel())
     }
+
+    fun updateDraft(current: DeviceInput, mode: OcrUpdateMode): DeviceInput =
+        OcrDeviceUpdateMerger.merge(current, registrationDraft(), mode)
 
     override fun onCleared() {
         recognizer.close()

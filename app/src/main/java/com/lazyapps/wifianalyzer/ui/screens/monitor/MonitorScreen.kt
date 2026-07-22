@@ -1,6 +1,9 @@
 package com.lazyapps.wifianalyzer.ui.screens.monitor
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,17 +23,27 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,17 +51,18 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lazyapps.wifianalyzer.R
-import com.lazyapps.wifianalyzer.data.WifiScanRepository
 import com.lazyapps.wifianalyzer.model.ScanState
+import com.lazyapps.wifianalyzer.domain.SignalHistoryPolicy
 import com.lazyapps.wifianalyzer.model.SignalSample
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import com.lazyapps.wifianalyzer.ui.components.ScanStatusCard
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
+import com.lazyapps.wifianalyzer.ui.components.RefreshProgress
 import com.lazyapps.wifianalyzer.ui.scan.ScanUiState
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 import com.lazyapps.wifianalyzer.ui.theme.ThemeMode
 import com.lazyapps.wifianalyzer.ui.theme.WifiAnalyzerTheme
-import kotlinx.coroutines.delay
+import kotlin.math.abs
 
 @Composable
 fun MonitorScreen(
@@ -57,16 +71,6 @@ fun MonitorScreen(
     onRequestPermission: () -> Unit,
     onOpenSettings: (ScanState) -> Unit,
 ) {
-    LaunchedEffect(state.selectedBssid) {
-        if (state.selectedBssid != null) {
-            onRefresh()
-            while (true) {
-                delay(WifiScanRepository.MIN_SCAN_INTERVAL_MS)
-                onRefresh()
-            }
-        }
-    }
-
     val accessPoint = state.selectedAccessPoint
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -81,6 +85,7 @@ fun MonitorScreen(
                 IconButton(onClick = onRefresh) { Icon(Icons.Rounded.Refresh, stringResource(R.string.refresh_scan)) }
             }
         }
+        item { RefreshProgress(state) }
         item {
             ScanStatusCard(
                 state.scanState, state.accessPoints.isNotEmpty(), onRequestPermission, onOpenSettings, onRefresh,
@@ -180,17 +185,70 @@ private fun MetricCard(icon: androidx.compose.ui.graphics.vector.ImageVector, la
     }
 }
 
+private enum class HistoryRange(val label: String, val millis: Long) {
+    THIRTY_SECONDS("30秒", 30_000L), ONE_MINUTE("1分", 60_000L), FIVE_MINUTES("5分", 300_000L), FIFTEEN_MINUTES("15分", 900_000L)
+}
+
 @Composable
-private fun SignalChart(history: List<SignalSample>, modifier: Modifier = Modifier) {
+internal fun SignalChart(history: List<SignalSample>, modifier: Modifier = Modifier) {
     val lineColor = MaterialTheme.colorScheme.primary
     val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = .25f)
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    var range by remember { mutableStateOf(HistoryRange.THIRTY_SECONDS) }
+    var zoom by remember { mutableFloatStateOf(1f) }
+    var panFraction by remember { mutableFloatStateOf(0f) }
+    var selected by remember { mutableStateOf<SignalSample?>(null) }
+    val transformState = rememberTransformableState { zoomChange, panChange, _ ->
+        zoom = (zoom * zoomChange).coerceIn(1f, 8f)
+        panFraction = (panFraction - panChange.x / 800f).coerceIn(0f, 1f - 1f / zoom)
+    }
+    val latest = history.maxOfOrNull { it.timestampMillis } ?: System.currentTimeMillis()
+    val rangeStart = latest - range.millis
+    val rangeSamples = history.filter { it.timestampMillis in rangeStart..latest }
+    val visibleDuration = (range.millis / zoom).toLong()
+    val visibleEnd = latest - (range.millis * panFraction).toLong()
+    val visibleStart = visibleEnd - visibleDuration
+    val visible = rangeSamples.filter { it.timestampMillis in visibleStart..visibleEnd }
+    val max = rangeSamples.maxOfOrNull { it.rssi }
+    val min = rangeSamples.minOfOrNull { it.rssi }
+    val average = rangeSamples.takeIf { it.isNotEmpty() }?.map { it.rssi }?.average()
     Card(modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
         Column(Modifier.padding(AppSpacing.large), verticalArrangement = Arrangement.spacedBy(AppSpacing.medium)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(stringResource(R.string.signal_history), style = MaterialTheme.typography.titleMedium)
                 Text(stringResource(R.string.dbm_axis), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Canvas(Modifier.fillMaxWidth().aspectRatio(1.9f)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+                HistoryRange.entries.forEach { item ->
+                    FilterChip(selected = range == item, onClick = { range = item; zoom = 1f; panFraction = 0f; selected = null }, label = { Text(item.label) })
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("最大 ${max?.let { "$it dBm" } ?: "—"}", style = MaterialTheme.typography.labelMedium)
+                Text("平均 ${average?.let { "%.1f dBm".format(it) } ?: "—"}", style = MaterialTheme.typography.labelMedium)
+                Text("最小 ${min?.let { "$it dBm" } ?: "—"}", style = MaterialTheme.typography.labelMedium)
+            }
+            selected?.let { Text("${it.rssi} dBm・${((latest - it.timestampMillis) / 1000L)}秒前", color = MaterialTheme.colorScheme.primary) }
+            Canvas(
+                Modifier.fillMaxWidth().aspectRatio(1.9f)
+                    .semantics { contentDescription = "信号履歴グラフ。縦軸はdBm、横軸は時間。ピンチで拡大、ドラッグで移動、ダブルタップでリセット" }
+                    .transformable(transformState)
+                    .pointerInput(visible, visibleStart, visibleDuration) {
+                        detectTapGestures(
+                            onDoubleTap = { zoom = 1f; panFraction = 0f; selected = null },
+                            onTap = { tap ->
+                                val target = visibleStart + (tap.x / size.width * visibleDuration).toLong()
+                                selected = visible.minByOrNull { abs(it.timestampMillis - target) }
+                            },
+                        )
+                    }
+            ) {
+                val labelPaint = android.graphics.Paint().apply { color = labelColor.toArgb(); textSize = 11.sp.toPx() }
+                listOf(-40, -60, -80, -100).forEach { dbm ->
+                    val y = size.height * ((-40 - dbm) / 60f)
+                    drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
+                    drawContext.canvas.nativeCanvas.drawText("$dbm", 2.dp.toPx(), (y - 2.dp.toPx()).coerceAtLeast(12.dp.toPx()), labelPaint)
+                }
                 repeat(4) { index ->
                     val y = size.height * index / 3f
                     drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
@@ -199,22 +257,20 @@ private fun SignalChart(history: List<SignalSample>, modifier: Modifier = Modifi
                     val x = size.width * index / 5f
                     drawLine(gridColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1.dp.toPx())
                 }
-                if (history.isNotEmpty()) {
-                    val end = history.maxOf { it.timestampMillis }
-                    val start = end - 30_000L
+                SignalHistoryPolicy.segments(visible).forEach { segment ->
                     val path = Path()
-                    history.forEachIndexed { index, sample ->
-                        val x = size.width * ((sample.timestampMillis - start).coerceIn(0, 30_000) / 30_000f)
-                        val y = size.height * (1f - ((sample.rssi.coerceIn(-90, -40) + 90) / 50f))
+                    segment.forEachIndexed { index, sample ->
+                        val x = size.width * ((sample.timestampMillis - visibleStart).coerceIn(0, visibleDuration) / visibleDuration.toFloat())
+                        val y = size.height * ((-40 - sample.rssi.coerceIn(-100, -40)) / 60f)
                         if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
-                        if (history.size == 1) drawCircle(lineColor, 4.dp.toPx(), Offset(x, y))
+                        if (segment.size == 1) drawCircle(lineColor, 4.dp.toPx(), Offset(x, y))
                     }
-                    if (history.size > 1) drawPath(path, lineColor, style = Stroke(width = 3.dp.toPx()))
+                    if (segment.size > 1) drawPath(path, lineColor, style = Stroke(width = 3.dp.toPx()))
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(stringResource(R.string.seconds_ago_30), style = MaterialTheme.typography.labelSmall)
-                Text(stringResource(R.string.seconds_ago_15), style = MaterialTheme.typography.labelSmall)
+                Text("${visibleDuration / 1000}秒前", style = MaterialTheme.typography.labelSmall)
+                Text("時間", style = MaterialTheme.typography.labelSmall)
                 Text(stringResource(R.string.now), style = MaterialTheme.typography.labelSmall)
             }
         }

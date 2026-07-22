@@ -20,6 +20,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,6 +42,7 @@ import com.lazyapps.wifianalyzer.ui.components.RegisteredBadge
 import com.lazyapps.wifianalyzer.ui.components.BandSelector
 import com.lazyapps.wifianalyzer.ui.components.ScanStatusCard
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
+import com.lazyapps.wifianalyzer.ui.components.RefreshProgress
 import com.lazyapps.wifianalyzer.ui.scan.ScanUiState
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 import com.lazyapps.wifianalyzer.ui.theme.ThemeMode
@@ -57,6 +59,11 @@ fun ChannelScreen(
 ) {
     var band by remember { mutableStateOf(WifiBand.BAND_24) }
     val occupancy = state.occupancyFor(band)
+    PullToRefreshBox(
+        isRefreshing = state.isRefreshing,
+        onRefresh = onRefresh,
+        modifier = Modifier.fillMaxSize(),
+    ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = AppSpacing.xLarge),
@@ -67,6 +74,7 @@ fun ChannelScreen(
                 IconButton(onClick = onRefresh) { Icon(Icons.Rounded.Refresh, stringResource(R.string.refresh_scan)) }
             }
         }
+        item { RefreshProgress(state) }
         item { BandSelector(band, { band = it }, Modifier.padding(horizontal = AppSpacing.large)) }
         item {
             ScanStatusCard(
@@ -86,6 +94,7 @@ fun ChannelScreen(
         items(occupancy, key = { it.channel }) { usage ->
             ChannelCard(usage, onSelectAccessPoint, onRegisterAccessPoint, Modifier.padding(horizontal = AppSpacing.large))
         }
+    }
     }
 }
 

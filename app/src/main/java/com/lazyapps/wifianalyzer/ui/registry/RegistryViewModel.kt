@@ -24,6 +24,7 @@ data class RegistryUiState(
     val draft: DeviceInput = DeviceInput(displayName = "", bssids = listOf(DeviceBssidInput("", "2.4 GHz"))),
     val errorMessage: String? = null,
     val busy: Boolean = false,
+    val editBaseline: DeviceInput? = null,
 )
 
 class RegistryViewModel(application: Application) : AndroidViewModel(application) {
@@ -71,17 +72,21 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
                 )
             },
             errorMessage = null,
+            editBaseline = null,
         )
     }
 
     fun startNew(input: DeviceInput) {
-        _uiState.value = _uiState.value.copy(draft = input, errorMessage = null)
+        _uiState.value = _uiState.value.copy(
+            draft = input,
+            errorMessage = null,
+            editBaseline = _uiState.value.editBaseline?.takeIf { it.id == input.id && input.id != 0L },
+        )
     }
 
     fun startEdit(deviceId: Long) {
         val device = _uiState.value.devices.firstOrNull { it.id == deviceId } ?: return
-        _uiState.value = _uiState.value.copy(
-            draft = DeviceInput(
+        val draft = DeviceInput(
                 id = device.id,
                 displayName = device.displayName,
                 manufacturer = device.manufacturer,
@@ -94,7 +99,10 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
                 bssids = device.bssids.map { DeviceBssidInput(it.bssid, it.band, it.label) },
                 initialLastSeenAt = device.lastSeenAt,
                 initialLastSeenRssi = device.lastSeenRssi,
-            ),
+            )
+        _uiState.value = _uiState.value.copy(
+            draft = draft,
+            editBaseline = draft,
             errorMessage = null,
         )
     }
