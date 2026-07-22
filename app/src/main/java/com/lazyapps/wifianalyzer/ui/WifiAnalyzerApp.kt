@@ -209,6 +209,7 @@ fun WifiAnalyzerApp(
                         onRefresh = scanViewModel::refresh,
                         onRequestPermission = requestPermission,
                         onOpenSettings = openSettings,
+                        onHistoryRangeChange = scanViewModel::setSignalHistoryRange,
                     )
                 }
                 composable(AppDestination.Devices.route) {
@@ -240,6 +241,10 @@ fun WifiAnalyzerApp(
                         onAnimationChange = themeViewModel::setAnimationsEnabled,
                         refreshIntervalMillis = scanState.refreshIntervalMillis,
                         onRefreshIntervalChange = scanViewModel::setRefreshInterval,
+                        distanceUnit = scanState.distanceUnit,
+                        onDistanceUnitChange = scanViewModel::setDistanceUnit,
+                        visibleBands = scanState.visibleBands,
+                        onVisibleBandsChange = scanViewModel::setVisibleBands,
                         workspaceState = workspaceState,
                         onSelectWorkspace = workspaceViewModel::select,
                         onCreateWorkspace = workspaceViewModel::create,
@@ -315,6 +320,7 @@ fun WifiAnalyzerApp(
                             deviceId?.let(registryViewModel::startEdit)
                             navController.navigate(OCR_REGISTRATION_ROUTE)
                         },
+                        useFeet = scanState.distanceUnit == com.lazyapps.wifianalyzer.data.DistanceUnitPreference.FEET,
                     )
                 }
             }

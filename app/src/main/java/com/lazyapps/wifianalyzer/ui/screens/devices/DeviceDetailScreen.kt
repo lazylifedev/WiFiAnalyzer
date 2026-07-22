@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.testTag
 import com.lazyapps.wifianalyzer.domain.DetectionPolicy
 import com.lazyapps.wifianalyzer.domain.RegisteredDevice
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
+import com.lazyapps.wifianalyzer.model.displayLabel
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 import com.lazyapps.wifianalyzer.ui.photos.DevicePhotoGallery
@@ -52,6 +53,7 @@ fun DeviceDetailScreen(
     onDelete: () -> Unit,
     onMonitor: (String) -> Unit,
     onOcrUpdate: () -> Unit,
+    useFeet: Boolean = false,
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
     var chooseMonitor by remember { mutableStateOf(false) }
@@ -102,7 +104,7 @@ fun DeviceDetailScreen(
                 DetailLine("状態", if (detected) "現在検出中" else "未検出")
                 DetailLine("最新RSSI", device.lastSeenRssi?.let { "$it dBm" } ?: "—")
                 DetailLine("最終検出", relativeDate(device.lastSeenAt))
-                val distance = detectedAccessPoints.maxByOrNull { it.rssi }?.distanceRange?.label ?: "—"
+                val distance = detectedAccessPoints.maxByOrNull { it.rssi }?.distanceRange?.displayLabel(useFeet) ?: "—"
                 DetailLine("推定距離", distance)
             }
         }

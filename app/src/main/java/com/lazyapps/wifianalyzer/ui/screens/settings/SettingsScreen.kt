@@ -46,13 +46,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import com.lazyapps.wifianalyzer.R
+import com.lazyapps.wifianalyzer.data.DistanceUnitPreference
+import com.lazyapps.wifianalyzer.model.WifiBand
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
 import com.lazyapps.wifianalyzer.ui.components.SectionLabel
 import com.lazyapps.wifianalyzer.ui.theme.AccentColor
@@ -70,8 +74,12 @@ fun SettingsScreen(
     onModeChange: (ThemeMode) -> Unit,
     onAccentChange: (AccentColor) -> Unit,
     onAnimationChange: (Boolean) -> Unit,
-    refreshIntervalMillis: Long = 18_000L,
+    refreshIntervalMillis: Long = 20_000L,
     onRefreshIntervalChange: (Long) -> Unit = {},
+    distanceUnit: DistanceUnitPreference = DistanceUnitPreference.METERS,
+    onDistanceUnitChange: (DistanceUnitPreference) -> Unit = {},
+    visibleBands: Set<WifiBand> = WifiBand.entries.toSet(),
+    onVisibleBandsChange: (Set<WifiBand>) -> Unit = {},
     workspaceState: WorkspaceUiState = WorkspaceUiState(),
     onSelectWorkspace: (Long) -> Unit = {},
     onCreateWorkspace: (String) -> Unit = {},
@@ -80,8 +88,13 @@ fun SettingsScreen(
     onDeleteWorkspace: (Long) -> Unit = {},
     onLoadWorkspaceCounts: (Long) -> Unit = {},
 ) {
+    val context = LocalContext.current
+    val packageInfo = remember(context) { context.packageManager.getPackageInfo(context.packageName, 0) }
     var showWorkspaces by remember { mutableStateOf(false) }
     var showRefreshIntervals by remember { mutableStateOf(false) }
+    var showDistanceUnits by remember { mutableStateOf(false) }
+    var showBands by remember { mutableStateOf(false) }
+    var showAbout by remember { mutableStateOf(false) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = AppSpacing.xLarge),
@@ -137,8 +150,8 @@ fun SettingsScreen(
         item { SectionLabel(stringResource(R.string.display_section), Modifier.padding(horizontal = AppSpacing.large)) }
         item {
             Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
-                SettingRow(stringResource(R.string.distance_unit), stringResource(R.string.distance_unit_value))
-                SettingRow(stringResource(R.string.frequency_bands), stringResource(R.string.frequency_bands_value))
+                SettingRow(stringResource(R.string.distance_unit), if (distanceUnit == DistanceUnitPreference.METERS) "メートル (m)" else "フィート (ft)", onClick = { showDistanceUnits = true })
+                SettingRow(stringResource(R.string.frequency_bands), visibleBandLabel(visibleBands), onClick = { showBands = true })
                 SettingRow("Wi-Fi自動更新", refreshIntervalLabel(refreshIntervalMillis), trailing = {
                     IconButton(onClick = { showRefreshIntervals = true }, modifier = Modifier.testTag("refresh_interval")) {
                         Icon(Icons.Rounded.ChevronRight, "更新間隔を変更")
@@ -156,7 +169,7 @@ fun SettingsScreen(
         item { SectionLabel(stringResource(R.string.other_section), Modifier.padding(horizontal = AppSpacing.large)) }
         item {
             Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
-                SettingRow(stringResource(R.string.about_app), stringResource(R.string.about_value))
+                SettingRow(stringResource(R.string.about_app), "バージョン ${packageInfo.versionName}", onClick = { showAbout = true })
             }
         }
     }
@@ -170,7 +183,7 @@ fun SettingsScreen(
         title = { Text("Wi-Fi自動更新") },
         text = {
             Column {
-                listOf(18_000L, 30_000L, 60_000L, 120_000L, 300_000L).forEach { interval ->
+                listOf(10_000L, 15_000L, 20_000L, 30_000L, 60_000L, 120_000L, 300_000L).forEach { interval ->
                     Row(
                         Modifier.fillMaxWidth().selectable(
                             selected = refreshIntervalMillis == interval,
@@ -187,15 +200,72 @@ fun SettingsScreen(
         },
         confirmButton = { TextButton(onClick = { showRefreshIntervals = false }) { Text("閉じる") } },
     )
+    if (showDistanceUnits) ChoiceDialog(
+        title = "距離単位",
+        choices = DistanceUnitPreference.entries.map { it to if (it == DistanceUnitPreference.METERS) "メートル" else "フィート" },
+        selected = distanceUnit,
+        onSelect = { onDistanceUnitChange(it); showDistanceUnits = false },
+        onDismiss = { showDistanceUnits = false },
+    )
+    if (showBands) AlertDialog(
+        onDismissRequest = { showBands = false },
+        title = { Text("表示対象周波数帯") },
+        text = { Column { WifiBand.entries.forEach { band ->
+            val selected = band in visibleBands
+            Row(
+                Modifier.fillMaxWidth().selectable(selected, onClick = {
+                    val next = if (selected) visibleBands - band else visibleBands + band
+                    if (next.isNotEmpty()) onVisibleBandsChange(next)
+                }, role = Role.Checkbox).padding(vertical = AppSpacing.small),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                androidx.compose.material3.Checkbox(selected, null)
+                Text(band.label)
+            }
+        } } },
+        confirmButton = { TextButton(onClick = { showBands = false }) { Text("完了") } },
+    )
+    if (showAbout) AlertDialog(
+        onDismissRequest = { showAbout = false },
+        title = { Text("アプリについて") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+            Text("Wi-Fiアナライザー")
+            Text("バージョン名: ${packageInfo.versionName}")
+            Text("バージョンコード: ${packageInfo.longVersionCode}")
+            Text("パッケージ名: ${context.packageName}")
+            Text("Android対応バージョン: Android 8.0以上")
+            Text("オープンソースライセンス: 準備中")
+            Text("プライバシーポリシー: 準備中")
+            Text("利用規約: 準備中")
+            Text("問い合わせ: 準備中")
+        } },
+        confirmButton = { TextButton(onClick = { showAbout = false }) { Text("閉じる") } },
+    )
 }
 
 internal fun refreshIntervalLabel(milliseconds: Long): String = when (milliseconds) {
-    18_000L -> "18秒"
+    10_000L -> "10秒"
+    15_000L -> "15秒"
+    20_000L -> "20秒"
     30_000L -> "30秒"
     60_000L -> "1分"
     120_000L -> "2分"
     300_000L -> "5分"
     else -> "${milliseconds / 1_000L}秒"
+}
+
+internal fun visibleBandLabel(bands: Set<WifiBand>): String = WifiBand.entries.filter { it in bands }.joinToString(" / ") {
+    when (it) { WifiBand.BAND_24 -> "2.4"; WifiBand.BAND_5 -> "5"; WifiBand.BAND_6 -> "6" }
+} + " GHz"
+
+@Composable
+private fun <T> ChoiceDialog(title: String, choices: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(title) }, text = { Column {
+        choices.forEach { (choice, label) -> Row(
+            Modifier.fillMaxWidth().selectable(choice == selected, onClick = { onSelect(choice) }, role = Role.RadioButton).padding(vertical = AppSpacing.small),
+            verticalAlignment = Alignment.CenterVertically,
+        ) { RadioButton(choice == selected, null); Text(label) } }
+    } }, confirmButton = { TextButton(onClick = onDismiss) { Text("閉じる") } })
 }
 
 @Composable
@@ -273,10 +343,10 @@ private fun ThemeModeCard(mode: ThemeMode, selected: Boolean, onClick: () -> Uni
 }
 
 @Composable
-private fun SettingRow(title: String, value: String? = null, trailing: (@Composable () -> Unit)? = null) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large, vertical = AppSpacing.medium), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-        value?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
+private fun SettingRow(title: String, value: String? = null, trailing: (@Composable () -> Unit)? = null, onClick: (() -> Unit)? = null) {
+    Row(Modifier.fillMaxWidth().then(if (onClick != null) Modifier.selectable(false, onClick = onClick) else Modifier).padding(horizontal = AppSpacing.large, vertical = AppSpacing.medium), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        value?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         trailing?.invoke() ?: Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

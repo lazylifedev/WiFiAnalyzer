@@ -36,6 +36,13 @@ class PhotoRepositoryTest {
         assertTrue(runCatching { repository.save(deviceId, workspaceId, Uri.fromFile(sources.last())) }.isFailure)
         repository.setPrimary(photos[2].id); assertTrue(repository.observe(deviceId).first { list -> list.any { it.id == photos[2].id && it.isPrimary } }.single { it.isPrimary }.id == photos[2].id)
         val deletedFile = repository.file(photos.first()); repository.delete(photos.first().id); assertFalse(deletedFile.exists()); assertEquals(8, repository.observe(deviceId).first { it.size == 8 }.size)
+        val batchTargets = setOf(photos[2].id, photos[4].id)
+        val batchFiles = photos.filter { it.id in batchTargets }.map(repository::file)
+        repository.delete(batchTargets)
+        val remaining = repository.observe(deviceId).first { it.size == 6 }
+        assertTrue(batchFiles.none(File::exists))
+        assertTrue(remaining.none { it.isPrimary })
+        assertEquals((0 until remaining.size).toList(), remaining.map { it.sortOrder })
         sources.forEach(File::delete); db.close(); Unit
     }
 }

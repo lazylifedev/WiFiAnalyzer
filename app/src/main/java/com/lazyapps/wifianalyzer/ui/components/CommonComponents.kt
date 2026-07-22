@@ -23,6 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.model.WifiBand
@@ -42,17 +43,17 @@ fun ScreenHeader(title: String, supporting: String? = null, action: (@Composable
             modifier = Modifier.size(30.dp),
         )
         androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleLarge)
-            supporting?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            supporting?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
         action?.invoke()
     }
 }
 
 @Composable
-fun BandSelector(selected: WifiBand, onSelected: (WifiBand) -> Unit, modifier: Modifier = Modifier) {
+fun BandSelector(selected: WifiBand, onSelected: (WifiBand) -> Unit, modifier: Modifier = Modifier, bands: Set<WifiBand> = WifiBand.entries.toSet()) {
     Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-        WifiBand.entries.forEach { band ->
+        WifiBand.entries.filter { it in bands }.forEach { band ->
             FilterChip(
                 selected = selected == band,
                 onClick = { onSelected(band) },

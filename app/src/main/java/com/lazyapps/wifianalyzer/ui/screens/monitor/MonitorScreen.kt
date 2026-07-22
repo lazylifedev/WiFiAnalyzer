@@ -56,6 +56,8 @@ import com.lazyapps.wifianalyzer.model.ScanState
 import com.lazyapps.wifianalyzer.domain.SignalHistoryPolicy
 import com.lazyapps.wifianalyzer.model.SignalSample
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
+import com.lazyapps.wifianalyzer.model.displayLabel
+import com.lazyapps.wifianalyzer.data.DistanceUnitPreference
 import com.lazyapps.wifianalyzer.ui.components.ScanStatusCard
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
 import com.lazyapps.wifianalyzer.ui.components.RefreshProgress
@@ -71,6 +73,7 @@ fun MonitorScreen(
     onRefresh: () -> Unit,
     onRequestPermission: () -> Unit,
     onOpenSettings: (ScanState) -> Unit,
+    onHistoryRangeChange: (Long) -> Unit = {},
 ) {
     val accessPoint = state.selectedAccessPoint
     LazyColumn(
@@ -125,14 +128,14 @@ fun MonitorScreen(
                     }
                 }
             }
-            item { SignalSummary(accessPoint, state.selectedDetected, state.signalHistory, Modifier.padding(horizontal = AppSpacing.large)) }
-            item { SignalChart(state.signalHistory, Modifier.padding(horizontal = AppSpacing.large)) }
+            item { SignalSummary(accessPoint, state.selectedDetected, state.signalHistory, state.distanceUnit == DistanceUnitPreference.FEET, Modifier.padding(horizontal = AppSpacing.large)) }
+            item { SignalChart(state.signalHistory, state.signalHistoryRangeMillis, onHistoryRangeChange, Modifier.padding(horizontal = AppSpacing.large)) }
         }
     }
 }
 
 @Composable
-private fun SignalSummary(accessPoint: WifiAccessPoint, detected: Boolean, history: List<SignalSample>, modifier: Modifier = Modifier) {
+private fun SignalSummary(accessPoint: WifiAccessPoint, detected: Boolean, history: List<SignalSample>, feet: Boolean, modifier: Modifier = Modifier) {
     val stability = stabilityLabel(history)
     val progress = ((accessPoint.rssi + 100) / 55f).coerceIn(0f, 1f)
     Card(modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
@@ -156,7 +159,7 @@ private fun SignalSummary(accessPoint: WifiAccessPoint, detected: Boolean, histo
             HorizontalDivider()
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
                 MetricCard(Icons.AutoMirrored.Rounded.ShowChart, stringResource(R.string.stability), stability, Modifier.weight(1f))
-                MetricCard(Icons.Rounded.LocationOn, stringResource(R.string.monitor_distance), if (detected) "推定 ${accessPoint.distanceRange.label}" else "—", Modifier.weight(1f))
+                MetricCard(Icons.Rounded.LocationOn, stringResource(R.string.monitor_distance), if (detected) "推定 ${accessPoint.distanceRange.displayLabel(feet)}" else "—", Modifier.weight(1f))
             }
         }
     }
@@ -191,17 +194,17 @@ private enum class HistoryRange(val label: String, val millis: Long) {
 }
 
 @Composable
-internal fun SignalChart(history: List<SignalSample>, modifier: Modifier = Modifier) {
+internal fun SignalChart(history: List<SignalSample>, selectedRangeMillis: Long = 30_000L, onRangeChange: (Long) -> Unit = {}, modifier: Modifier = Modifier) {
     val lineColor = MaterialTheme.colorScheme.primary
     val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = .25f)
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-    var range by remember { mutableStateOf(HistoryRange.THIRTY_SECONDS) }
+    val range = HistoryRange.entries.firstOrNull { it.millis == selectedRangeMillis } ?: HistoryRange.THIRTY_SECONDS
     var zoom by remember { mutableFloatStateOf(1f) }
     var panFraction by remember { mutableFloatStateOf(0f) }
     var selected by remember { mutableStateOf<SignalSample?>(null) }
     val transformState = rememberTransformableState { zoomChange, panChange, _ ->
         zoom = (zoom * zoomChange).coerceIn(1f, 8f)
-        panFraction = (panFraction + panChange.x / 800f).coerceIn(0f, 1f - 1f / zoom)
+        panFraction = (panFraction + panChange.x / 1600f).coerceIn(0f, 1f - 1f / zoom)
     }
     val latest = history.maxOfOrNull { it.timestampMillis } ?: System.currentTimeMillis()
     val rangeStart = latest - range.millis
@@ -222,7 +225,7 @@ internal fun SignalChart(history: List<SignalSample>, modifier: Modifier = Modif
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
                 HistoryRange.entries.forEach { item ->
-                    FilterChip(selected = range == item, onClick = { range = item; zoom = 1f; panFraction = 0f; selected = null }, label = { Text(item.label) })
+                    FilterChip(selected = range == item, onClick = { onRangeChange(item.millis); zoom = 1f; panFraction = 0f; selected = null }, label = { Text(item.label) })
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -239,31 +242,38 @@ internal fun SignalChart(history: List<SignalSample>, modifier: Modifier = Modif
                         detectTapGestures(
                             onDoubleTap = { zoom = 1f; panFraction = 0f; selected = null },
                             onTap = { tap ->
-                                val target = visibleStart + (tap.x / size.width * visibleDuration).toLong()
+                                val axisWidth = 42.dp.toPx()
+                                val plotWidth = (size.width - axisWidth - 8.dp.toPx()).coerceAtLeast(1f)
+                                val target = visibleStart + (((tap.x - axisWidth) / plotWidth).coerceIn(0f, 1f) * visibleDuration).toLong()
                                 selected = visible.minByOrNull { abs(it.timestampMillis - target) }
                             },
                         )
                     }
             ) {
                 val labelPaint = android.graphics.Paint().apply { color = labelColor.toArgb(); textSize = 11.sp.toPx() }
+                val leftAxisWidth = labelPaint.measureText("-100") + 12.dp.toPx()
+                val rightPadding = 8.dp.toPx()
+                val plotLeft = leftAxisWidth
+                val plotWidth = (size.width - plotLeft - rightPadding).coerceAtLeast(1f)
+                val plotRight = plotLeft + plotWidth
                 val tickStep = if (yAxis.span <= 30) 5 else 10
                 (yAxis.lower..yAxis.upper step tickStep).forEach { dbm ->
                     val y = size.height * ((yAxis.upper - dbm) / yAxis.span.toFloat())
-                    drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
+                    drawLine(gridColor, Offset(plotLeft, y), Offset(plotRight, y), strokeWidth = 1.dp.toPx())
                     drawContext.canvas.nativeCanvas.drawText("$dbm", 2.dp.toPx(), (y - 2.dp.toPx()).coerceAtLeast(12.dp.toPx()), labelPaint)
                 }
                 repeat(4) { index ->
                     val y = size.height * index / 3f
-                    drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
+                    drawLine(gridColor, Offset(plotLeft, y), Offset(plotRight, y), strokeWidth = 1.dp.toPx())
                 }
                 repeat(6) { index ->
-                    val x = size.width * index / 5f
+                    val x = plotLeft + plotWidth * index / 5f
                     drawLine(gridColor, Offset(x, 0f), Offset(x, size.height), strokeWidth = 1.dp.toPx())
                 }
                 SignalHistoryPolicy.segments(visible).forEach { segment ->
                     val path = Path()
                     segment.forEachIndexed { index, sample ->
-                        val x = size.width * ((sample.timestampMillis - visibleStart).coerceIn(0, visibleDuration) / visibleDuration.toFloat())
+                        val x = plotLeft + plotWidth * ((sample.timestampMillis - visibleStart).coerceIn(0, visibleDuration) / visibleDuration.toFloat())
                         val y = size.height * ((yAxis.upper - sample.rssi.coerceIn(yAxis.lower, yAxis.upper)) / yAxis.span.toFloat())
                         if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
                         if (segment.size == 1) drawCircle(lineColor, 4.dp.toPx(), Offset(x, y))
@@ -271,7 +281,7 @@ internal fun SignalChart(history: List<SignalSample>, modifier: Modifier = Modif
                     if (segment.size > 1) drawPath(path, lineColor, style = Stroke(width = 3.dp.toPx()))
                 }
                 selected?.takeIf { it in visible }?.let { sample ->
-                    val x = size.width * ((sample.timestampMillis - visibleStart).coerceIn(0, visibleDuration) / visibleDuration.toFloat())
+                    val x = plotLeft + plotWidth * ((sample.timestampMillis - visibleStart).coerceIn(0, visibleDuration) / visibleDuration.toFloat())
                     val y = size.height * ((yAxis.upper - sample.rssi.coerceIn(yAxis.lower, yAxis.upper)) / yAxis.span.toFloat())
                     drawLine(lineColor.copy(alpha = .5f), Offset(x, 0f), Offset(x, size.height), strokeWidth = 1.dp.toPx())
                     drawCircle(Color.White, 7.dp.toPx(), Offset(x, y))
