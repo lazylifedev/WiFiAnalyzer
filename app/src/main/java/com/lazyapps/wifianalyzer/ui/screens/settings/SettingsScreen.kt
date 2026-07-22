@@ -25,7 +25,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.IconButton
@@ -68,6 +70,8 @@ fun SettingsScreen(
     onModeChange: (ThemeMode) -> Unit,
     onAccentChange: (AccentColor) -> Unit,
     onAnimationChange: (Boolean) -> Unit,
+    refreshIntervalMillis: Long = 18_000L,
+    onRefreshIntervalChange: (Long) -> Unit = {},
     workspaceState: WorkspaceUiState = WorkspaceUiState(),
     onSelectWorkspace: (Long) -> Unit = {},
     onCreateWorkspace: (String) -> Unit = {},
@@ -77,6 +81,7 @@ fun SettingsScreen(
     onLoadWorkspaceCounts: (Long) -> Unit = {},
 ) {
     var showWorkspaces by remember { mutableStateOf(false) }
+    var showRefreshIntervals by remember { mutableStateOf(false) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = AppSpacing.xLarge),
@@ -134,6 +139,17 @@ fun SettingsScreen(
             Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
                 SettingRow(stringResource(R.string.distance_unit), stringResource(R.string.distance_unit_value))
                 SettingRow(stringResource(R.string.frequency_bands), stringResource(R.string.frequency_bands_value))
+                SettingRow("Wi-Fi自動更新", refreshIntervalLabel(refreshIntervalMillis), trailing = {
+                    IconButton(onClick = { showRefreshIntervals = true }, modifier = Modifier.testTag("refresh_interval")) {
+                        Icon(Icons.Rounded.ChevronRight, "更新間隔を変更")
+                    }
+                })
+                Text(
+                    "端末やAndroidの制限により、設定した間隔で更新できない場合があります。",
+                    modifier = Modifier.padding(horizontal = AppSpacing.large),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 SettingRow(stringResource(R.string.animations), trailing = { Switch(state.animationsEnabled, onAnimationChange) })
             }
         }
@@ -149,6 +165,37 @@ fun SettingsScreen(
         onCreate = onCreateWorkspace, onRename = onRenameWorkspace, onMove = onMoveWorkspace,
         onDelete = onDeleteWorkspace, onLoadCounts = onLoadWorkspaceCounts,
     )
+    if (showRefreshIntervals) AlertDialog(
+        onDismissRequest = { showRefreshIntervals = false },
+        title = { Text("Wi-Fi自動更新") },
+        text = {
+            Column {
+                listOf(18_000L, 30_000L, 60_000L, 120_000L, 300_000L).forEach { interval ->
+                    Row(
+                        Modifier.fillMaxWidth().selectable(
+                            selected = refreshIntervalMillis == interval,
+                            onClick = { onRefreshIntervalChange(interval); showRefreshIntervals = false },
+                            role = Role.RadioButton,
+                        ).padding(vertical = AppSpacing.small),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(refreshIntervalMillis == interval, onClick = null)
+                        Text(refreshIntervalLabel(interval))
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { showRefreshIntervals = false }) { Text("閉じる") } },
+    )
+}
+
+internal fun refreshIntervalLabel(milliseconds: Long): String = when (milliseconds) {
+    18_000L -> "18秒"
+    30_000L -> "30秒"
+    60_000L -> "1分"
+    120_000L -> "2分"
+    300_000L -> "5分"
+    else -> "${milliseconds / 1_000L}秒"
 }
 
 @Composable

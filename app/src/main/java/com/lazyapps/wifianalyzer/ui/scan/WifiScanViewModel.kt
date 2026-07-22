@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lazyapps.wifianalyzer.data.WifiScanRepository
+import com.lazyapps.wifianalyzer.data.WifiUiPreferencesRepository
 import com.lazyapps.wifianalyzer.domain.WifiAnalysis
 import com.lazyapps.wifianalyzer.model.ChannelOccupancy
 import com.lazyapps.wifianalyzer.model.ScanState
@@ -30,6 +31,9 @@ data class ScanUiState(
     val refreshProgress: Float = 0f,
     val refreshSecondsRemaining: Int? = null,
     val isRefreshing: Boolean = false,
+    val homeBand: WifiBand = WifiBand.BAND_24,
+    val channelBand: WifiBand = WifiBand.BAND_24,
+    val refreshIntervalMillis: Long = WifiUiPreferencesRepository.DEFAULT_REFRESH_INTERVAL_MILLIS,
 ) {
     fun accessPointsFor(band: WifiBand): List<WifiAccessPoint> = accessPoints.filter { it.band == band }
     fun occupancyFor(band: WifiBand): List<ChannelOccupancy> = WifiAnalysis.channelOccupancy(accessPoints, band)
@@ -37,13 +41,26 @@ data class ScanUiState(
 
 class WifiScanViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = WifiScanRepository(application)
+    private val preferences = WifiUiPreferencesRepository(application)
     private val _uiState = MutableStateFlow(ScanUiState())
     val uiState: StateFlow<ScanUiState> = _uiState.asStateFlow()
     private val samplesByBssid = mutableMapOf<String, ArrayDeque<SignalSample>>()
     private var permissionState = ScanState.PERMISSION_REQUIRED
     private var autoRefreshJob: Job? = null
+    private var foreground = true
 
     init {
+        viewModelScope.launch {
+            preferences.preferences.collectLatest { value ->
+                val intervalChanged = _uiState.value.refreshIntervalMillis != value.refreshIntervalMillis
+                _uiState.value = _uiState.value.copy(
+                    homeBand = value.homeBand,
+                    channelBand = value.channelBand,
+                    refreshIntervalMillis = value.refreshIntervalMillis,
+                )
+                if (intervalChanged) scheduleAutoRefresh()
+            }
+        }
         viewModelScope.launch {
             repository.snapshot.collectLatest { snapshot ->
                 if (permissionState != ScanState.READY) {
@@ -112,6 +129,28 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
         requestRefresh()
     }
 
+    fun selectHomeBand(band: WifiBand) {
+        _uiState.value = _uiState.value.copy(homeBand = band)
+        viewModelScope.launch { preferences.setHomeBand(band) }
+    }
+
+    fun selectChannelBand(band: WifiBand) {
+        _uiState.value = _uiState.value.copy(channelBand = band)
+        viewModelScope.launch { preferences.setChannelBand(band) }
+    }
+
+    fun setRefreshInterval(milliseconds: Long) {
+        viewModelScope.launch { preferences.setRefreshInterval(milliseconds) }
+    }
+
+    fun setForeground(isForeground: Boolean) {
+        foreground = isForeground
+        if (isForeground) scheduleAutoRefresh() else {
+            autoRefreshJob?.cancel()
+            autoRefreshJob = null
+        }
+    }
+
     private fun requestRefresh() {
         if (permissionState == ScanState.READY) {
             if (_uiState.value.scanState == ScanState.SCANNING) return
@@ -121,16 +160,17 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun scheduleAutoRefresh() {
-        if (permissionState != ScanState.READY) return
+        if (permissionState != ScanState.READY || !foreground) return
         autoRefreshJob?.cancel()
         autoRefreshJob = viewModelScope.launch {
             while (true) {
                 val startedAt = System.currentTimeMillis()
-                while (System.currentTimeMillis() - startedAt < REFRESH_CYCLE_MS) {
+                val cycleMillis = _uiState.value.refreshIntervalMillis
+                while (System.currentTimeMillis() - startedAt < cycleMillis) {
                     val elapsed = System.currentTimeMillis() - startedAt
-                    val remaining = (REFRESH_CYCLE_MS - elapsed).coerceAtLeast(0L)
+                    val remaining = (cycleMillis - elapsed).coerceAtLeast(0L)
                     _uiState.value = _uiState.value.copy(
-                        refreshProgress = (elapsed.toFloat() / REFRESH_CYCLE_MS).coerceIn(0f, 1f),
+                        refreshProgress = (elapsed.toFloat() / cycleMillis).coerceIn(0f, 1f),
                         refreshSecondsRemaining = ((remaining + 999L) / 1_000L).toInt(),
                     )
                     delay(250L)
@@ -161,7 +201,7 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
         const val HISTORY_WINDOW_MS = 15 * 60_000L
         const val DETECTION_TIMEOUT_MS = 45_000L
         const val MAX_HISTORY_SAMPLES = 900
-        const val REFRESH_CYCLE_MS = 18_000L
+        const val REFRESH_CYCLE_MS = WifiUiPreferencesRepository.DEFAULT_REFRESH_INTERVAL_MILLIS
         val PERMISSION_STATES = setOf(
             ScanState.PERMISSION_REQUIRED,
             ScanState.PERMISSION_DENIED,

@@ -108,7 +108,14 @@ fun WifiAnalyzerApp(
     }
     DisposableEffect(lifecycleOwner, requestedOnce) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) scanViewModel.updatePermissionState(currentPermissionState())
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    scanViewModel.setForeground(true)
+                    scanViewModel.updatePermissionState(currentPermissionState())
+                }
+                Lifecycle.Event.ON_PAUSE -> scanViewModel.setForeground(false)
+                else -> Unit
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -173,6 +180,8 @@ fun WifiAnalyzerApp(
                             navController.navigate(REGISTRATION_ROUTE)
                         },
                         workspaceName = workspaceState.selected?.name,
+                        selectedBand = scanState.homeBand,
+                        onBandSelected = scanViewModel::selectHomeBand,
                     )
                 }
                 composable(AppDestination.Channel.route) {
@@ -190,6 +199,8 @@ fun WifiAnalyzerApp(
                             navController.navigate(REGISTRATION_ROUTE)
                         },
                         workspaceName = workspaceState.selected?.name,
+                        selectedBand = scanState.channelBand,
+                        onBandSelected = scanViewModel::selectChannelBand,
                     )
                 }
                 composable(AppDestination.Monitor.route) {
@@ -227,6 +238,8 @@ fun WifiAnalyzerApp(
                         onModeChange = themeViewModel::setMode,
                         onAccentChange = themeViewModel::setAccent,
                         onAnimationChange = themeViewModel::setAnimationsEnabled,
+                        refreshIntervalMillis = scanState.refreshIntervalMillis,
+                        onRefreshIntervalChange = scanViewModel::setRefreshInterval,
                         workspaceState = workspaceState,
                         onSelectWorkspace = workspaceViewModel::select,
                         onCreateWorkspace = workspaceViewModel::create,

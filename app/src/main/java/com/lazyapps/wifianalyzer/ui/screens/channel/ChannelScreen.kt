@@ -22,10 +22,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -57,26 +53,23 @@ fun ChannelScreen(
     onSelectAccessPoint: (String) -> Unit,
     onRegisterAccessPoint: (WifiAccessPoint) -> Unit,
     workspaceName: String? = null,
+    selectedBand: WifiBand = state.channelBand,
+    onBandSelected: (WifiBand) -> Unit = {},
 ) {
-    var band by remember { mutableStateOf(WifiBand.BAND_24) }
+    val band = selectedBand
     val occupancy = state.occupancyFor(band)
-    PullToRefreshBox(
-        isRefreshing = state.isRefreshing,
-        onRefresh = onRefresh,
-        modifier = Modifier.fillMaxSize(),
-    ) {
-    LazyColumn(
+    Column(Modifier.fillMaxSize()) {
+        ScreenHeader(stringResource(R.string.screen_channel), listOfNotNull(workspaceName, stringResource(R.string.estimated_congestion)).joinToString(" ・ ")) {
+            IconButton(onClick = onRefresh) { Icon(Icons.Rounded.Refresh, stringResource(R.string.refresh_scan)) }
+        }
+        BandSelector(band, onBandSelected, Modifier.padding(horizontal = AppSpacing.large))
+        RefreshProgress(state)
+        PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
+        LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = AppSpacing.xLarge),
         verticalArrangement = Arrangement.spacedBy(AppSpacing.medium),
     ) {
-        item {
-            ScreenHeader(stringResource(R.string.screen_channel), listOfNotNull(workspaceName, stringResource(R.string.estimated_congestion)).joinToString(" ・ ")) {
-                IconButton(onClick = onRefresh) { Icon(Icons.Rounded.Refresh, stringResource(R.string.refresh_scan)) }
-            }
-        }
-        item { RefreshProgress(state) }
-        item { BandSelector(band, { band = it }, Modifier.padding(horizontal = AppSpacing.large)) }
         item {
             ScanStatusCard(
                 state.scanState, state.accessPoints.isNotEmpty(), onRequestPermission, onOpenSettings, onRefresh,
@@ -95,7 +88,8 @@ fun ChannelScreen(
         items(occupancy, key = { it.channel }) { usage ->
             ChannelCard(usage, onSelectAccessPoint, onRegisterAccessPoint, Modifier.padding(horizontal = AppSpacing.large))
         }
-    }
+        }
+        }
     }
 }
 

@@ -33,7 +33,7 @@
     <string name="stability">安定性</string>
     <string name="stable">安定</string>
     <string name="monitor_distance">推定距離</string>
-    <string name="signal_history">過去30秒のシグナル推移</string>
+    <string name="signal_history">シグナル推移</string>
     <string name="seconds_ago_30">30秒前</string>
     <string name="seconds_ago_15">15秒前</string>
     <string name="now">現在</string>

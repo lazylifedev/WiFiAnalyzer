@@ -23,10 +23,6 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -63,31 +59,28 @@ fun HomeScreen(
     onSelectAccessPoint: (String) -> Unit,
     onRegisterAccessPoint: (WifiAccessPoint) -> Unit,
     workspaceName: String? = null,
+    selectedBand: WifiBand = state.homeBand,
+    onBandSelected: (WifiBand) -> Unit = {},
 ) {
-    var band by remember { mutableStateOf(WifiBand.BAND_24) }
+    val band = selectedBand
     val accessPoints = state.accessPointsFor(band)
     val context = LocalContext.current
     val updated = state.lastUpdatedMillis?.let {
         stringResource(R.string.last_updated_time, DateFormat.getTimeFormat(context).format(Date(it)))
     } ?: stringResource(R.string.last_updated_time, "—")
 
-    PullToRefreshBox(
-        isRefreshing = state.isRefreshing,
-        onRefresh = onRefresh,
-        modifier = Modifier.fillMaxSize(),
-    ) {
-    LazyColumn(
+    Column(Modifier.fillMaxSize()) {
+        ScreenHeader(stringResource(R.string.screen_home), listOfNotNull(workspaceName, updated).joinToString(" ・ ")) {
+            IconButton(onClick = onRefresh) { Icon(Icons.Rounded.Refresh, stringResource(R.string.refresh_scan)) }
+        }
+        BandSelector(band, onBandSelected, Modifier.padding(horizontal = AppSpacing.large))
+        RefreshProgress(state)
+        PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
+        LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = AppSpacing.xLarge),
         verticalArrangement = Arrangement.spacedBy(AppSpacing.small),
     ) {
-        item {
-            ScreenHeader(stringResource(R.string.screen_home), listOfNotNull(workspaceName, updated).joinToString(" ・ ")) {
-                IconButton(onClick = onRefresh) { Icon(Icons.Rounded.Refresh, stringResource(R.string.refresh_scan)) }
-            }
-        }
-        item { RefreshProgress(state) }
-        item { BandSelector(band, { band = it }, Modifier.padding(horizontal = AppSpacing.large)) }
         item {
             ScanStatusCard(
                 state = state.scanState,
@@ -116,7 +109,8 @@ fun HomeScreen(
         items(accessPoints, key = { it.bssid }) { accessPoint ->
             AccessPointRow(accessPoint, onSelectAccessPoint, onRegisterAccessPoint, Modifier.padding(horizontal = AppSpacing.large))
         }
-    }
+        }
+        }
     }
 }
 
