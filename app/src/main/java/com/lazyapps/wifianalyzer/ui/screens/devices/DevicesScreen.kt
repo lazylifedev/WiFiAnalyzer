@@ -56,6 +56,7 @@ fun DevicesScreen(
     groups: List<DeviceGroup>,
     errorMessage: String?,
     onAddDevice: () -> Unit,
+    onScanLabel: () -> Unit,
     onOpenDevice: (Long) -> Unit,
     onDeleteDevice: (Long) -> Unit,
     onCreateGroup: (String) -> Unit,
@@ -69,6 +70,7 @@ fun DevicesScreen(
     var sort by remember { mutableStateOf(DeviceSort.NAME) }
     var deleteTarget by remember { mutableStateOf<RegisteredDevice?>(null) }
     var showGroups by remember { mutableStateOf(false) }
+    var showAddMethods by remember { mutableStateOf(false) }
     val visible = devices.asSequence()
         .filter { !uncategorizedOnly && selectedGroup == null || uncategorizedOnly && it.groupId == null || selectedGroup == it.groupId }
         .filter { query.isBlank() || listOf(it.displayName, it.manufacturer, it.model, it.ssid, it.primaryBssid).any { value -> value.contains(query, true) } }
@@ -89,7 +91,7 @@ fun DevicesScreen(
             ScreenHeader("登録済みデバイス", "${devices.size}台", action = {
                 Row {
                     IconButton(onClick = { showGroups = true }) { Icon(Icons.Rounded.Settings, "グループ管理") }
-                    Button(onClick = onAddDevice, modifier = Modifier.testTag("add_device")) {
+                    Button(onClick = { showAddMethods = true }, modifier = Modifier.testTag("add_device")) {
                         Icon(Icons.Rounded.Add, null)
                         Text("新規登録")
                     }
@@ -153,6 +155,26 @@ fun DevicesScreen(
     }
     if (showGroups) {
         GroupManagementDialog(groups, onCreateGroup, onRenameGroup, onDeleteGroup, onMoveGroup) { showGroups = false }
+    }
+    if (showAddMethods) {
+        AlertDialog(
+            onDismissRequest = { showAddMethods = false },
+            title = { Text("登録方法を選択") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+                    Button(
+                        onClick = { showAddMethods = false; onScanLabel() },
+                        modifier = Modifier.fillMaxWidth().testTag("add_by_camera"),
+                    ) { Icon(Icons.Rounded.Add, null); Text("ラベルをカメラで読み取る") }
+                    OutlinedButton(
+                        onClick = { showAddMethods = false; onAddDevice() },
+                        modifier = Modifier.fillMaxWidth().testTag("add_manually"),
+                    ) { Text("手動で入力する") }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showAddMethods = false }) { Text("キャンセル") } },
+        )
     }
 }
 

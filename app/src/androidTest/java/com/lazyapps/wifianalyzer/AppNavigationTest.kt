@@ -28,6 +28,7 @@ class AppNavigationTest {
         composeRule.onNodeWithText("シグナルモニター").assertIsDisplayed()
         composeRule.onNodeWithTag("nav_devices").performClick()
         composeRule.onNodeWithTag("add_device").performClick()
+        composeRule.onNodeWithTag("add_manually").performClick()
         composeRule.onNodeWithText("機器を登録").assertIsDisplayed()
         composeRule.onNodeWithTag("device_name").performTextInput("UIテスト機器")
         composeRule.onNodeWithTag("registration_list").performScrollToIndex(5)

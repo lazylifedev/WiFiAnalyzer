@@ -34,6 +34,7 @@ class RegistryFlowTest {
         composeRule.onNodeWithText("閉じる").performClick()
 
         composeRule.onNodeWithTag("add_device").performClick()
+        composeRule.onNodeWithTag("add_manually").performClick()
         composeRule.onNodeWithTag("device_name").performTextInput(deviceName)
         composeRule.onNodeWithTag("registration_list").performScrollToIndex(2)
         composeRule.onNodeWithText(groupName).performClick()
