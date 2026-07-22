@@ -28,8 +28,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -76,12 +74,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
@@ -175,12 +175,13 @@ fun DevicePhotoGallery(deviceId: Long, workspaceId: Long, photoViewModel: Device
 }
 
 @Composable private fun PhotoViewer(photos: List<DevicePhoto>, start: Int, vm: DevicePhotoViewModel, onClose: () -> Unit, onPageChanged: (Int) -> Unit, onDelete: (DevicePhoto) -> Unit) {
-    val pager = rememberPagerState(start) { photos.size }
+    var currentPage by rememberSaveable { mutableStateOf(start.coerceIn(0, photos.lastIndex)) }
     var captionPhoto by remember { mutableStateOf<DevicePhoto?>(null) }
     var menuExpanded by remember { mutableStateOf(false) }
     var immersive by rememberSaveable { mutableStateOf(false) }
     var chromeVisible by rememberSaveable { mutableStateOf(true) }
     var zoomed by remember { mutableStateOf(false) }
+    val safeCurrentPage = currentPage.coerceIn(0, photos.lastIndex)
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     fun closeViewer() {
@@ -193,15 +194,15 @@ fun DevicePhotoGallery(deviceId: Long, workspaceId: Long, photoViewModel: Device
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         if (immersive) controller.hide(WindowInsetsCompat.Type.systemBars()) else controller.show(WindowInsetsCompat.Type.systemBars())
     }
-    LaunchedEffect(pager.currentPage) { zoomed = false; onPageChanged(pager.currentPage) }
+    LaunchedEffect(currentPage) { zoomed = false; onPageChanged(currentPage) }
     Dialog(onDismissRequest = ::closeViewer, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            HorizontalPager(pager, Modifier.fillMaxSize().navigationBarsPadding(), userScrollEnabled = !zoomed) { page ->
-                ZoomablePhoto(photos[page], vm, { if (page == pager.currentPage) zoomed = it }) { if (immersive) chromeVisible = !chromeVisible }
+            PhotoPager(photos.map { it.id }, start, zoomed, Modifier.navigationBarsPadding(), onPageChanged = { currentPage = it }) { page ->
+                ZoomablePhoto(photos[page], vm, currentPage, { if (page == currentPage) zoomed = it }) { if (immersive) chromeVisible = !chromeVisible }
             }
             if (!immersive || chromeVisible) Row(Modifier.fillMaxWidth().align(Alignment.TopCenter).background(Color.Black.copy(alpha = .6f)).then(if (!immersive) Modifier.statusBarsPadding() else Modifier).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = ::closeViewer) { Icon(Icons.Rounded.Close, "写真ビューアを閉じる", tint = Color.White) }
-                Text("${pager.currentPage + 1} / ${photos.size}", Modifier.weight(1f), color = Color.White)
+                Text("${safeCurrentPage + 1} / ${photos.size}", Modifier.weight(1f).testTag("photo_viewer_position"), color = Color.White)
                 IconButton(onClick = { immersive = !immersive; chromeVisible = !immersive }) { Icon(if (immersive) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen, if (immersive) "全画面を終了" else "全画面", tint = Color.White) }
                 IconButton(onClick = {
                     activity.requestedOrientation = if (activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
@@ -209,13 +210,13 @@ fun DevicePhotoGallery(deviceId: Long, workspaceId: Long, photoViewModel: Device
                 Box {
                     IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Rounded.MoreVert, "写真メニュー", tint = Color.White) }
                     DropdownMenu(menuExpanded, { menuExpanded = false }) {
-                        DropdownMenuItem({ Text("メイン写真に設定") }, onClick = { menuExpanded = false; vm.primary(photos[pager.currentPage].id) }, leadingIcon = { Icon(Icons.Rounded.Star, null) })
-                        DropdownMenuItem({ Text("キャプション編集") }, onClick = { menuExpanded = false; captionPhoto = photos[pager.currentPage] }, leadingIcon = { Icon(Icons.Rounded.Edit, null) })
-                        DropdownMenuItem({ Text("削除") }, onClick = { menuExpanded = false; onDelete(photos[pager.currentPage]) }, leadingIcon = { Icon(Icons.Rounded.Delete, null) })
+                        DropdownMenuItem({ Text("メイン写真に設定") }, onClick = { menuExpanded = false; vm.primary(photos[safeCurrentPage].id) }, leadingIcon = { Icon(Icons.Rounded.Star, null) })
+                        DropdownMenuItem({ Text("キャプション編集") }, onClick = { menuExpanded = false; captionPhoto = photos[safeCurrentPage] }, leadingIcon = { Icon(Icons.Rounded.Edit, null) })
+                        DropdownMenuItem({ Text("削除") }, onClick = { menuExpanded = false; onDelete(photos[safeCurrentPage]) }, leadingIcon = { Icon(Icons.Rounded.Delete, null) })
                     }
                 }
             }
-            photos[pager.currentPage].caption.takeIf { it.isNotBlank() && (!immersive || chromeVisible) }?.let { caption ->
+            photos[safeCurrentPage].caption.takeIf { it.isNotBlank() && (!immersive || chromeVisible) }?.let { caption ->
                 Text(caption, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().background(Color.Black.copy(alpha = .6f)).padding(12.dp), color = Color.White)
             }
         }
@@ -223,10 +224,21 @@ fun DevicePhotoGallery(deviceId: Long, workspaceId: Long, photoViewModel: Device
     captionPhoto?.let { photo -> var text by remember(photo.id) { mutableStateOf(photo.caption) }; AlertDialog(onDismissRequest = { captionPhoto = null }, title = { Text("キャプション") }, text = { OutlinedTextField(text, { text = it }, label = { Text("例: 背面ラベル") }) }, confirmButton = { Button(onClick = { vm.caption(photo.id, text); captionPhoto = null }) { Text("保存") } }, dismissButton = { TextButton(onClick = { captionPhoto = null }) { Text("キャンセル") } }) }
 }
 
-@Composable private fun ZoomablePhoto(photo: DevicePhoto, vm: DevicePhotoViewModel, onZoomedChange: (Boolean) -> Unit, onTap: () -> Unit) {
+@Composable private fun ZoomablePhoto(photo: DevicePhoto, vm: DevicePhotoViewModel, resetPage: Int, onZoomedChange: (Boolean) -> Unit, onTap: () -> Unit) {
     var scale by remember(photo.id) { mutableFloatStateOf(1f) }; var x by remember(photo.id) { mutableFloatStateOf(0f) }; var y by remember(photo.id) { mutableFloatStateOf(0f) }
-    val transform = rememberTransformableState { zoom, pan, _ -> scale = (scale * zoom).coerceIn(1f, 5f); onZoomedChange(scale > 1.01f); if (scale > 1f) { x += pan.x; y += pan.y } else { x = 0f; y = 0f } }
-    Box(Modifier.fillMaxSize().transformable(transform).pointerInput(photo.id) { detectTapGestures(onTap = { onTap() }, onDoubleTap = { scale = if (scale > 1f) 1f else 2.5f; onZoomedChange(scale > 1f); if (scale == 1f) { x = 0f; y = 0f } }) }, contentAlignment = Alignment.Center) { PhotoImage(photo, vm, Modifier.fillMaxWidth().graphicsLayer(scaleX = scale, scaleY = scale, translationX = x, translationY = y)) }
+    var viewport by remember(photo.id) { mutableStateOf(IntSize.Zero) }
+    LaunchedEffect(resetPage) { scale = 1f; x = 0f; y = 0f; onZoomedChange(false) }
+    val transform = rememberTransformableState { zoom, pan, _ ->
+        scale = (scale * zoom).coerceIn(1f, 5f)
+        onZoomedChange(isPhotoZoomed(scale))
+        if (isPhotoZoomed(scale)) {
+            val maxX = viewport.width * (scale - 1f) / 2f
+            val maxY = viewport.height * (scale - 1f) / 2f
+            x = (x + pan.x).coerceIn(-maxX, maxX)
+            y = (y + pan.y).coerceIn(-maxY, maxY)
+        } else { x = 0f; y = 0f }
+    }
+    Box(Modifier.fillMaxSize().onSizeChanged { viewport = it }.transformable(state = transform, canPan = { isPhotoZoomed(scale) }).pointerInput(photo.id) { detectTapGestures(onTap = { onTap() }, onDoubleTap = { scale = if (isPhotoZoomed(scale)) 1f else 2.5f; onZoomedChange(isPhotoZoomed(scale)); x = 0f; y = 0f }) }, contentAlignment = Alignment.Center) { PhotoImage(photo, vm, Modifier.fillMaxWidth().graphicsLayer(scaleX = scale, scaleY = scale, translationX = x, translationY = y)) }
 }
 
 private tailrec fun Context.findActivity(): Activity = when (this) {
