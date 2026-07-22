@@ -22,6 +22,7 @@ import org.junit.runner.RunWith
 class RegistryDatabaseTest {
     private lateinit var database: WifiAnalyzerDatabase
     private lateinit var repository: DeviceRegistryRepository
+    private lateinit var workspaceRepository: WorkspaceRepository
 
     @Before fun createDatabase() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -29,7 +30,7 @@ class RegistryDatabaseTest {
             context,
             WifiAnalyzerDatabase::class.java,
         ).build()
-        val workspaceRepository = WorkspaceRepository(context, database)
+        workspaceRepository = WorkspaceRepository(context, database)
         runBlocking { workspaceRepository.ensureUsable() }
         repository = DeviceRegistryRepository(context, database, workspaceRepository)
     }
@@ -71,6 +72,19 @@ class RegistryDatabaseTest {
         repository.createGroup("Ｏｆｆｉｃｅ")
         val error = runCatching { repository.createGroup(" office ") }.exceptionOrNull()
         assertTrue(error?.message?.contains("同名") == true)
+    }
+
+    @Test fun groupNameValidationAndWorkspaceIsolation() = runBlocking {
+        val firstWorkspace = workspaceRepository.snapshot.first().selectedId
+        repository.createGroup(firstWorkspace, "Ｏｆｆｉｃｅ")
+        assertTrue(runCatching { repository.createGroup(firstWorkspace, " office ") }.exceptionOrNull()?.message?.contains("同名") == true)
+        assertTrue(runCatching { repository.createGroup(firstWorkspace, " ") }.exceptionOrNull()?.message?.contains("入力") == true)
+        assertTrue(runCatching { repository.createGroup(firstWorkspace, "a".repeat(51)) }.exceptionOrNull()?.message?.contains("50") == true)
+
+        val secondWorkspace = workspaceRepository.create("別ワークスペース")
+        repository.createGroup(secondWorkspace, "office")
+        workspaceRepository.delete(firstWorkspace)
+        assertTrue(runCatching { repository.createGroup(firstWorkspace, "削除後") }.exceptionOrNull()?.message?.contains("削除") == true)
     }
 
     private fun input(name: String, vararg bssids: String) = DeviceInput(

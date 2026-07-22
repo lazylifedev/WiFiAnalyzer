@@ -40,7 +40,7 @@ class AppNavigationTest {
         }
         composeRule.onNodeWithText("UIテスト機器").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("戻る").performClick()
-        composeRule.onNodeWithText("登録済みデバイス").assertIsDisplayed()
+        composeRule.onNodeWithText("登録済み機器").assertIsDisplayed()
     }
 
     @Test

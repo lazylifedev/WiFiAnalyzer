@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -17,14 +18,18 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,6 +38,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
 import com.lazyapps.wifianalyzer.domain.DeviceBssidInput
 import com.lazyapps.wifianalyzer.domain.DeviceGroup
@@ -49,8 +56,17 @@ fun DeviceRegistrationScreen(
     onBack: () -> Unit,
     onSave: (DeviceInput) -> Unit,
     baseline: DeviceInput? = null,
+    groupCreateDialogVisible: Boolean = false,
+    newGroupName: String = "",
+    groupNameValidationError: String? = null,
+    isCreatingGroup: Boolean = false,
+    onShowGroupCreate: () -> Unit = {},
+    onDismissGroupCreate: () -> Unit = {},
+    onNewGroupNameChange: (String) -> Unit = {},
+    onCreateGroup: ((Long) -> Unit) -> Unit = {},
 ) {
     var form by remember(initial) { mutableStateOf(initial) }
+    var showGroupPicker by remember { mutableStateOf(false) }
     LazyColumn(
         modifier = Modifier.fillMaxSize().imePadding().testTag("registration_list"),
         contentPadding = PaddingValues(bottom = AppSpacing.xLarge),
@@ -101,11 +117,9 @@ fun DeviceRegistrationScreen(
         }
         item {
             FormSection("グループ") {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-                    FilterChip(selected = form.groupId == null, onClick = { form = form.copy(groupId = null) }, label = { Text("未分類") })
-                    groups.forEach { group ->
-                        FilterChip(selected = form.groupId == group.id, onClick = { form = form.copy(groupId = group.id) }, label = { Text(group.name) })
-                    }
+                val selectedName = groups.firstOrNull { it.id == form.groupId }?.name ?: "未分類"
+                OutlinedButton(onClick = { showGroupPicker = true }, modifier = Modifier.fillMaxWidth().testTag("group_picker")) {
+                    Text(selectedName, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -144,6 +158,59 @@ fun DeviceRegistrationScreen(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large).testTag("save_device_bottom"),
             ) { Text(if (busy) "保存中…" else "登録内容を保存") }
         }
+    }
+
+    if (showGroupPicker) AlertDialog(
+        onDismissRequest = { showGroupPicker = false },
+        title = { Text("グループを選択") },
+        text = {
+            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp).testTag("group_picker_list")) {
+                item {
+                    GroupChoice("未分類", form.groupId == null) { form = form.copy(groupId = null); showGroupPicker = false }
+                }
+                itemsIndexed(groups, key = { _, group -> group.id }) { _, group ->
+                    GroupChoice(group.name, form.groupId == group.id) { form = form.copy(groupId = group.id); showGroupPicker = false }
+                }
+                item {
+                    TextButton(onClick = onShowGroupCreate, modifier = Modifier.fillMaxWidth().testTag("create_group_from_form")) {
+                        Icon(Icons.Rounded.Add, null)
+                        Text("新しいグループを作成")
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { showGroupPicker = false }) { Text("閉じる") } },
+    )
+
+    if (groupCreateDialogVisible) AlertDialog(
+        onDismissRequest = onDismissGroupCreate,
+        modifier = Modifier.imePadding(),
+        title = { Text("新しいグループ") },
+        text = {
+            OutlinedTextField(
+                value = newGroupName,
+                onValueChange = onNewGroupNameChange,
+                label = { Text("グループ名") },
+                supportingText = groupNameValidationError?.let { message -> { Text(message) } },
+                isError = groupNameValidationError != null,
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().testTag("new_group_name"),
+            )
+        },
+        dismissButton = { TextButton(enabled = !isCreatingGroup, onClick = onDismissGroupCreate) { Text("キャンセル") } },
+        confirmButton = {
+            Button(enabled = !isCreatingGroup, onClick = { onCreateGroup { id -> form = form.copy(groupId = id); showGroupPicker = false } }, modifier = Modifier.testTag("confirm_create_group")) {
+                Text(if (isCreatingGroup) "作成中…" else "作成")
+            }
+        },
+    )
+}
+
+@Composable
+private fun GroupChoice(name: String, selected: Boolean, onClick: () -> Unit) {
+    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        RadioButton(selected = selected, onClick = null)
+        Text(name, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
