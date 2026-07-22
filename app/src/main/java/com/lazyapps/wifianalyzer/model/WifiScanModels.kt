@@ -51,6 +51,9 @@ data class WifiAccessPoint(
     val distanceRange: DistanceRange,
     val observedAtMillis: Long,
     val isRegistered: Boolean = false,
+    val registeredDeviceId: Long? = null,
+    val registeredDeviceName: String? = null,
+    val registeredGroupName: String? = null,
 )
 
 enum class ScanState {

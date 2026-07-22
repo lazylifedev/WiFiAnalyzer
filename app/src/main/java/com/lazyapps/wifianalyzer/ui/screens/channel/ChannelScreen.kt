@@ -19,6 +19,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +36,8 @@ import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.model.ChannelOccupancy
 import com.lazyapps.wifianalyzer.model.ScanState
 import com.lazyapps.wifianalyzer.model.WifiBand
+import com.lazyapps.wifianalyzer.model.WifiAccessPoint
+import com.lazyapps.wifianalyzer.ui.components.RegisteredBadge
 import com.lazyapps.wifianalyzer.ui.components.BandSelector
 import com.lazyapps.wifianalyzer.ui.components.ScanStatusCard
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
@@ -50,6 +53,7 @@ fun ChannelScreen(
     onRequestPermission: () -> Unit,
     onOpenSettings: (ScanState) -> Unit,
     onSelectAccessPoint: (String) -> Unit,
+    onRegisterAccessPoint: (WifiAccessPoint) -> Unit,
 ) {
     var band by remember { mutableStateOf(WifiBand.BAND_24) }
     val occupancy = state.occupancyFor(band)
@@ -80,13 +84,13 @@ fun ChannelScreen(
             item { Text(stringResource(R.string.band_empty, band.label), Modifier.padding(horizontal = AppSpacing.large), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         items(occupancy, key = { it.channel }) { usage ->
-            ChannelCard(usage, onSelectAccessPoint, Modifier.padding(horizontal = AppSpacing.large))
+            ChannelCard(usage, onSelectAccessPoint, onRegisterAccessPoint, Modifier.padding(horizontal = AppSpacing.large))
         }
     }
 }
 
 @Composable
-private fun ChannelCard(usage: ChannelOccupancy, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
+private fun ChannelCard(usage: ChannelOccupancy, onSelect: (String) -> Unit, onRegister: (WifiAccessPoint) -> Unit, modifier: Modifier = Modifier) {
     val barColor = when {
         usage.estimatedCongestion >= .8f -> MaterialTheme.colorScheme.error
         usage.estimatedCongestion >= .55f -> MaterialTheme.colorScheme.tertiary
@@ -115,11 +119,18 @@ private fun ChannelCard(usage: ChannelOccupancy, onSelect: (String) -> Unit, mod
                     horizontalArrangement = Arrangement.spacedBy(AppSpacing.small),
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text(accessPoint.ssid, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+                            Text(accessPoint.ssid, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+                            if (accessPoint.isRegistered) RegisteredBadge()
+                        }
+                        accessPoint.registeredDeviceName?.let { Text("$it · ${accessPoint.registeredGroupName ?: "未分類"}", maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
                         Text(accessPoint.bssid, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text("${accessPoint.rssi} dBm", style = MaterialTheme.typography.labelMedium)
-                    Text("推定 ${accessPoint.distanceRange.label}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("${accessPoint.rssi} dBm", style = MaterialTheme.typography.labelMedium)
+                        Text("推定 ${accessPoint.distanceRange.label}", maxLines = 1, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (!accessPoint.isRegistered) TextButton(onClick = { onRegister(accessPoint) }) { Text("登録") }
+                    }
                 }
             }
         }
@@ -129,5 +140,5 @@ private fun ChannelCard(usage: ChannelOccupancy, onSelect: (String) -> Unit, mod
 @Preview(showBackground = true, backgroundColor = 0xFF07111F)
 @Composable
 private fun ChannelPreview() = WifiAnalyzerTheme(mode = ThemeMode.DARK) {
-    ChannelScreen(ScanUiState(scanState = ScanState.EMPTY), {}, {}, {}, {})
+    ChannelScreen(ScanUiState(scanState = ScanState.EMPTY), {}, {}, {}, {}, {})
 }
