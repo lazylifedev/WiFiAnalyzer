@@ -5,7 +5,9 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
+import android.graphics.Color as AndroidColor
 import android.net.Uri
+import android.view.Window
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -24,6 +26,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -77,6 +80,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -84,6 +88,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -187,23 +192,37 @@ fun DevicePhotoGallery(deviceId: Long, workspaceId: Long, photoViewModel: Device
     fun closeViewer() {
         activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         WindowCompat.getInsetsController(activity.window, activity.window.decorView).show(WindowInsetsCompat.Type.systemBars())
+        immersive = false
         onClose()
-    }
-    LaunchedEffect(immersive) {
-        val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
-        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        if (immersive) controller.hide(WindowInsetsCompat.Type.systemBars()) else controller.show(WindowInsetsCompat.Type.systemBars())
     }
     LaunchedEffect(currentPage) { zoomed = false; onPageChanged(currentPage) }
     Dialog(onDismissRequest = ::closeViewer, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        val dialogWindow = (LocalView.current.parent as DialogWindowProvider).window
+        PhotoViewerSystemBars(dialogWindow, immersive)
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            PhotoPager(photos.map { it.id }, start, zoomed, Modifier.navigationBarsPadding(), onPageChanged = { currentPage = it }) { page ->
-                ZoomablePhoto(photos[page], vm, currentPage, { if (page == currentPage) zoomed = it }) { if (immersive) chromeVisible = !chromeVisible }
+            PhotoPager(
+                photos.map { it.id },
+                start,
+                zoomed,
+                Modifier.then(if (immersive) Modifier else Modifier.navigationBarsPadding()).testTag(if (immersive) "photo_viewer_edge_to_edge" else "photo_viewer_inset"),
+                onPageChanged = { currentPage = it },
+            ) { page ->
+                ZoomablePhoto(photos[page], vm, currentPage, { if (page == currentPage) zoomed = it }) {
+                    PhotoViewerFullscreenState(immersive, chromeVisible).toggleChrome().also {
+                        immersive = it.immersive
+                        chromeVisible = it.chromeVisible
+                    }
+                }
             }
-            if (!immersive || chromeVisible) Row(Modifier.fillMaxWidth().align(Alignment.TopCenter).background(Color.Black.copy(alpha = .6f)).then(if (!immersive) Modifier.statusBarsPadding() else Modifier).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (!immersive || chromeVisible) Row(Modifier.fillMaxWidth().align(Alignment.TopCenter).background(Color.Black.copy(alpha = .6f)).then(if (immersive) Modifier.displayCutoutPadding() else Modifier.statusBarsPadding()).padding(horizontal = 8.dp, vertical = 4.dp).testTag("photo_viewer_chrome"), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = ::closeViewer) { Icon(Icons.Rounded.Close, "写真ビューアを閉じる", tint = Color.White) }
                 Text("${safeCurrentPage + 1} / ${photos.size}", Modifier.weight(1f).testTag("photo_viewer_position"), color = Color.White)
-                IconButton(onClick = { immersive = !immersive; chromeVisible = !immersive }) { Icon(if (immersive) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen, if (immersive) "全画面を終了" else "全画面", tint = Color.White) }
+                IconButton(onClick = {
+                    PhotoViewerFullscreenState(immersive, chromeVisible).toggleFullscreen().also {
+                        immersive = it.immersive
+                        chromeVisible = it.chromeVisible
+                    }
+                }) { Icon(if (immersive) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen, PhotoViewerFullscreenState(immersive, chromeVisible).fullscreenActionDescription, tint = Color.White) }
                 IconButton(onClick = {
                     activity.requestedOrientation = if (activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
                 }) { Icon(Icons.Rounded.ScreenRotation, "画面の縦横を切り替え", tint = Color.White) }
@@ -217,11 +236,29 @@ fun DevicePhotoGallery(deviceId: Long, workspaceId: Long, photoViewModel: Device
                 }
             }
             photos[safeCurrentPage].caption.takeIf { it.isNotBlank() && (!immersive || chromeVisible) }?.let { caption ->
-                Text(caption, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().background(Color.Black.copy(alpha = .6f)).padding(12.dp), color = Color.White)
+                Text(caption, Modifier.align(Alignment.BottomCenter).then(if (immersive) Modifier.displayCutoutPadding() else Modifier.navigationBarsPadding()).background(Color.Black.copy(alpha = .6f)).padding(12.dp), color = Color.White)
             }
         }
     }
     captionPhoto?.let { photo -> var text by remember(photo.id) { mutableStateOf(photo.caption) }; AlertDialog(onDismissRequest = { captionPhoto = null }, title = { Text("キャプション") }, text = { OutlinedTextField(text, { text = it }, label = { Text("例: 背面ラベル") }) }, confirmButton = { Button(onClick = { vm.caption(photo.id, text); captionPhoto = null }) { Text("保存") } }, dismissButton = { TextButton(onClick = { captionPhoto = null }) { Text("キャンセル") } }) }
+}
+
+@Composable
+private fun PhotoViewerSystemBars(window: Window, immersive: Boolean) {
+    DisposableEffect(window) {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = AndroidColor.TRANSPARENT
+        window.navigationBarColor = AndroidColor.TRANSPARENT
+        onDispose {
+            WindowCompat.getInsetsController(window, window.decorView).show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+    LaunchedEffect(window, immersive) {
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (immersive) controller.hide(WindowInsetsCompat.Type.systemBars())
+        else controller.show(WindowInsetsCompat.Type.systemBars())
+    }
 }
 
 @Composable private fun ZoomablePhoto(photo: DevicePhoto, vm: DevicePhotoViewModel, resetPage: Int, onZoomedChange: (Boolean) -> Unit, onTap: () -> Unit) {
