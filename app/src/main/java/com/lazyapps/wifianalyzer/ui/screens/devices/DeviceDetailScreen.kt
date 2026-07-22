@@ -38,6 +38,7 @@ import com.lazyapps.wifianalyzer.domain.RegisteredDevice
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
+import com.lazyapps.wifianalyzer.ui.photos.DevicePhotoGallery
 import java.util.Date
 
 @Composable
@@ -74,6 +75,7 @@ fun DeviceDetailScreen(
                 }
             })
         }
+        item { DevicePhotoGallery(device.id, device.workspaceId) }
         if (detectedAccessPoints.isNotEmpty()) {
             item {
                 Button(onClick = {
@@ -129,7 +131,7 @@ fun DeviceDetailScreen(
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("機器を削除しますか？") },
-            text = { Text("関連するBSSIDも削除されます。この操作は元に戻せません。") },
+            text = { Text("関連するBSSIDと写真 ${device.photoCount}枚も削除されます。この操作は元に戻せません。") },
             confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete() }) { Text("削除") } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("キャンセル") } },
         )

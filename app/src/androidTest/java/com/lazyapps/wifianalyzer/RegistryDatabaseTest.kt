@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.lazyapps.wifianalyzer.data.registry.DeviceRegistryRepository
 import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
+import com.lazyapps.wifianalyzer.data.registry.WorkspaceRepository
 import com.lazyapps.wifianalyzer.domain.DeviceBssidInput
 import com.lazyapps.wifianalyzer.domain.DeviceInput
 import kotlinx.coroutines.flow.first
@@ -23,11 +24,14 @@ class RegistryDatabaseTest {
     private lateinit var repository: DeviceRegistryRepository
 
     @Before fun createDatabase() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
         database = Room.inMemoryDatabaseBuilder(
-            InstrumentationRegistry.getInstrumentation().targetContext,
+            context,
             WifiAnalyzerDatabase::class.java,
         ).build()
-        repository = DeviceRegistryRepository(database)
+        val workspaceRepository = WorkspaceRepository(context, database)
+        runBlocking { workspaceRepository.ensureUsable() }
+        repository = DeviceRegistryRepository(context, database, workspaceRepository)
     }
 
     @After fun closeDatabase() = database.close()

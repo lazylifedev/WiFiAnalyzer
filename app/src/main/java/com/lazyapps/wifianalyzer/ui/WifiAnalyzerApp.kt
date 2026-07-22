@@ -61,16 +61,19 @@ import com.lazyapps.wifianalyzer.ui.theme.ThemeViewModel
 import com.lazyapps.wifianalyzer.ui.theme.WifiAnalyzerTheme
 import com.lazyapps.wifianalyzer.model.ScanState
 import com.lazyapps.wifianalyzer.ui.registry.RegistryViewModel
+import com.lazyapps.wifianalyzer.ui.workspace.WorkspaceViewModel
 
 @Composable
 fun WifiAnalyzerApp(
     themeViewModel: ThemeViewModel = viewModel(),
     scanViewModel: WifiScanViewModel = viewModel(),
     registryViewModel: RegistryViewModel = viewModel(),
+    workspaceViewModel: WorkspaceViewModel = viewModel(),
 ) {
     val themeState by themeViewModel.uiState.collectAsStateWithLifecycle()
     val scanState by scanViewModel.uiState.collectAsStateWithLifecycle()
     val registryState by registryViewModel.uiState.collectAsStateWithLifecycle()
+    val workspaceState by workspaceViewModel.uiState.collectAsStateWithLifecycle()
     val enrichedScanState = scanState.copy(accessPoints = registryViewModel.enriched(scanState.accessPoints))
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -169,6 +172,7 @@ fun WifiAnalyzerApp(
                             registryViewModel.startNew(accessPoint)
                             navController.navigate(REGISTRATION_ROUTE)
                         },
+                        workspaceName = workspaceState.selected?.name,
                     )
                 }
                 composable(AppDestination.Channel.route) {
@@ -185,6 +189,7 @@ fun WifiAnalyzerApp(
                             registryViewModel.startNew(accessPoint)
                             navController.navigate(REGISTRATION_ROUTE)
                         },
+                        workspaceName = workspaceState.selected?.name,
                     )
                 }
                 composable(AppDestination.Monitor.route) {
@@ -213,6 +218,7 @@ fun WifiAnalyzerApp(
                             scanViewModel.refresh()
                             registryViewModel.reconcile(scanState.accessPoints)
                         },
+                        workspaceName = workspaceState.selected?.name,
                     )
                 }
                 composable(AppDestination.Settings.route) {
@@ -221,6 +227,13 @@ fun WifiAnalyzerApp(
                         onModeChange = themeViewModel::setMode,
                         onAccentChange = themeViewModel::setAccent,
                         onAnimationChange = themeViewModel::setAnimationsEnabled,
+                        workspaceState = workspaceState,
+                        onSelectWorkspace = workspaceViewModel::select,
+                        onCreateWorkspace = workspaceViewModel::create,
+                        onRenameWorkspace = workspaceViewModel::rename,
+                        onMoveWorkspace = workspaceViewModel::move,
+                        onDeleteWorkspace = workspaceViewModel::delete,
+                        onLoadWorkspaceCounts = workspaceViewModel::loadCounts,
                     )
                 }
                 composable(REGISTRATION_ROUTE) {

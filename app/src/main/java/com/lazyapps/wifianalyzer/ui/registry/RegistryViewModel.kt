@@ -6,6 +6,10 @@ import androidx.lifecycle.viewModelScope
 import com.lazyapps.wifianalyzer.data.registry.DeviceRegistryRepository
 import com.lazyapps.wifianalyzer.data.registry.RegistryValidationException
 import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
+import com.lazyapps.wifianalyzer.data.registry.WorkspaceRepository
+import com.lazyapps.wifianalyzer.data.photos.PhotoRepository
+import android.net.Uri
+import java.io.File
 import com.lazyapps.wifianalyzer.domain.DeviceBssidInput
 import com.lazyapps.wifianalyzer.domain.DeviceGroup
 import com.lazyapps.wifianalyzer.domain.DeviceInput
@@ -16,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 data class RegistryUiState(
@@ -28,12 +33,15 @@ data class RegistryUiState(
 )
 
 class RegistryViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository = DeviceRegistryRepository(WifiAnalyzerDatabase.get(application))
+    private val workspaceRepository = WorkspaceRepository(application, WifiAnalyzerDatabase.get(application))
+    private val repository = DeviceRegistryRepository(application, WifiAnalyzerDatabase.get(application), workspaceRepository)
+    private val photoRepository = PhotoRepository(application, WifiAnalyzerDatabase.get(application))
     private val _uiState = MutableStateFlow(RegistryUiState())
     val uiState: StateFlow<RegistryUiState> = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
+            workspaceRepository.ensureUsable()
             repository.snapshot.collectLatest { snapshot ->
                 _uiState.value = _uiState.value.copy(devices = snapshot.devices, groups = snapshot.groups)
             }
@@ -59,6 +67,7 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun startNew(accessPoint: WifiAccessPoint? = null) {
+        val workspaceId = _uiState.value.devices.firstOrNull()?.workspaceId ?: _uiState.value.groups.firstOrNull()?.workspaceId ?: 0L
         _uiState.value = _uiState.value.copy(
             draft = if (accessPoint == null) {
                 DeviceInput(displayName = "", bssids = listOf(DeviceBssidInput("", "2.4 GHz")))
@@ -69,6 +78,7 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
                     bssids = listOf(DeviceBssidInput(accessPoint.bssid, accessPoint.band.label)),
                     initialLastSeenAt = accessPoint.observedAtMillis,
                     initialLastSeenRssi = accessPoint.rssi,
+                    workspaceId = workspaceId,
                 )
             },
             errorMessage = null,
@@ -99,6 +109,7 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
                 bssids = device.bssids.map { DeviceBssidInput(it.bssid, it.band, it.label) },
                 initialLastSeenAt = device.lastSeenAt,
                 initialLastSeenRssi = device.lastSeenRssi,
+                workspaceId = device.workspaceId,
             )
         _uiState.value = _uiState.value.copy(
             draft = draft,
@@ -108,7 +119,14 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun save(input: DeviceInput, onSuccess: (Long) -> Unit) = launchAction {
-        onSuccess(repository.save(input))
+        if (input.pendingPhotoPath != null) photoRepository.ensureCapacity(input.id)
+        val id = repository.save(input)
+        input.pendingPhotoPath?.let { path ->
+            val source = File(path)
+            try { photoRepository.save(id, input.workspaceId.takeIf { it != 0L } ?: _uiState.value.devices.firstOrNull { it.id == id }?.workspaceId ?: workspaceRepository.snapshot.first().selectedId, Uri.fromFile(source)) }
+            finally { source.delete() }
+        }
+        onSuccess(id)
     }
 
     fun deleteDevice(id: Long, onSuccess: () -> Unit = {}) = launchAction {

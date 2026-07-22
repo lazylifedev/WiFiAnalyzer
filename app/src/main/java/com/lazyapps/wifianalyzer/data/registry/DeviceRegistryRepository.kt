@@ -1,6 +1,7 @@
 package com.lazyapps.wifianalyzer.data.registry
 
 import androidx.room.withTransaction
+import android.content.Context
 import com.lazyapps.wifianalyzer.domain.BssidFormat
 import com.lazyapps.wifianalyzer.domain.DetectionPolicy
 import com.lazyapps.wifianalyzer.domain.DeviceBssidInput
@@ -13,6 +14,9 @@ import com.lazyapps.wifianalyzer.domain.RegisteredDevice
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
 
 data class RegistrySnapshot(
     val devices: List<RegisteredDevice> = emptyList(),
@@ -21,12 +25,13 @@ data class RegistrySnapshot(
 
 class RegistryValidationException(message: String) : IllegalArgumentException(message)
 
-class DeviceRegistryRepository(private val database: WifiAnalyzerDatabase) {
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+class DeviceRegistryRepository(private val context: Context, private val database: WifiAnalyzerDatabase, private val workspaceRepository: WorkspaceRepository) {
     private val dao = database.registryDao()
 
-    val snapshot: Flow<RegistrySnapshot> = combine(
-        dao.observeDevices(), dao.observeBssids(), dao.observeGroups(),
-    ) { devices, bssids, groups ->
+    val snapshot: Flow<RegistrySnapshot> = workspaceRepository.snapshot.flatMapLatest { workspace -> combine(
+        dao.observeDevices(workspace.selectedId), dao.observeBssids(workspace.selectedId), dao.observeGroups(workspace.selectedId), dao.observePhotosForWorkspace(workspace.selectedId),
+    ) { devices, bssids, groups, photos ->
         val groupMap = groups.associateBy { it.id }
         val bssidMap = bssids.groupBy { it.deviceId }
         RegistrySnapshot(
@@ -48,13 +53,18 @@ class DeviceRegistryRepository(private val database: WifiAnalyzerDatabase) {
                     lastSeenRssi = entity.lastSeenRssi,
                     isEnabled = entity.isEnabled,
                     bssids = bssidMap[entity.id].orEmpty().map { RegisteredBssid(it.id, it.bssid, it.band, it.label) },
+                    workspaceId = entity.workspaceId,
+                    photoCount = photos.count { it.deviceId == entity.id },
                 )
             },
-            groups = groups.map { DeviceGroup(it.id, it.name, it.sortOrder) },
+            groups = groups.map { DeviceGroup(it.id, it.name, it.sortOrder, it.workspaceId) },
         )
-    }
+    } }
 
     suspend fun save(input: DeviceInput): Long = database.withTransaction {
+        val selectedWorkspaceId = workspaceRepository.snapshot.first().selectedId
+        val workspaceId = input.workspaceId.takeIf { it != 0L } ?: selectedWorkspaceId
+        if (workspaceId != selectedWorkspaceId || dao.getWorkspace(workspaceId) == null) throw RegistryValidationException("対象ワークスペースが変更または削除されました")
         val displayName = input.displayName.trim()
         if (displayName.isBlank()) throw RegistryValidationException("機器名を入力してください")
         if (input.bssids.isEmpty()) throw RegistryValidationException("BSSIDを1件以上入力してください")
@@ -66,7 +76,7 @@ class DeviceRegistryRepository(private val database: WifiAnalyzerDatabase) {
         if (normalized.map { it.bssid }.distinct().size != normalized.size) {
             throw RegistryValidationException("同じBSSIDが複数入力されています")
         }
-        val conflicts = dao.findBssids(normalized.map { it.bssid }).filter { it.deviceId != input.id }
+        val conflicts = dao.findBssids(workspaceId, normalized.map { it.bssid }).filter { it.deviceId != input.id }
         if (conflicts.isNotEmpty()) throw RegistryValidationException("BSSID ${conflicts.first().bssid} は別の機器に登録済みです")
 
         val now = System.currentTimeMillis()
@@ -87,45 +97,57 @@ class DeviceRegistryRepository(private val database: WifiAnalyzerDatabase) {
             lastSeenAt = existing?.lastSeenAt ?: input.initialLastSeenAt,
             lastSeenRssi = existing?.lastSeenRssi ?: input.initialLastSeenRssi,
             isEnabled = existing?.isEnabled ?: true,
+            workspaceId = workspaceId,
         )
         val deviceId = if (existing == null) dao.insertDevice(entity) else {
             dao.updateDevice(entity)
             dao.deleteBssidsForDevice(entity.id)
             entity.id
         }
-        dao.insertBssids(normalized.map { it.toEntity(deviceId, now) })
+        dao.insertBssids(normalized.map { it.toEntity(deviceId, workspaceId, now) })
         deviceId
     }
 
-    suspend fun deleteDevice(id: Long) = dao.deleteDevice(id)
+    suspend fun deleteDevice(id: Long) {
+        val paths = mutableListOf<String>()
+        database.withTransaction {
+            dao.getPhotos(id).forEach { photo ->
+                val path = "devices/${photo.workspaceId}/${photo.deviceId}/photos/${photo.fileName}"
+                paths += path; dao.insertPendingDeletion(PendingFileDeletionEntity(path, System.currentTimeMillis()))
+            }
+            dao.deleteDevice(id)
+        }
+        paths.forEach { path -> val file = java.io.File(context.filesDir, path); if (!file.exists() || file.delete()) dao.deletePendingDeletion(path) }
+    }
 
     suspend fun createGroup(name: String): Long {
+        val workspaceId = workspaceRepository.snapshot.first().selectedId
         val trimmed = name.trim()
         val normalized = GroupNameFormat.normalize(name)
         if (normalized.isBlank()) throw RegistryValidationException("グループ名を入力してください")
-        val current = snapshotOnceGroups()
+        val current = snapshotOnceGroups(workspaceId)
         if (current.any { it.normalizedName == normalized }) throw RegistryValidationException("同名のグループが既にあります")
         val now = System.currentTimeMillis()
-        return dao.insertGroup(WifiDeviceGroupEntity(name = trimmed, normalizedName = normalized, sortOrder = (current.maxOfOrNull { it.sortOrder } ?: -1) + 1, createdAt = now, updatedAt = now))
+        return dao.insertGroup(WifiDeviceGroupEntity(name = trimmed, normalizedName = normalized, sortOrder = (current.maxOfOrNull { it.sortOrder } ?: -1) + 1, createdAt = now, updatedAt = now, workspaceId = workspaceId))
     }
 
     suspend fun renameGroup(group: DeviceGroup, name: String) {
         val trimmed = name.trim()
         val normalized = GroupNameFormat.normalize(name)
         if (normalized.isBlank()) throw RegistryValidationException("グループ名を入力してください")
-        val current = snapshotOnceGroups()
+        val current = snapshotOnceGroups(group.workspaceId)
         if (current.any { it.id != group.id && it.normalizedName == normalized }) throw RegistryValidationException("同名のグループが既にあります")
         val old = current.first { it.id == group.id }
         dao.updateGroup(old.copy(name = trimmed, normalizedName = normalized, updatedAt = System.currentTimeMillis()))
     }
 
     suspend fun deleteGroup(group: DeviceGroup) {
-        val entity = snapshotOnceGroups().firstOrNull { it.id == group.id } ?: return
+        val entity = snapshotOnceGroups(group.workspaceId).firstOrNull { it.id == group.id } ?: return
         dao.deleteGroup(entity)
     }
 
     suspend fun moveGroup(group: DeviceGroup, direction: Int) = database.withTransaction {
-        val groups = snapshotOnceGroups().sortedBy { it.sortOrder }
+        val groups = snapshotOnceGroups(group.workspaceId).sortedBy { it.sortOrder }
         val index = groups.indexOfFirst { it.id == group.id }
         val otherIndex = index + direction
         if (index !in groups.indices || otherIndex !in groups.indices) return@withTransaction
@@ -148,13 +170,14 @@ class DeviceRegistryRepository(private val database: WifiAnalyzerDatabase) {
         }
     }
 
-    private suspend fun snapshotOnceGroups(): List<WifiDeviceGroupEntity> = dao.getGroupsOnce()
+    private suspend fun snapshotOnceGroups(workspaceId: Long): List<WifiDeviceGroupEntity> = dao.getGroupsOnce(workspaceId)
 }
 
-private fun DeviceBssidInput.toEntity(deviceId: Long, createdAt: Long) = WifiDeviceBssidEntity(
+private fun DeviceBssidInput.toEntity(deviceId: Long, workspaceId: Long, createdAt: Long) = WifiDeviceBssidEntity(
     deviceId = deviceId,
     bssid = bssid,
     band = band,
     label = label,
     createdAt = createdAt,
+    workspaceId = workspaceId,
 )

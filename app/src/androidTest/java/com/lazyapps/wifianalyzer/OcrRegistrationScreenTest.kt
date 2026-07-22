@@ -53,7 +53,7 @@ class OcrRegistrationScreenTest {
                     result = ParsedDeviceLabel(ssidCandidates = listOf(candidate), rawText = "SSID 5G: Lab-5"),
                     onUpdate = { _, updated -> candidate = updated },
                     onRetake = { retake = true },
-                    onContinue = { continued = true },
+                    onContinue = { _, _ -> continued = true },
                     onManual = {},
                 )
             }
@@ -71,7 +71,7 @@ class OcrRegistrationScreenTest {
     @Test fun resultRendersInLightAndDarkThemes() {
         val result = ParsedDeviceLabel(modelCandidates = listOf(ParsedFieldCandidate("TEST-100", CandidateKind.MODEL, "MODEL", ConfidenceLevel.HIGH)), rawText = "MODEL: TEST-100")
         val mode = mutableStateOf(ThemeMode.LIGHT)
-        composeRule.setContent { WifiAnalyzerTheme(mode = mode.value) { ResultConfirmation(result, { _, _ -> }, {}, { _ -> }, {}) } }
+        composeRule.setContent { WifiAnalyzerTheme(mode = mode.value) { ResultConfirmation(result, { _, _ -> }, {}, { _, _ -> }, {}) } }
         composeRule.onNodeWithText("TEST-100").assertIsDisplayed()
         composeRule.runOnUiThread { mode.value = ThemeMode.DARK }
         composeRule.waitForIdle()

@@ -56,6 +56,7 @@ fun ChannelScreen(
     onOpenSettings: (ScanState) -> Unit,
     onSelectAccessPoint: (String) -> Unit,
     onRegisterAccessPoint: (WifiAccessPoint) -> Unit,
+    workspaceName: String? = null,
 ) {
     var band by remember { mutableStateOf(WifiBand.BAND_24) }
     val occupancy = state.occupancyFor(band)
@@ -70,7 +71,7 @@ fun ChannelScreen(
         verticalArrangement = Arrangement.spacedBy(AppSpacing.medium),
     ) {
         item {
-            ScreenHeader(stringResource(R.string.screen_channel), stringResource(R.string.estimated_congestion)) {
+            ScreenHeader(stringResource(R.string.screen_channel), listOfNotNull(workspaceName, stringResource(R.string.estimated_congestion)).joinToString(" ・ ")) {
                 IconButton(onClick = onRefresh) { Icon(Icons.Rounded.Refresh, stringResource(R.string.refresh_scan)) }
             }
         }

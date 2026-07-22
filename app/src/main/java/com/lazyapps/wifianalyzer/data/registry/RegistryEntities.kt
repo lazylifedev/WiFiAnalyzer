@@ -6,9 +6,20 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
+@Entity(tableName = "workspaces", indices = [Index(value = ["normalized_name"], unique = true)])
+data class WorkspaceEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    @ColumnInfo(name = "normalized_name") val normalizedName: String,
+    @ColumnInfo(name = "sort_order") val sortOrder: Int,
+    @ColumnInfo(name = "created_at") val createdAt: Long,
+    @ColumnInfo(name = "updated_at") val updatedAt: Long,
+)
+
 @Entity(
     tableName = "wifi_device_groups",
-    indices = [Index(value = ["normalized_name"], unique = true)],
+    foreignKeys = [ForeignKey(entity = WorkspaceEntity::class, parentColumns = ["id"], childColumns = ["workspace_id"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index("workspace_id"), Index(value = ["workspace_id", "normalized_name"], unique = true)],
 )
 data class WifiDeviceGroupEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -17,6 +28,7 @@ data class WifiDeviceGroupEntity(
     @ColumnInfo(name = "sort_order") val sortOrder: Int,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    @ColumnInfo(name = "workspace_id") val workspaceId: Long,
 )
 
 @Entity(
@@ -28,8 +40,9 @@ data class WifiDeviceGroupEntity(
             childColumns = ["group_id"],
             onDelete = ForeignKey.SET_NULL,
         ),
+        ForeignKey(entity = WorkspaceEntity::class, parentColumns = ["id"], childColumns = ["workspace_id"], onDelete = ForeignKey.CASCADE),
     ],
-    indices = [Index("group_id"), Index("display_name")],
+    indices = [Index("group_id"), Index("workspace_id"), Index(value = ["workspace_id", "display_name"])],
 )
 data class RegisteredWifiDeviceEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -47,6 +60,7 @@ data class RegisteredWifiDeviceEntity(
     @ColumnInfo(name = "last_seen_at") val lastSeenAt: Long? = null,
     @ColumnInfo(name = "last_seen_rssi") val lastSeenRssi: Int? = null,
     @ColumnInfo(name = "is_enabled") val isEnabled: Boolean = true,
+    @ColumnInfo(name = "workspace_id") val workspaceId: Long,
 )
 
 @Entity(
@@ -58,8 +72,9 @@ data class RegisteredWifiDeviceEntity(
             childColumns = ["device_id"],
             onDelete = ForeignKey.CASCADE,
         ),
+        ForeignKey(entity = WorkspaceEntity::class, parentColumns = ["id"], childColumns = ["workspace_id"], onDelete = ForeignKey.CASCADE),
     ],
-    indices = [Index("device_id"), Index(value = ["bssid"], unique = true)],
+    indices = [Index("device_id"), Index("workspace_id"), Index(value = ["workspace_id", "bssid"], unique = true)],
 )
 data class WifiDeviceBssidEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -67,5 +82,36 @@ data class WifiDeviceBssidEntity(
     val bssid: String,
     val band: String,
     val label: String = "",
+    @ColumnInfo(name = "created_at") val createdAt: Long,
+    @ColumnInfo(name = "workspace_id") val workspaceId: Long,
+)
+
+@Entity(
+    tableName = "device_photos",
+    foreignKeys = [
+        ForeignKey(entity = RegisteredWifiDeviceEntity::class, parentColumns = ["id"], childColumns = ["device_id"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(entity = WorkspaceEntity::class, parentColumns = ["id"], childColumns = ["workspace_id"], onDelete = ForeignKey.CASCADE),
+    ],
+    indices = [Index("device_id"), Index("workspace_id"), Index(value = ["device_id", "sort_order"])],
+)
+data class DevicePhotoEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(name = "device_id") val deviceId: Long,
+    @ColumnInfo(name = "workspace_id") val workspaceId: Long,
+    @ColumnInfo(name = "file_name") val fileName: String,
+    @ColumnInfo(name = "mime_type") val mimeType: String,
+    val width: Int,
+    val height: Int,
+    @ColumnInfo(name = "file_size") val fileSize: Long,
+    @ColumnInfo(name = "sort_order") val sortOrder: Int,
+    val caption: String = "",
+    @ColumnInfo(name = "is_primary") val isPrimary: Boolean = false,
+    @ColumnInfo(name = "created_at") val createdAt: Long,
+    @ColumnInfo(name = "updated_at") val updatedAt: Long,
+)
+
+@Entity(tableName = "pending_file_deletions")
+data class PendingFileDeletionEntity(
+    @PrimaryKey val path: String,
     @ColumnInfo(name = "created_at") val createdAt: Long,
 )
