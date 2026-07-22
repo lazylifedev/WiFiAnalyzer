@@ -48,6 +48,7 @@ fun DeviceRegistrationScreen(
     busy: Boolean,
     onBack: () -> Unit,
     onSave: (DeviceInput) -> Unit,
+    baseline: DeviceInput? = null,
 ) {
     var form by remember(initial) { mutableStateOf(initial) }
     LazyColumn(
@@ -69,6 +70,24 @@ fun DeviceRegistrationScreen(
                     Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
                 ) { Text(message, Modifier.padding(AppSpacing.medium), color = MaterialTheme.colorScheme.onErrorContainer) }
+            }
+        }
+        baseline?.let { before ->
+            val changes = listOf(
+                "メーカー" to (before.manufacturer to form.manufacturer),
+                "型番" to (before.model to form.model),
+                "シリアル番号" to (before.serialNumber to form.serialNumber),
+                "SSID" to (before.ssid to form.ssid),
+                "BSSID" to (before.bssids.joinToString { it.bssid } to form.bssids.joinToString { it.bssid }),
+            ).filter { (_, values) -> values.first != values.second }
+            if (changes.isNotEmpty()) item {
+                Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), border = CardDefaults.outlinedCardBorder()) {
+                    Column(Modifier.padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+                        Text("変更内容", style = MaterialTheme.typography.titleMedium)
+                        changes.forEach { (label, values) -> Text("$label\n${values.first.ifBlank { "未入力" }} → ${values.second.ifBlank { "未入力" }}") }
+                        Text("内容を確認してから保存してください。保存に失敗した場合は変更前の情報が維持されます。", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
             }
         }
         item {

@@ -44,6 +44,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -83,6 +84,7 @@ import com.lazyapps.wifianalyzer.domain.ocr.ConfidenceLevel
 import com.lazyapps.wifianalyzer.domain.ocr.ParsedDeviceLabel
 import com.lazyapps.wifianalyzer.domain.ocr.ParsedFieldCandidate
 import com.lazyapps.wifianalyzer.domain.ocr.SensitiveValueMasker
+import com.lazyapps.wifianalyzer.domain.ocr.OcrUpdateMode
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 import java.io.File
@@ -96,6 +98,7 @@ fun OcrRegistrationScreen(
     onBack: () -> Unit,
     onUseDraft: (DeviceInput) -> Unit,
     onManual: () -> Unit,
+    existingDraft: DeviceInput? = null,
     ocrViewModel: OcrRegistrationViewModel = viewModel(),
 ) {
     val context = LocalContext.current
@@ -154,7 +157,8 @@ fun OcrRegistrationScreen(
                 result = uiState.result ?: ParsedDeviceLabel(),
                 onUpdate = ocrViewModel::updateCandidate,
                 onRetake = ocrViewModel::retake,
-                onContinue = { onUseDraft(ocrViewModel.registrationDraft()) },
+                existingDevice = existingDraft != null,
+                onContinue = { mode -> onUseDraft(existingDraft?.let { ocrViewModel.updateDraft(it, mode) } ?: ocrViewModel.registrationDraft()) },
                 onManual = onManual,
             )
         }
@@ -296,9 +300,11 @@ internal fun ResultConfirmation(
     result: ParsedDeviceLabel,
     onUpdate: (ParsedFieldCandidate, ParsedFieldCandidate) -> Unit,
     onRetake: () -> Unit,
-    onContinue: () -> Unit,
+    onContinue: (OcrUpdateMode) -> Unit,
     onManual: () -> Unit,
+    existingDevice: Boolean = false,
 ) {
+    var updateMode by rememberSaveable { mutableStateOf(OcrUpdateMode.FILL_BLANKS) }
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("ocr_result_list"),
         verticalArrangement = Arrangement.spacedBy(AppSpacing.small),
@@ -316,6 +322,17 @@ internal fun ResultConfirmation(
         candidateSection("シリアル番号", result.serialCandidates, onUpdate)
         candidateSection("SSID候補", result.ssidCandidates, onUpdate)
         candidateSection("MAC / BSSID候補", result.macCandidates, onUpdate)
+        if (existingDevice) item {
+            Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+                Text("既存情報への反映方法", style = MaterialTheme.typography.titleMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+                    FilterChip(updateMode == OcrUpdateMode.FILL_BLANKS, { updateMode = OcrUpdateMode.FILL_BLANKS }, label = { Text("空欄だけ入力") })
+                    FilterChip(updateMode == OcrUpdateMode.SELECT_FIELDS, { updateMode = OcrUpdateMode.SELECT_FIELDS }, label = { Text("項目ごとに選択") })
+                    FilterChip(updateMode == OcrUpdateMode.OVERWRITE, { updateMode = OcrUpdateMode.OVERWRITE }, label = { Text("OCR結果で上書き") })
+                }
+                Text("BSSIDは既存値を削除せず、有効な新規値だけ追加します。WAN/LAN MACは初期状態では選択されません。", style = MaterialTheme.typography.bodySmall)
+            }
+        }
         if (result.managementCandidates.isNotEmpty()) item {
             SensitiveSection(result.managementCandidates, onUpdate)
         }
@@ -331,7 +348,7 @@ internal fun ResultConfirmation(
             FlowRow(horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
                 OutlinedButton(onClick = onRetake, modifier = Modifier.testTag("retake")) { Text("再撮影") }
                 TextButton(onClick = onManual) { Text("手動で入力") }
-                Button(onClick = onContinue, modifier = Modifier.testTag("use_ocr_result")) { Text("登録フォームへ進む") }
+                Button(onClick = { onContinue(updateMode) }, modifier = Modifier.testTag("use_ocr_result")) { Text(if (existingDevice) "差分を確認" else "登録フォームへ進む") }
             }
         }
     }

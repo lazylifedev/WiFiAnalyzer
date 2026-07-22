@@ -95,3 +95,26 @@ object OcrRegistrationDraftFactory {
         )
     }
 }
+
+enum class OcrUpdateMode { FILL_BLANKS, SELECT_FIELDS, OVERWRITE }
+
+object OcrDeviceUpdateMerger {
+    fun merge(current: DeviceInput, recognized: DeviceInput, mode: OcrUpdateMode): DeviceInput {
+        fun choose(old: String, fresh: String): String = when (mode) {
+            OcrUpdateMode.FILL_BLANKS -> old.ifBlank { fresh }
+            OcrUpdateMode.SELECT_FIELDS, OcrUpdateMode.OVERWRITE -> fresh.ifBlank { old }
+        }
+        val known = current.bssids.mapNotNull { BssidFormat.normalize(it.bssid) }.toSet()
+        val additions = recognized.bssids.filter { input ->
+            BssidFormat.normalize(input.bssid)?.let { it !in known } == true
+        }
+        return current.copy(
+            displayName = choose(current.displayName, recognized.displayName),
+            manufacturer = choose(current.manufacturer, recognized.manufacturer),
+            model = choose(current.model, recognized.model),
+            serialNumber = choose(current.serialNumber, recognized.serialNumber),
+            ssid = choose(current.ssid, recognized.ssid),
+            bssids = current.bssids + additions,
+        )
+    }
+}

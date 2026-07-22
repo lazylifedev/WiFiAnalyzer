@@ -71,7 +71,7 @@ class OcrRegistrationScreenTest {
     @Test fun resultRendersInLightAndDarkThemes() {
         val result = ParsedDeviceLabel(modelCandidates = listOf(ParsedFieldCandidate("TEST-100", CandidateKind.MODEL, "MODEL", ConfidenceLevel.HIGH)), rawText = "MODEL: TEST-100")
         val mode = mutableStateOf(ThemeMode.LIGHT)
-        composeRule.setContent { WifiAnalyzerTheme(mode = mode.value) { ResultConfirmation(result, { _, _ -> }, {}, {}, {}) } }
+        composeRule.setContent { WifiAnalyzerTheme(mode = mode.value) { ResultConfirmation(result, { _, _ -> }, {}, { _ -> }, {}) } }
         composeRule.onNodeWithText("TEST-100").assertIsDisplayed()
         composeRule.runOnUiThread { mode.value = ThemeMode.DARK }
         composeRule.waitForIdle()

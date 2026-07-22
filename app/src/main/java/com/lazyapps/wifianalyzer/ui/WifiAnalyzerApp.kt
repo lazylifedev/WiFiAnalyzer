@@ -42,6 +42,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavHostController
 import com.lazyapps.wifianalyzer.ui.navigation.AppDestination
 import com.lazyapps.wifianalyzer.ui.navigation.REGISTRATION_ROUTE
 import com.lazyapps.wifianalyzer.ui.navigation.OCR_REGISTRATION_ROUTE
@@ -139,13 +140,7 @@ fun WifiAnalyzerApp(
                             NavigationBarItem(
                                 modifier = Modifier.testTag("nav_${destination.route}"),
                                 selected = currentRoute == destination.route,
-                                onClick = {
-                                    navController.navigate(destination.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                },
+                                onClick = { navController.navigateTopLevel(destination.route) },
                                 icon = { Icon(destination.icon, contentDescription = stringResource(destination.labelRes)) },
                                 label = { Text(stringResource(destination.labelRes), maxLines = 1) },
                                 alwaysShowLabel = true,
@@ -168,7 +163,7 @@ fun WifiAnalyzerApp(
                         onOpenSettings = openSettings,
                         onSelectAccessPoint = { bssid ->
                             scanViewModel.selectAccessPoint(bssid)
-                            navController.navigate(AppDestination.Monitor.route) { launchSingleTop = true }
+                            navController.navigateTopLevel(AppDestination.Monitor.route)
                         },
                         onRegisterAccessPoint = { accessPoint ->
                             registryViewModel.startNew(accessPoint)
@@ -184,7 +179,7 @@ fun WifiAnalyzerApp(
                         onOpenSettings = openSettings,
                         onSelectAccessPoint = { bssid ->
                             scanViewModel.selectAccessPoint(bssid)
-                            navController.navigate(AppDestination.Monitor.route) { launchSingleTop = true }
+                            navController.navigateTopLevel(AppDestination.Monitor.route)
                         },
                         onRegisterAccessPoint = { accessPoint ->
                             registryViewModel.startNew(accessPoint)
@@ -213,6 +208,11 @@ fun WifiAnalyzerApp(
                         onRenameGroup = registryViewModel::renameGroup,
                         onDeleteGroup = registryViewModel::deleteGroup,
                         onMoveGroup = registryViewModel::moveGroup,
+                        isRefreshing = scanState.isRefreshing || registryState.busy,
+                        onRefresh = {
+                            scanViewModel.refresh()
+                            registryViewModel.reconcile(scanState.accessPoints)
+                        },
                     )
                 }
                 composable(AppDestination.Settings.route) {
@@ -237,6 +237,7 @@ fun WifiAnalyzerApp(
                                 }
                             }
                         },
+                        baseline = registryState.editBaseline,
                     )
                 }
                 composable(OCR_REGISTRATION_ROUTE) {
@@ -250,11 +251,12 @@ fun WifiAnalyzerApp(
                             }
                         },
                         onManual = {
-                            registryViewModel.startNew()
+                            if (registryState.draft.id == 0L) registryViewModel.startNew()
                             navController.navigate(REGISTRATION_ROUTE) {
                                 popUpTo(OCR_REGISTRATION_ROUTE) { inclusive = true }
                             }
                         },
+                        existingDraft = registryState.draft.takeIf { it.id != 0L },
                     )
                 }
                 composable(DEVICE_DETAIL_ROUTE) { entry ->
@@ -283,10 +285,22 @@ fun WifiAnalyzerApp(
                             scanViewModel.selectAccessPoint(bssid)
                             navController.navigate(AppDestination.Monitor.route)
                         },
+                        onOcrUpdate = {
+                            deviceId?.let(registryViewModel::startEdit)
+                            navController.navigate(OCR_REGISTRATION_ROUTE)
+                        },
                     )
                 }
             }
         }
+    }
+}
+
+private fun NavHostController.navigateTopLevel(route: String) {
+    navigate(route) {
+        popUpTo(graph.findStartDestination().id) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
     }
 }
 

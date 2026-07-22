@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 data class ScanUiState(
@@ -25,6 +27,9 @@ data class ScanUiState(
     val selectedDetected: Boolean = false,
     val signalHistory: List<SignalSample> = emptyList(),
     val errorMessage: String? = null,
+    val refreshProgress: Float = 0f,
+    val refreshSecondsRemaining: Int? = null,
+    val isRefreshing: Boolean = false,
 ) {
     fun accessPointsFor(band: WifiBand): List<WifiAccessPoint> = accessPoints.filter { it.band == band }
     fun occupancyFor(band: WifiBand): List<ChannelOccupancy> = WifiAnalysis.channelOccupancy(accessPoints, band)
@@ -36,6 +41,7 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
     val uiState: StateFlow<ScanUiState> = _uiState.asStateFlow()
     private val samplesByBssid = mutableMapOf<String, ArrayDeque<SignalSample>>()
     private var permissionState = ScanState.PERMISSION_REQUIRED
+    private var autoRefreshJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -80,6 +86,7 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
                     selectedDetected = selected != null,
                     signalHistory = selectedBssid?.let { samplesByBssid[it]?.toList() }.orEmpty(),
                     errorMessage = snapshot.message,
+                    isRefreshing = snapshot.state == ScanState.SCANNING,
                 )
             }
         }
@@ -88,13 +95,49 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
     fun updatePermissionState(state: ScanState) {
         require(state in PERMISSION_STATES)
         permissionState = state
-        if (state == ScanState.READY) repository.refreshEnvironment()
-        else _uiState.value = _uiState.value.copy(scanState = state, selectedDetected = false)
+        if (state == ScanState.READY) {
+            repository.refreshEnvironment()
+            if (autoRefreshJob?.isActive != true) {
+                scheduleAutoRefresh()
+            }
+        } else {
+            autoRefreshJob?.cancel()
+            autoRefreshJob = null
+            _uiState.value = _uiState.value.copy(scanState = state, selectedDetected = false)
+        }
     }
 
     fun refresh() {
-        if (permissionState == ScanState.READY) repository.requestScan()
+        scheduleAutoRefresh()
+        requestRefresh()
+    }
+
+    private fun requestRefresh() {
+        if (permissionState == ScanState.READY) {
+            if (_uiState.value.scanState == ScanState.SCANNING) return
+            repository.requestScan()
+        }
         else _uiState.value = _uiState.value.copy(scanState = permissionState)
+    }
+
+    private fun scheduleAutoRefresh() {
+        if (permissionState != ScanState.READY) return
+        autoRefreshJob?.cancel()
+        autoRefreshJob = viewModelScope.launch {
+            while (true) {
+                val startedAt = System.currentTimeMillis()
+                while (System.currentTimeMillis() - startedAt < REFRESH_CYCLE_MS) {
+                    val elapsed = System.currentTimeMillis() - startedAt
+                    val remaining = (REFRESH_CYCLE_MS - elapsed).coerceAtLeast(0L)
+                    _uiState.value = _uiState.value.copy(
+                        refreshProgress = (elapsed.toFloat() / REFRESH_CYCLE_MS).coerceIn(0f, 1f),
+                        refreshSecondsRemaining = ((remaining + 999L) / 1_000L).toInt(),
+                    )
+                    delay(250L)
+                }
+                requestRefresh()
+            }
+        }
     }
 
     fun selectAccessPoint(bssid: String) {
@@ -115,9 +158,10 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
     }
 
     companion object {
-        const val HISTORY_WINDOW_MS = 30_000L
+        const val HISTORY_WINDOW_MS = 15 * 60_000L
         const val DETECTION_TIMEOUT_MS = 45_000L
-        const val MAX_HISTORY_SAMPLES = 30
+        const val MAX_HISTORY_SAMPLES = 900
+        const val REFRESH_CYCLE_MS = 18_000L
         val PERMISSION_STATES = setOf(
             ScanState.PERMISSION_REQUIRED,
             ScanState.PERMISSION_DENIED,
