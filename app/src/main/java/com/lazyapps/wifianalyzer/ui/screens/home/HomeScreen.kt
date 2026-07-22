@@ -20,6 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +45,7 @@ import com.lazyapps.wifianalyzer.model.WifiStandard
 import com.lazyapps.wifianalyzer.ui.components.BandSelector
 import com.lazyapps.wifianalyzer.ui.components.ScanStatusCard
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
+import com.lazyapps.wifianalyzer.ui.components.RegisteredBadge
 import com.lazyapps.wifianalyzer.ui.scan.ScanUiState
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 import com.lazyapps.wifianalyzer.ui.theme.ThemeMode
@@ -57,6 +59,7 @@ fun HomeScreen(
     onRequestPermission: () -> Unit,
     onOpenSettings: (ScanState) -> Unit,
     onSelectAccessPoint: (String) -> Unit,
+    onRegisterAccessPoint: (WifiAccessPoint) -> Unit,
 ) {
     var band by remember { mutableStateOf(WifiBand.BAND_24) }
     val accessPoints = state.accessPointsFor(band)
@@ -102,13 +105,13 @@ fun HomeScreen(
             }
         }
         items(accessPoints, key = { it.bssid }) { accessPoint ->
-            AccessPointRow(accessPoint, onSelectAccessPoint, Modifier.padding(horizontal = AppSpacing.large))
+            AccessPointRow(accessPoint, onSelectAccessPoint, onRegisterAccessPoint, Modifier.padding(horizontal = AppSpacing.large))
         }
     }
 }
 
 @Composable
-private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Unit, modifier: Modifier = Modifier) {
+private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Unit, onRegister: (WifiAccessPoint) -> Unit, modifier: Modifier = Modifier) {
     val signalColor = when (accessPoint.signalQuality) {
         SignalQuality.EXCELLENT, SignalQuality.GOOD -> MaterialTheme.colorScheme.primary
         SignalQuality.FAIR -> MaterialTheme.colorScheme.tertiary
@@ -126,7 +129,14 @@ private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Un
         ) {
             Icon(Icons.Rounded.Wifi, contentDescription = null, tint = signalColor)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(accessPoint.ssid, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+                    Text(accessPoint.ssid, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+                    if (accessPoint.isRegistered) RegisteredBadge()
+                }
+                accessPoint.registeredDeviceName?.let { name ->
+                    Text("登録名: $name", maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text("グループ: ${accessPoint.registeredGroupName ?: "未分類"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                }
                 Text(accessPoint.bssid, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
                     "${accessPoint.securityType.label} · ${accessPoint.band.label} · CH ${accessPoint.channel}",
@@ -138,7 +148,11 @@ private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Un
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Text(stringResource(R.string.select_for_monitor), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                if (accessPoint.isRegistered) {
+                    Text(stringResource(R.string.select_for_monitor), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                } else {
+                    TextButton(onClick = { onRegister(accessPoint) }) { Text("機器として登録") }
+                }
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text("${accessPoint.rssi} dBm", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = signalColor)
@@ -160,5 +174,5 @@ private val previewAccessPoint = WifiAccessPoint(
 @Preview(showBackground = true, backgroundColor = 0xFF07111F)
 @Composable
 private fun HomePreview() = WifiAnalyzerTheme(mode = ThemeMode.DARK) {
-    HomeScreen(ScanUiState(ScanState.READY, listOf(previewAccessPoint), 1), {}, {}, {}, {})
+    HomeScreen(ScanUiState(ScanState.READY, listOf(previewAccessPoint), 1), {}, {}, {}, {}, {})
 }

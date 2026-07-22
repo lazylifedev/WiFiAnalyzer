@@ -19,4 +19,6 @@ sealed class AppDestination(val route: String, val labelRes: Int, val icon: Imag
     companion object { val bottomItems = listOf(Home, Channel, Monitor, Devices, Settings) }
 }
 
-const val OCR_ROUTE = "device-registration/ocr"
+const val REGISTRATION_ROUTE = "device-registration"
+const val DEVICE_DETAIL_ROUTE = "device-detail/{deviceId}"
+fun deviceDetailRoute(deviceId: Long) = "device-detail/$deviceId"

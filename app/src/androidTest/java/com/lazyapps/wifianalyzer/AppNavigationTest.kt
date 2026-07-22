@@ -10,6 +10,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performScrollToIndex
 import org.junit.Rule
 import org.junit.Test
 
@@ -24,9 +27,17 @@ class AppNavigationTest {
         composeRule.onNodeWithTag("nav_monitor").performClick()
         composeRule.onNodeWithText("シグナルモニター").assertIsDisplayed()
         composeRule.onNodeWithTag("nav_devices").performClick()
-        composeRule.onNodeWithText("新規登録").performClick()
-        composeRule.onNodeWithText("機器ラベルを読み取る").assertIsDisplayed()
-        composeRule.onNodeWithTag("ocr_back").performClick()
+        composeRule.onNodeWithTag("add_device").performClick()
+        composeRule.onNodeWithText("機器を登録").assertIsDisplayed()
+        composeRule.onNodeWithTag("device_name").performTextInput("UIテスト機器")
+        composeRule.onNodeWithTag("registration_list").performScrollToIndex(5)
+        composeRule.onNodeWithTag("bssid_0").performTextInput("02:00:00:00:00:01")
+        composeRule.onNodeWithTag("save_device_bottom").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodes(hasTestTag("save_device_bottom")).fetchSemanticsNodes().isEmpty()
+        }
+        composeRule.onNodeWithText("UIテスト機器").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("戻る").performClick()
         composeRule.onNodeWithText("登録済みデバイス").assertIsDisplayed()
     }
 
