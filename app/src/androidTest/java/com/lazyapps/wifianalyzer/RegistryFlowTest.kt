@@ -42,6 +42,7 @@ class RegistryFlowTest {
         composeRule.onNodeWithTag("add_bssid").performClick()
         composeRule.onNodeWithTag("registration_list").performScrollToIndex(6)
         composeRule.onNodeWithTag("bssid_1").performTextInput(firstBssid.lowercase().replace(':', '-'))
+        composeRule.onNodeWithTag("registration_list").performScrollToIndex(7)
         composeRule.onNodeWithTag("save_device_bottom").performClick()
         composeRule.onNodeWithTag("registration_list").performScrollToIndex(1)
         composeRule.onNodeWithText("同じBSSIDが複数入力されています").assertIsDisplayed()

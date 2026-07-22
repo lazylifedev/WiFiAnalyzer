@@ -32,7 +32,8 @@ class AppNavigationTest {
         composeRule.onNodeWithTag("device_name").performTextInput("UIテスト機器")
         composeRule.onNodeWithTag("registration_list").performScrollToIndex(5)
         composeRule.onNodeWithTag("bssid_0").performTextInput("02:00:00:00:00:01")
-        composeRule.onNodeWithTag("save_device_bottom").performScrollTo().performClick()
+        composeRule.onNodeWithTag("registration_list").performScrollToIndex(6)
+        composeRule.onNodeWithTag("save_device_bottom").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodes(hasTestTag("save_device_bottom")).fetchSemanticsNodes().isEmpty()
         }

@@ -53,6 +53,7 @@ class DeviceRegistryTest {
         assertTrue(DetectionPolicy.isDetected(now - 10_000, now))
         assertFalse(DetectionPolicy.isDetected(now - 46_000, now))
         assertFalse(DetectionPolicy.shouldUpdate(now - 10_000, -60, now, -63))
+        assertTrue(DetectionPolicy.shouldUpdate(now - 46_000, -60, now, -61))
         assertTrue(DetectionPolicy.shouldUpdate(now - 10_000, -60, now, -66))
         assertTrue(DetectionPolicy.shouldUpdate(now - 61_000, -60, now, -61))
     }

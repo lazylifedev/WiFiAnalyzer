@@ -101,6 +101,7 @@ object DetectionPolicy {
 
     fun shouldUpdate(lastSeenAt: Long?, lastSeenRssi: Int?, observedAt: Long, rssi: Int): Boolean =
         lastSeenAt == null ||
+            observedAt - lastSeenAt > DETECTION_WINDOW_MS ||
             observedAt - lastSeenAt >= MIN_UPDATE_INTERVAL_MS ||
             lastSeenRssi == null ||
             abs(rssi - lastSeenRssi) >= RSSI_UPDATE_THRESHOLD
