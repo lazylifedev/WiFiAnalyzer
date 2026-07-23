@@ -22,5 +22,6 @@ sealed class AppDestination(val route: String, val labelRes: Int, val icon: Imag
 const val REGISTRATION_ROUTE = "device-registration"
 const val OCR_REGISTRATION_ROUTE = "ocr-registration"
 const val BACKUP_ROUTE = "backup-restore"
+const val EXPORT_ROUTE = "data-export"
 const val DEVICE_DETAIL_ROUTE = "device-detail/{deviceId}"
 fun deviceDetailRoute(deviceId: Long) = "device-detail/$deviceId"
