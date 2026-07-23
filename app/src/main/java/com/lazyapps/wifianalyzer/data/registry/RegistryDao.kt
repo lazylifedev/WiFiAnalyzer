@@ -74,6 +74,13 @@ interface RegistryDao {
     @Query("SELECT COUNT(*) FROM registered_wifi_devices WHERE workspace_id = :workspaceId") suspend fun countDevices(workspaceId: Long): Int
     @Query("SELECT COUNT(*) FROM wifi_device_groups WHERE workspace_id = :workspaceId") suspend fun countGroups(workspaceId: Long): Int
     @Query("SELECT COUNT(*) FROM device_photos WHERE workspace_id = :workspaceId") suspend fun countPhotos(workspaceId: Long): Int
+    @Query("SELECT * FROM registered_wifi_devices ORDER BY workspace_id, id") suspend fun getAllDevices(): List<RegisteredWifiDeviceEntity>
+    @Query("SELECT * FROM registered_wifi_devices WHERE workspace_id = :workspaceId ORDER BY id") suspend fun getDevicesOnce(workspaceId: Long): List<RegisteredWifiDeviceEntity>
+    @Query("SELECT * FROM wifi_device_groups ORDER BY workspace_id, sort_order, id") suspend fun getAllGroups(): List<WifiDeviceGroupEntity>
+    @Query("SELECT * FROM wifi_device_bssids ORDER BY workspace_id, device_id, id") suspend fun getAllBssids(): List<WifiDeviceBssidEntity>
+    @Query("SELECT * FROM wifi_device_bssids WHERE workspace_id = :workspaceId ORDER BY device_id, id") suspend fun getBssidsForWorkspace(workspaceId: Long): List<WifiDeviceBssidEntity>
+    @Query("SELECT * FROM device_photos ORDER BY workspace_id, device_id, sort_order, id") suspend fun getAllPhotos(): List<DevicePhotoEntity>
+    @Query("DELETE FROM workspaces") suspend fun deleteAllWorkspaces()
 
     @Query("SELECT * FROM device_photos WHERE device_id = :deviceId ORDER BY sort_order, id") fun observePhotos(deviceId: Long): Flow<List<DevicePhotoEntity>>
     @Query("SELECT * FROM device_photos WHERE device_id = :deviceId ORDER BY sort_order, id") suspend fun getPhotos(deviceId: Long): List<DevicePhotoEntity>

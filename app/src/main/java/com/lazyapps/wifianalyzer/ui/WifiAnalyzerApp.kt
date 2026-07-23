@@ -47,6 +47,8 @@ import com.lazyapps.wifianalyzer.ui.navigation.AppDestination
 import com.lazyapps.wifianalyzer.ui.navigation.REGISTRATION_ROUTE
 import com.lazyapps.wifianalyzer.ui.navigation.OCR_REGISTRATION_ROUTE
 import com.lazyapps.wifianalyzer.ui.navigation.DEVICE_DETAIL_ROUTE
+import com.lazyapps.wifianalyzer.ui.navigation.BACKUP_ROUTE
+import com.lazyapps.wifianalyzer.ui.backup.BackupScreen
 import com.lazyapps.wifianalyzer.ui.navigation.deviceDetailRoute
 import com.lazyapps.wifianalyzer.ui.screens.channel.ChannelScreen
 import com.lazyapps.wifianalyzer.ui.screens.devices.DevicesScreen
@@ -252,6 +254,14 @@ fun WifiAnalyzerApp(
                         onMoveWorkspace = workspaceViewModel::move,
                         onDeleteWorkspace = workspaceViewModel::delete,
                         onLoadWorkspaceCounts = workspaceViewModel::loadCounts,
+                        onOpenBackup = { navController.navigate(BACKUP_ROUTE) },
+                    )
+                }
+                composable(BACKUP_ROUTE) {
+                    BackupScreen(
+                        workspaceState = workspaceState,
+                        onBack = { navController.popBackStack() },
+                        onOpenWorkspace = { id -> workspaceViewModel.select(id); navController.navigateTopLevel(AppDestination.Devices.route) },
                     )
                 }
                 composable(REGISTRATION_ROUTE) {

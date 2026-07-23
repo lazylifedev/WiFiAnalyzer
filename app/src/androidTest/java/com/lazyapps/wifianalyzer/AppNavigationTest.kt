@@ -53,6 +53,16 @@ class AppNavigationTest {
         selectAccent("ブルー")
     }
 
+    @Test
+    fun backupAndRestoreScreenOpensFromSettings() {
+        composeRule.onNodeWithTag("nav_settings").performClick()
+        composeRule.onNodeWithText("バックアップと復元").performScrollTo().performClick()
+        composeRule.onNodeWithText("全データをバックアップ").assertIsDisplayed()
+        composeRule.onNodeWithText("ワークスペースをバックアップ").assertIsDisplayed()
+        composeRule.onNodeWithText("バックアップから復元").assertIsDisplayed()
+        composeRule.onNodeWithText("暗号化されません。", substring = true).assertIsDisplayed()
+    }
+
     private fun selectTheme(mode: String) {
         val tag = "theme_$mode"
         composeRule.onNodeWithTag(tag).performClick()
