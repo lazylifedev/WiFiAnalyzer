@@ -89,6 +89,7 @@ fun SettingsScreen(
     onLoadWorkspaceCounts: (Long) -> Unit = {},
     onOpenBackup: () -> Unit = {},
     onOpenExport: () -> Unit = {},
+    onOpenImport: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val packageInfo = remember(context) { context.packageManager.getPackageInfo(context.packageName, 0) }
@@ -172,6 +173,7 @@ fun SettingsScreen(
         item {
             Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
                 SettingRow("データのエクスポート", "CSV・レポート", onClick = onOpenExport)
+                SettingRow("CSVからインポート", "CSV", onClick = onOpenImport)
                 SettingRow("バックアップと復元", "ZIP", onClick = onOpenBackup)
                 SettingRow(stringResource(R.string.about_app), "バージョン ${packageInfo.versionName}", onClick = { showAbout = true })
             }
