@@ -83,4 +83,3 @@ data class OperationError(
     val detailCode: String get() = category.code
     val retryable: Boolean get() = category.retryable
 }
-
