@@ -94,6 +94,9 @@ fun SettingsScreen(
     onOpenBackup: () -> Unit = {},
     onOpenExport: () -> Unit = {},
     onOpenImport: () -> Unit = {},
+    onOpenPro: () -> Unit = {},
+    onOpenKintone: () -> Unit = {},
+    onRateApp: () -> Unit = {},
     permissionSummary: PermissionSummary = PermissionSummary(PermissionStatus.NOT_GRANTED, PermissionStatus.NOT_GRANTED),
     onRequestScanPermission: () -> Unit = {},
     onOpenAppSettings: () -> Unit = {},
@@ -201,6 +204,14 @@ fun SettingsScreen(
                 SettingRow("初回案内を再表示", onClick = onShowOnboarding)
                 SettingRow("プライバシー", "データと権限", onClick = { showPrivacy = true })
                 SettingRow(stringResource(R.string.about_app), "バージョン ${packageInfo.versionName}", onClick = { showAbout = true })
+            }
+        }
+        item { SectionLabel("Pro・連携", Modifier.padding(horizontal = AppSpacing.large)) }
+        item {
+            Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
+                SettingRow("Pro版", onClick = onOpenPro)
+                SettingRow("kintone連携", onClick = onOpenKintone)
+                SettingRow("Playストアで評価する", onClick = onRateApp)
             }
         }
     }

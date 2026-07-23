@@ -18,6 +18,8 @@ camerax = "1.6.1"
 mlkitText = "16.0.1"
 exifinterface = "1.4.2"
 kotlinxSerialization = "1.9.0"
+billing = "9.1.0"
+playReview = "2.0.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -52,6 +54,8 @@ androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterfa
 mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitText" }
 mlkit-text-recognition-japanese = { group = "com.google.mlkit", name = "text-recognition-japanese", version.ref = "mlkitText" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+play-billing = { group = "com.android.billingclient", name = "billing-ktx", version.ref = "billing" }
+play-review = { group = "com.google.android.play", name = "review-ktx", version.ref = "playReview" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
