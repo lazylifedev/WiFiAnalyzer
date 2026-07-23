@@ -63,6 +63,20 @@ class AppNavigationTest {
         composeRule.onNodeWithText("暗号化されません。", substring = true).assertIsDisplayed()
     }
 
+    @Test
+    fun exportScreenOpensAndOffersCsvColumnsAndReport() {
+        composeRule.onNodeWithTag("nav_settings").performClick()
+        composeRule.onNodeWithText("データのエクスポート").performScrollTo().performClick()
+        composeRule.onNodeWithTag("export_screen").assertIsDisplayed()
+        composeRule.onNodeWithText("登録機器CSV").assertIsDisplayed()
+        composeRule.onNodeWithTag("column_settings").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("全選択").assertIsDisplayed()
+        composeRule.onNodeWithText("完了").performClick()
+        composeRule.onNodeWithText("簡易レポート").performClick()
+        composeRule.onNodeWithText("メイン写真だけ").assertIsDisplayed()
+        composeRule.onNodeWithTag("generate_report").assertIsDisplayed()
+    }
+
     private fun selectTheme(mode: String) {
         val tag = "theme_$mode"
         composeRule.onNodeWithTag(tag).performClick()
