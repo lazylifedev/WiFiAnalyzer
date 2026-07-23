@@ -22,6 +22,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +65,8 @@ fun HomeScreen(
     workspaceName: String? = null,
     selectedBand: WifiBand = state.homeBand,
     onBandSelected: (WifiBand) -> Unit = {},
+    onOpenDevices: () -> Unit = {},
+    onOpenOcr: () -> Unit = {},
 ) {
     val band = selectedBand
     val accessPoints = state.accessPointsFor(band)
@@ -92,6 +96,20 @@ fun HomeScreen(
                 onRefresh = onRefresh,
                 modifier = Modifier.padding(horizontal = AppSpacing.large),
             )
+        }
+        if (state.accessPoints.isEmpty() && state.lastUpdatedMillis == null) {
+            item {
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large),
+                    verticalArrangement = Arrangement.spacedBy(AppSpacing.small),
+                ) {
+                    Text("まずは周辺Wi-Fiを確認しましょう", style = MaterialTheme.typography.titleMedium)
+                    Text("権限はスキャンを始めるときにご案内します。登録は手動やOCRからも始められます。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) { Text("Wi-Fiをスキャン") }
+                    OutlinedButton(onClick = onOpenDevices, modifier = Modifier.fillMaxWidth()) { Text("機器を登録") }
+                    TextButton(onClick = onOpenOcr, modifier = Modifier.fillMaxWidth()) { Text("OCRで読み取る") }
+                }
+            }
         }
         item {
             Column(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large, vertical = AppSpacing.small)) {

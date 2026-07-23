@@ -156,7 +156,16 @@ fun DevicesScreen(
             )
         }
         if (visible.isEmpty()) {
-            item { Text("条件に一致する登録機器はありません", Modifier.padding(AppSpacing.large), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            item {
+                Column(Modifier.padding(AppSpacing.large), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+                    Text(if (devices.isEmpty()) "登録済み機器はまだありません" else "条件に一致する登録機器はありません", style = MaterialTheme.typography.titleMedium)
+                    if (devices.isEmpty()) {
+                        Text("スキャン結果から登録するか、ラベルを読み取る、または手動で追加できます。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Button(onClick = onScanLabel, modifier = Modifier.fillMaxWidth()) { Text("OCRで機器登録") }
+                        OutlinedButton(onClick = onAddDevice, modifier = Modifier.fillMaxWidth()) { Text("手動で機器登録") }
+                    }
+                }
+            }
         }
         items(visible, key = { it.id }) { device ->
             DeviceRow(device, { onOpenDevice(device.id) }, { deleteTarget = device }, Modifier.padding(horizontal = AppSpacing.large))

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -67,6 +68,9 @@ import com.lazyapps.wifianalyzer.ui.theme.WifiAnalyzerTheme
 import com.lazyapps.wifianalyzer.ui.theme.lightSeed
 import com.lazyapps.wifianalyzer.ui.workspace.WorkspaceUiState
 import com.lazyapps.wifianalyzer.domain.Workspace
+import com.lazyapps.wifianalyzer.ui.permissions.PermissionStatus
+import com.lazyapps.wifianalyzer.ui.permissions.PermissionSummary
+import com.lazyapps.wifianalyzer.ui.permissions.AppPermissionPolicy
 
 @Composable
 fun SettingsScreen(
@@ -90,6 +94,10 @@ fun SettingsScreen(
     onOpenBackup: () -> Unit = {},
     onOpenExport: () -> Unit = {},
     onOpenImport: () -> Unit = {},
+    permissionSummary: PermissionSummary = PermissionSummary(PermissionStatus.NOT_GRANTED, PermissionStatus.NOT_GRANTED),
+    onRequestScanPermission: () -> Unit = {},
+    onOpenAppSettings: () -> Unit = {},
+    onShowOnboarding: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val packageInfo = remember(context) { context.packageManager.getPackageInfo(context.packageName, 0) }
@@ -98,6 +106,9 @@ fun SettingsScreen(
     var showDistanceUnits by remember { mutableStateOf(false) }
     var showBands by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
+    var showPermissions by remember { mutableStateOf(false) }
+    var showHelp by remember { mutableStateOf(false) }
+    var showPrivacy by remember { mutableStateOf(false) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = AppSpacing.xLarge),
@@ -150,7 +161,7 @@ fun SettingsScreen(
                 }
             }
         }
-        item { SectionLabel(stringResource(R.string.display_section), Modifier.padding(horizontal = AppSpacing.large)) }
+        item { SectionLabel("表示", Modifier.padding(horizontal = AppSpacing.large)) }
         item {
             Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
                 SettingRow(stringResource(R.string.distance_unit), if (distanceUnit == DistanceUnitPreference.METERS) "メートル (m)" else "フィート (ft)", onClick = { showDistanceUnits = true })
@@ -169,12 +180,26 @@ fun SettingsScreen(
                 SettingRow(stringResource(R.string.animations), trailing = { Switch(state.animationsEnabled, onAnimationChange) })
             }
         }
-        item { SectionLabel(stringResource(R.string.other_section), Modifier.padding(horizontal = AppSpacing.large)) }
+        item { SectionLabel("データ", Modifier.padding(horizontal = AppSpacing.large)) }
         item {
             Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
                 SettingRow("データのエクスポート", "CSV・レポート", onClick = onOpenExport)
                 SettingRow("CSVからインポート", "CSV", onClick = onOpenImport)
                 SettingRow("バックアップと復元", "ZIP", onClick = onOpenBackup)
+            }
+        }
+        item { SectionLabel("スキャン", Modifier.padding(horizontal = AppSpacing.large)) }
+        item {
+            Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), border = CardDefaults.outlinedCardBorder()) {
+                SettingRow("権限", permissionSummary.wifiScan.label(), onClick = { showPermissions = true })
+            }
+        }
+        item { SectionLabel("サポート", Modifier.padding(horizontal = AppSpacing.large)) }
+        item {
+            Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
+                SettingRow("使い方", "アプリ内ヘルプ", onClick = { showHelp = true })
+                SettingRow("初回案内を再表示", onClick = onShowOnboarding)
+                SettingRow("プライバシー", "データと権限", onClick = { showPrivacy = true })
                 SettingRow(stringResource(R.string.about_app), "バージョン ${packageInfo.versionName}", onClick = { showAbout = true })
             }
         }
@@ -247,6 +272,63 @@ fun SettingsScreen(
         } },
         confirmButton = { TextButton(onClick = { showAbout = false }) { Text("閉じる") } },
     )
+    if (showPermissions) AlertDialog(
+        onDismissRequest = { showPermissions = false },
+        title = { Text("権限") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.medium)) {
+            PermissionRow("Wi-Fiスキャン", permissionSummary.wifiScan, AppPermissionPolicy.wifiExplanation())
+            PermissionRow("カメラ", permissionSummary.camera, "OCR撮影に使用します。撮影を始める直前に要求します。")
+            PermissionRow("写真選択", permissionSummary.photoPicker, "Androidの写真選択画面を使用するため、写真ライブラリ全体の権限は要求しません。")
+        } },
+        confirmButton = {
+            if (permissionSummary.wifiScan == PermissionStatus.SETTINGS_REQUIRED) Button(onClick = onOpenAppSettings) { Text("Android設定を開く") }
+            else Button(onClick = onRequestScanPermission) { Text("Wi-Fi権限を許可") }
+        },
+        dismissButton = { TextButton(onClick = { showPermissions = false }) { Text("閉じる") } },
+    )
+    if (showHelp) AlertDialog(
+        onDismissRequest = { showHelp = false },
+        title = { Text("使い方") },
+        text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(AppSpacing.medium)) {
+            HelpItem("Wi-Fiを調べる", "ホームの「更新」から周辺Wi-Fiを取得し、チャネルやモニターで状態を確認します。")
+            HelpItem("機器を登録する", "スキャン結果の「機器として登録」、または登録済み機器画面の追加操作を使います。")
+            HelpItem("OCRで登録する", "ラベルを撮影または選択し、読み取り結果を確認してから登録します。")
+            HelpItem("写真を管理する", "機器詳細から写真を追加・確認します。写真には機密情報が含まれる場合があります。")
+            HelpItem("ワークスペースとグループ", "ワークスペースはデータを分ける保管場所、グループは機器の分類です。")
+            HelpItem("バックアップと復元", "設定のデータ欄からZIPを作成・復元します。")
+            HelpItem("CSV入出力", "登録データをCSVへ出力、または確認後に取り込みます。")
+            HelpItem("よくある質問", "スキャンできない場合は、権限、位置情報サービス、Wi-Fi設定を確認してください。")
+            HelpItem("権限について", AppPermissionPolicy.wifiExplanation())
+        } },
+        confirmButton = { TextButton(onClick = { showHelp = false }) { Text("閉じる") } },
+    )
+    if (showPrivacy) AlertDialog(
+        onDismissRequest = { showPrivacy = false },
+        title = { Text("プライバシー") },
+        text = { Text("Wi-Fi情報は端末内で処理し、登録データも端末内へ保存します。アプリがデータを自動で外部送信することはありません。バックアップや共有を選択した場合のみ、選んだ保存先やアプリへデータが渡ります。写真には機密情報が含まれる可能性があります。位置情報権限はWi-Fiスキャンのためにだけ使用し、位置情報そのものは保存しません。") },
+        confirmButton = { TextButton(onClick = { showPrivacy = false }) { Text("閉じる") } },
+    )
+}
+
+private fun PermissionStatus.label() = when (this) {
+    PermissionStatus.GRANTED -> "許可済み"
+    PermissionStatus.NOT_GRANTED -> "未許可"
+    PermissionStatus.PARTIALLY_GRANTED -> "一部許可"
+    PermissionStatus.SETTINGS_REQUIRED -> "設定が必要"
+}
+
+@Composable private fun PermissionRow(title: String, status: PermissionStatus, explanation: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text("$title：${status.label()}", style = MaterialTheme.typography.titleSmall)
+        Text(explanation, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable private fun HelpItem(title: String, body: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall)
+        Text(body, style = MaterialTheme.typography.bodySmall)
+    }
 }
 
 internal fun refreshIntervalLabel(milliseconds: Long): String = when (milliseconds) {
