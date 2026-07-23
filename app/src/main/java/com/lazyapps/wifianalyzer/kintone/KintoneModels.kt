@@ -66,3 +66,14 @@ data class KintoneVerification(
     val fields: Map<String, String>,
     val warnings: List<String> = emptyList(),
 )
+
+data class KintoneFieldProperty(
+    val code: String,
+    val label: String,
+    val type: String,
+    val required: Boolean? = null,
+    val unique: Boolean? = null,
+    val maxLength: Int? = null,
+    val defaultNowValue: Boolean? = null,
+    val options: Set<String> = emptySet(),
+)
