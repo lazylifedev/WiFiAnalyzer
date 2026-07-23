@@ -12,7 +12,7 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class WorkspaceMigrationTest {
-    @Test fun migrate1To2PreservesRegistryAndAssignsDefault() = runBlocking {
+    @Test fun migrate1To3PreservesRegistryAndAssignsDefault() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val name = "workspace-migration.db"; context.deleteDatabase(name)
         SQLiteDatabase.openOrCreateDatabase(context.getDatabasePath(name), null).use { db ->
@@ -30,7 +30,8 @@ class WorkspaceMigrationTest {
             db.execSQL("INSERT INTO wifi_device_bssids VALUES (1,1,'AA:BB:CC:DD:EE:FF','5 GHz','',10)")
             db.version = 1
         }
-        val room = Room.databaseBuilder(context, WifiAnalyzerDatabase::class.java, name).addMigrations(WifiAnalyzerDatabase.MIGRATION_1_2).build()
+        val room = Room.databaseBuilder(context, WifiAnalyzerDatabase::class.java, name)
+            .addMigrations(WifiAnalyzerDatabase.MIGRATION_1_2, WifiAnalyzerDatabase.MIGRATION_2_3).build()
         val dao = room.registryDao(); val device = dao.getDevice(1)!!; val bssid = dao.getBssids(1).single()
         assertEquals(1L, device.workspaceId); assertEquals(1L, device.groupId); assertEquals(12L, device.lastSeenAt); assertEquals(-55, device.lastSeenRssi)
         assertEquals(1L, bssid.workspaceId); assertEquals("AA:BB:CC:DD:EE:FF", bssid.bssid); assertEquals("default", dao.getWorkspace(1)?.name)

@@ -58,6 +58,7 @@ import com.lazyapps.wifianalyzer.ui.navigation.IMPORT_ROUTE
 import com.lazyapps.wifianalyzer.ui.navigation.PRO_ROUTE
 import com.lazyapps.wifianalyzer.ui.navigation.KINTONE_ROUTE
 import com.lazyapps.wifianalyzer.ui.navigation.KINTONE_INFO_ROUTE
+import com.lazyapps.wifianalyzer.ui.navigation.KINTONE_QR_ROUTE
 import com.lazyapps.wifianalyzer.ui.export.ExportScreen
 import com.lazyapps.wifianalyzer.ui.importcsv.ImportScreen
 import com.lazyapps.wifianalyzer.ui.backup.BackupScreen
@@ -73,6 +74,8 @@ import com.lazyapps.wifianalyzer.ui.screens.settings.SettingsScreen
 import com.lazyapps.wifianalyzer.ui.pro.ProScreen
 import com.lazyapps.wifianalyzer.ui.pro.KintoneScreen
 import com.lazyapps.wifianalyzer.ui.pro.KintonePluginInfoScreen
+import com.lazyapps.wifianalyzer.ui.kintone.KintoneQrScreen
+import com.lazyapps.wifianalyzer.ui.kintone.KintoneViewModel
 import com.lazyapps.wifianalyzer.billing.BillingViewModel
 import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import com.lazyapps.wifianalyzer.review.PlayReviewCoordinator
@@ -99,12 +102,14 @@ fun WifiAnalyzerApp(
     registryViewModel: RegistryViewModel = viewModel(),
     workspaceViewModel: WorkspaceViewModel = viewModel(),
     billingViewModel: BillingViewModel = viewModel(),
+    kintoneViewModel: KintoneViewModel = viewModel(),
 ) {
     val themeState by themeViewModel.uiState.collectAsStateWithLifecycle()
     val scanState by scanViewModel.uiState.collectAsStateWithLifecycle()
     val registryState by registryViewModel.uiState.collectAsStateWithLifecycle()
     val workspaceState by workspaceViewModel.uiState.collectAsStateWithLifecycle()
     val billingState by billingViewModel.uiState.collectAsStateWithLifecycle()
+    val kintoneState by kintoneViewModel.uiState.collectAsStateWithLifecycle()
     val enrichedScanState = scanState.copy(accessPoints = registryViewModel.enriched(scanState.accessPoints))
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
@@ -119,6 +124,9 @@ fun WifiAnalyzerApp(
     val permissionPreferences = remember(context) { context.getSharedPreferences("wifi_scan_permissions", Context.MODE_PRIVATE) }
     var requestedOnce by rememberSaveable {
         mutableStateOf(permissionPreferences.getBoolean("requested_once", false))
+    }
+    LaunchedEffect(workspaceState.selectedId, workspaceState.selected?.name) {
+        workspaceState.selected?.let { kintoneViewModel.selectWorkspace(it.id, it.name) }
     }
 
     fun currentPermissionState(): ScanState {
@@ -356,9 +364,27 @@ fun WifiAnalyzerApp(
                 composable(KINTONE_ROUTE) {
                     KintoneScreen(
                         access = FeatureAccessPolicy.from(billingState.entitlement),
+                        state = kintoneState,
                         onBack = { navController.popBackStack() },
                         onOpenPro = { navController.navigate(PRO_ROUTE) },
                         onPluginInfo = { navController.navigate(KINTONE_INFO_ROUTE) },
+                        onScanQr = { navController.navigate(KINTONE_QR_ROUTE) },
+                        onConfirm = kintoneViewModel::confirmSave,
+                        onCancelPending = kintoneViewModel::cancel,
+                        onVerify = kintoneViewModel::reverify,
+                        onDisconnect = kintoneViewModel::disconnect,
+                    )
+                }
+                composable(KINTONE_QR_ROUTE) {
+                    if (!FeatureAccessPolicy.from(billingState.entitlement).canUseKintone) {
+                        LaunchedEffect(Unit) { navController.popBackStack(); navController.navigate(PRO_ROUTE) }
+                    } else KintoneQrScreen(
+                        onBack = { navController.popBackStack() },
+                        onQr = { raw ->
+                            val target = workspaceState.selected ?: return@KintoneQrScreen
+                            navController.popBackStack()
+                            kintoneViewModel.acceptQr(raw, target.id, target.name)
+                        },
                     )
                 }
                 composable(KINTONE_INFO_ROUTE) { KintonePluginInfoScreen { navController.popBackStack() } }

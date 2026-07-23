@@ -194,4 +194,9 @@
     <string name="backup_created">バックアップを作成しました</string>
     <string name="backup_verified">バックアップの確認が完了しました</string>
     <string name="restore_completed">復元が完了しました</string>
+    <string name="kintone_verifying">kintone接続を確認しています</string>
+    <string name="kintone_saving">接続情報を安全に保存しています</string>
+    <string name="kintone_connected">kintoneに接続しました</string>
+    <string name="kintone_verified">kintone接続を確認しました</string>
+    <string name="kintone_disconnected">kintone連携を解除しました</string>
 </resources>

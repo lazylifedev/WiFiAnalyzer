@@ -16,6 +16,7 @@ room = "2.8.4"
 ksp = "2.3.10"
 camerax = "1.6.1"
 mlkitText = "16.0.1"
+mlkitBarcode = "17.3.0"
 exifinterface = "1.4.2"
 kotlinxSerialization = "1.9.0"
 billing = "9.1.0"
@@ -53,6 +54,7 @@ androidx-camera-view = { group = "androidx.camera", name = "camera-view", versio
 androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
 mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitText" }
 mlkit-text-recognition-japanese = { group = "com.google.mlkit", name = "text-recognition-japanese", version.ref = "mlkitText" }
+mlkit-barcode-scanning = { group = "com.google.mlkit", name = "barcode-scanning", version.ref = "mlkitBarcode" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 play-billing = { group = "com.android.billingclient", name = "billing-ktx", version.ref = "billing" }
 play-review = { group = "com.google.android.play", name = "review-ktx", version.ref = "playReview" }

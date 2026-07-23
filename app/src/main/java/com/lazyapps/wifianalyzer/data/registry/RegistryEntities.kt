@@ -115,3 +115,26 @@ data class PendingFileDeletionEntity(
     @PrimaryKey val path: String,
     @ColumnInfo(name = "created_at") val createdAt: Long,
 )
+
+@Entity(
+    tableName = "kintone_connections",
+    foreignKeys = [ForeignKey(entity = WorkspaceEntity::class, parentColumns = ["id"], childColumns = ["workspace_id"], onDelete = ForeignKey.CASCADE)],
+    indices = [Index(value = ["workspace_id"], unique = true), Index(value = ["domain", "app_id"])],
+)
+data class KintoneConnectionEntity(
+    @PrimaryKey @ColumnInfo(name = "workspace_id") val workspaceId: Long,
+    @ColumnInfo(name = "workspace_uuid") val workspaceUuid: String,
+    val domain: String,
+    @ColumnInfo(name = "guest_space_id") val guestSpaceId: Long?,
+    @ColumnInfo(name = "app_id") val appId: Long,
+    @ColumnInfo(name = "plugin_id") val pluginId: String,
+    @ColumnInfo(name = "plugin_version") val pluginVersion: String,
+    @ColumnInfo(name = "template_id") val templateId: String,
+    @ColumnInfo(name = "template_version") val templateVersion: Int,
+    @ColumnInfo(name = "field_schema_version") val fieldSchemaVersion: Int,
+    @ColumnInfo(name = "encrypted_api_token", typeAffinity = ColumnInfo.BLOB) val encryptedApiToken: ByteArray,
+    @ColumnInfo(name = "token_iv", typeAffinity = ColumnInfo.BLOB) val tokenIv: ByteArray,
+    @ColumnInfo(name = "connected_at") val connectedAt: Long,
+    @ColumnInfo(name = "last_verified_at") val lastVerifiedAt: Long,
+    @ColumnInfo(name = "last_verification_status") val lastVerificationStatus: String,
+)

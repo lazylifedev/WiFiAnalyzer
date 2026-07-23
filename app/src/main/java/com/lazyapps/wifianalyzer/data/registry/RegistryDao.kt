@@ -10,6 +10,12 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface RegistryDao {
+    @Query("SELECT * FROM kintone_connections WHERE workspace_id = :workspaceId") fun observeKintoneConnection(workspaceId: Long): Flow<KintoneConnectionEntity?>
+    @Query("SELECT * FROM kintone_connections WHERE workspace_id = :workspaceId") suspend fun getKintoneConnection(workspaceId: Long): KintoneConnectionEntity?
+    @Query("SELECT COUNT(*) FROM kintone_connections WHERE domain = :domain AND app_id = :appId AND workspace_id != :workspaceId") suspend fun countOtherKintoneConnections(domain: String, appId: Long, workspaceId: Long): Int
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsertKintoneConnection(connection: KintoneConnectionEntity)
+    @Query("DELETE FROM kintone_connections WHERE workspace_id = :workspaceId") suspend fun deleteKintoneConnection(workspaceId: Long)
+    @Query("UPDATE kintone_connections SET last_verified_at = :verifiedAt, last_verification_status = :status WHERE workspace_id = :workspaceId") suspend fun updateKintoneVerification(workspaceId: Long, verifiedAt: Long, status: String)
     @Query("SELECT * FROM registered_wifi_devices WHERE workspace_id = :workspaceId ORDER BY display_name COLLATE NOCASE")
     fun observeDevices(workspaceId: Long): Flow<List<RegisteredWifiDeviceEntity>>
 
