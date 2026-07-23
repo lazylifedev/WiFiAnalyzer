@@ -12,9 +12,19 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Before
+import androidx.compose.ui.test.hasTestTag
 
 class RegistryFlowTest {
     @get:Rule val composeRule = createAndroidComposeRule<MainActivity>()
+
+    @Before fun leaveFirstRunGuideIfNeeded() {
+        composeRule.waitForIdle()
+        if (composeRule.onAllNodes(hasTestTag("onboarding_skip")).fetchSemanticsNodes().isNotEmpty()) {
+            composeRule.onNodeWithTag("onboarding_skip").performClick()
+            composeRule.waitForIdle()
+        }
+    }
 
     @Test fun createGroupRegisterValidateDuplicateEditAndDelete() {
         val suffix = (System.currentTimeMillis() % 0xFFFF).toString(16).uppercase().padStart(4, '0')

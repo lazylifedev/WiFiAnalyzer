@@ -20,6 +20,9 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -28,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -68,6 +72,12 @@ import com.lazyapps.wifianalyzer.ui.theme.WifiAnalyzerTheme
 import com.lazyapps.wifianalyzer.model.ScanState
 import com.lazyapps.wifianalyzer.ui.registry.RegistryViewModel
 import com.lazyapps.wifianalyzer.ui.workspace.WorkspaceViewModel
+import com.lazyapps.wifianalyzer.data.OnboardingPreferencesRepository
+import com.lazyapps.wifianalyzer.ui.onboarding.OnboardingScreen
+import com.lazyapps.wifianalyzer.ui.permissions.AppPermissionPolicy
+import com.lazyapps.wifianalyzer.ui.permissions.PermissionStatus
+import com.lazyapps.wifianalyzer.ui.permissions.PermissionSummary
+import kotlinx.coroutines.launch
 
 @Composable
 fun WifiAnalyzerApp(
@@ -84,13 +94,17 @@ fun WifiAnalyzerApp(
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
+    val onboardingPreferences = remember(context) { OnboardingPreferencesRepository(context) }
+    val onboardingCompleted by onboardingPreferences.completed.collectAsStateWithLifecycle(initialValue = null)
+    var replayOnboarding by rememberSaveable { mutableStateOf(false) }
     val permissionPreferences = remember(context) { context.getSharedPreferences("wifi_scan_permissions", Context.MODE_PRIVATE) }
     var requestedOnce by rememberSaveable {
         mutableStateOf(permissionPreferences.getBoolean("requested_once", false))
     }
 
     fun currentPermissionState(): ScanState {
-        val permissions = requiredScanPermissions()
+        val permissions = AppPermissionPolicy.wifiScanPermissions()
         val granted = permissions.all { permission ->
             androidx.core.content.ContextCompat.checkSelfPermission(context, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
         }
@@ -106,6 +120,7 @@ fun WifiAnalyzerApp(
         scanViewModel.updatePermissionState(currentPermissionState())
         if (currentPermissionState() == ScanState.READY) scanViewModel.refresh()
     }
+    var showPermissionExplanation by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         val permissionState = currentPermissionState()
@@ -130,7 +145,7 @@ fun WifiAnalyzerApp(
         registryViewModel.reconcile(scanState.accessPoints)
     }
 
-    val requestPermission = { permissionLauncher.launch(requiredScanPermissions()) }
+    val requestPermission = { showPermissionExplanation = true }
     val openSettings: (ScanState) -> Unit = { state ->
         val intent = when (state) {
             ScanState.LOCATION_DISABLED -> Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
@@ -141,6 +156,16 @@ fun WifiAnalyzerApp(
     }
 
     WifiAnalyzerTheme(mode = themeState.mode, accent = themeState.accent) {
+        if (onboardingCompleted == null) return@WifiAnalyzerTheme
+        if (onboardingCompleted == false || replayOnboarding) {
+            OnboardingScreen(
+                onComplete = {
+                    replayOnboarding = false
+                    coroutineScope.launch { onboardingPreferences.setCompleted(true) }
+                },
+            )
+            return@WifiAnalyzerTheme
+        }
         val navController = rememberNavController()
         val backStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = backStackEntry?.destination?.route
@@ -188,6 +213,8 @@ fun WifiAnalyzerApp(
                         workspaceName = workspaceState.selected?.name,
                         selectedBand = scanState.homeBand,
                         onBandSelected = scanViewModel::selectHomeBand,
+                        onOpenDevices = { navController.navigateTopLevel(AppDestination.Devices.route) },
+                        onOpenOcr = { navController.navigate(OCR_REGISTRATION_ROUTE) },
                     )
                 }
                 composable(AppDestination.Channel.route) {
@@ -261,6 +288,17 @@ fun WifiAnalyzerApp(
                         onOpenBackup = { navController.navigate(BACKUP_ROUTE) },
                         onOpenExport = { navController.navigate(EXPORT_ROUTE) },
                         onOpenImport = { navController.navigate(IMPORT_ROUTE) },
+                        permissionSummary = PermissionSummary(
+                            wifiScan = when (currentPermissionState()) {
+                                ScanState.READY -> PermissionStatus.GRANTED
+                                ScanState.PERMISSION_PERMANENTLY_DENIED -> PermissionStatus.SETTINGS_REQUIRED
+                                else -> PermissionStatus.NOT_GRANTED
+                            },
+                            camera = if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) PermissionStatus.GRANTED else PermissionStatus.NOT_GRANTED,
+                        ),
+                        onRequestScanPermission = requestPermission,
+                        onOpenAppSettings = { openSettings(ScanState.PERMISSION_PERMANENTLY_DENIED) },
+                        onShowOnboarding = { replayOnboarding = true },
                     )
                 }
                 composable(BACKUP_ROUTE) {
@@ -351,6 +389,22 @@ fun WifiAnalyzerApp(
                 }
             }
         }
+        if (showPermissionExplanation) {
+            AlertDialog(
+                onDismissRequest = { showPermissionExplanation = false },
+                title = { Text("Wi-Fiスキャンの権限") },
+                text = { Text(AppPermissionPolicy.wifiExplanation()) },
+                confirmButton = {
+                    Button(onClick = {
+                        showPermissionExplanation = false
+                        permissionLauncher.launch(AppPermissionPolicy.wifiScanPermissions().toTypedArray())
+                    }) { Text("許可する") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showPermissionExplanation = false }) { Text("今はしない") }
+                },
+            )
+        }
     }
 }
 
@@ -361,11 +415,6 @@ private fun NavHostController.navigateTopLevel(route: String) {
         restoreState = true
     }
 }
-
-private fun requiredScanPermissions(): Array<String> = buildList {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) add(Manifest.permission.ACCESS_COARSE_LOCATION)
-    add(Manifest.permission.ACCESS_FINE_LOCATION)
-}.toTypedArray()
 
 private tailrec fun Context.findActivity(): Activity = when (this) {
     is Activity -> this

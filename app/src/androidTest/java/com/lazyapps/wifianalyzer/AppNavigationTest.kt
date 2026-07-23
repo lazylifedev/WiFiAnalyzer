@@ -15,10 +15,19 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performScrollToIndex
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Before
 
 class AppNavigationTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
+
+    @Before fun leaveFirstRunGuideIfNeeded() {
+        composeRule.waitForIdle()
+        if (composeRule.onAllNodes(hasTestTag("onboarding_skip")).fetchSemanticsNodes().isNotEmpty()) {
+            composeRule.onNodeWithTag("onboarding_skip").performClick()
+            composeRule.waitForIdle()
+        }
+    }
 
     @Test
     fun bottomNavigationAndRegistrationFlowOpenAllMajorScreens() {
