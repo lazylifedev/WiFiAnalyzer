@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -56,8 +57,9 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
         preferences.recordCsv(s.type, data.rows.size, true); mutable.value = mutable.value.copy(busy = false, history = preferences.history(), message = "CSVを保存しました")
     }.onFailure { preferences.recordCsv(initial.type, initial.dataset?.rows?.size ?: 0, false); mutable.value = mutable.value.copy(busy = false, error = it.message) } }
 
-    suspend fun shareFile(): Result<File> = runCatching { val s = mutable.value; val data = s.dataset ?: error("出力データがありません"); val file = File(getApplication<Application>().cacheDir, suggestedFileName()).also { it.parentFile?.mkdirs() }; withContext(Dispatchers.IO) { file.outputStream().use { CsvWriter.write(it, activeColumns(s), data.rows.asSequence()) } }; preferences.recordCsv(s.type, data.rows.size, true); file }
-    suspend fun shareReportFile(): Result<File> = runCatching { val html = mutable.value.reportHtml ?: error("先にレポートを生成してください"); withContext(Dispatchers.IO) { File(getApplication<Application>().cacheDir, "WiFiAnalyzer_Report_${ExportFormat.fileStamp(System.currentTimeMillis())}.html").apply { writeText(html, Charsets.UTF_8) } } }
+    suspend fun shareFile(): Result<File> = runCatching { val s = mutable.value; val data = s.dataset ?: error("出力データがありません"); val file = File(getApplication<Application>().cacheDir, suggestedFileName()).also { cleanupShareCache(); it.parentFile?.mkdirs() }; withContext(Dispatchers.IO) { file.outputStream().use { CsvWriter.write(it, activeColumns(s), data.rows.asSequence()) } }; preferences.recordCsv(s.type, data.rows.size, true); file }
+    suspend fun shareReportFile(): Result<File> = runCatching { val html = mutable.value.reportHtml ?: error("先にレポートを生成してください"); withContext(Dispatchers.IO) { cleanupShareCache(); File(getApplication<Application>().cacheDir, "WiFiAnalyzer_Report_${ExportFormat.fileStamp(System.currentTimeMillis())}.html").apply { writeText(html, Charsets.UTF_8) } } }
+    fun deleteAfterSharing(file: File) { viewModelScope.launch(Dispatchers.IO) { delay(SHARE_CACHE_LIFETIME_MS); file.delete() } }
     fun generateReport() { val s = mutable.value; mutable.value = s.copy(busy = true, error = null); reportJob?.cancel(); reportJob = viewModelScope.launch { runCatching { withContext(Dispatchers.IO) { val unit = wifiPreferences.preferences.first().distanceUnit; val (label, devices) = repository.reportDevices(target(s), unit, s.reportPhotoMode); label to ReportGenerator.generate("Wi-Fi機器レポート", ExportFormat.dateTime(System.currentTimeMillis()).orEmpty(), devices.asSequence()) } }.onSuccess { (label, html) -> preferences.recordReport(label, true); mutable.value = s.copy(busy = false, targetLabel = label, reportHtml = html, history = preferences.history()) }.onFailure { if (it is kotlinx.coroutines.CancellationException) return@onFailure; preferences.recordReport(s.targetLabel, false); mutable.value = s.copy(busy = false, error = it.message) } } }
     fun cancel() { reportJob?.cancel(); mutable.value = mutable.value.copy(busy = false, message = "処理をキャンセルしました") }
     fun suggestedFileName(): String { val s = mutable.value; val target = if (s.scope == ExportScope.ALL_WORKSPACES) "All" else ExportFormat.safeFilePart(s.workspaceName); return "WiFiAnalyzer_${s.type.filePart}_${target}_${ExportFormat.fileStamp(System.currentTimeMillis())}.csv" }
@@ -70,4 +72,6 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     private fun activeColumns(s: ExportUiState) = s.preset.order.filter { it in s.preset.enabled || it in requiredKeys(s) }.mapNotNull { key -> ExportColumns.forType(s.type).firstOrNull { it.key == key } }
     private fun requiredKeys(s: ExportUiState) = buildSet { if (s.scope == ExportScope.ALL_WORKSPACES) add("workspaceName"); ExportColumns.forType(s.type).filter { it.required }.forEach { add(it.key) } }
     private fun target(s: ExportUiState) = ExportTarget(s.scope, s.workspaceId, s.groupId, s.ungroupedOnly)
+    private fun cleanupShareCache() { getApplication<Application>().cacheDir.listFiles()?.filter { it.name.startsWith("WiFiAnalyzer_") }?.forEach { it.delete() } }
+    private companion object { const val SHARE_CACHE_LIFETIME_MS = 10 * 60 * 1000L }
 }
