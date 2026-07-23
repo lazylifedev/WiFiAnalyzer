@@ -8,6 +8,8 @@ import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
 import com.lazyapps.wifianalyzer.data.registry.WorkspaceRepository
 import com.lazyapps.wifianalyzer.domain.Workspace
 import com.lazyapps.wifianalyzer.domain.WorkspaceCounts
+import com.lazyapps.wifianalyzer.ui.operation.OperationErrorCategory
+import com.lazyapps.wifianalyzer.ui.operation.OperationErrorMapper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -46,7 +48,8 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             try { block(); _uiState.value = _uiState.value.copy(busy = false) }
             catch (e: RegistryValidationException) { _uiState.value = _uiState.value.copy(busy = false, errorMessage = e.message) }
-            catch (e: Exception) { _uiState.value = _uiState.value.copy(busy = false, errorMessage = e.message ?: "操作に失敗しました") }
+            catch (e: Exception) { _uiState.value = _uiState.value.copy(busy = false, errorMessage = message(OperationErrorMapper.classify(e))) }
         }
     }
+    private fun message(category: OperationErrorCategory) = getApplication<Application>().getString(category.messageRes)
 }

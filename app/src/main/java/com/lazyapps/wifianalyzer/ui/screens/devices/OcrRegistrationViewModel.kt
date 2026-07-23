@@ -14,6 +14,7 @@ import com.lazyapps.wifianalyzer.domain.ocr.OcrRegistrationDraftFactory
 import com.lazyapps.wifianalyzer.domain.ocr.OcrDeviceUpdateMerger
 import com.lazyapps.wifianalyzer.domain.ocr.OcrUpdateMode
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
+import com.lazyapps.wifianalyzer.ui.operation.OperationErrorCategory
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -54,7 +55,10 @@ class OcrRegistrationViewModel(application: Application) : AndroidViewModel(appl
             } catch (_: kotlinx.coroutines.CancellationException) {
                 _uiState.value = OcrResultUiState()
             } catch (_: Exception) {
-                _uiState.value = OcrResultUiState(OcrProcessingState.ERROR, errorMessage = "認識処理を完了できませんでした")
+                _uiState.value = OcrResultUiState(
+                    OcrProcessingState.ERROR,
+                    errorMessage = getApplication<Application>().getString(OperationErrorCategory.OCR_FAILED.messageRes),
+                )
             } finally { }
         }
     }

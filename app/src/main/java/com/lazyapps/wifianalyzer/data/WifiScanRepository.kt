@@ -93,8 +93,8 @@ class WifiScanRepository(context: Context) : AutoCloseable {
             if (accepted) publishState(ScanState.SCANNING) else readResults(ScanState.THROTTLED)
         } catch (_: SecurityException) {
             publishState(ScanState.PERMISSION_REQUIRED)
-        } catch (error: RuntimeException) {
-            publishState(ScanState.ERROR, error.javaClass.simpleName)
+        } catch (_: RuntimeException) {
+            publishState(ScanState.ERROR, "SCN-002")
         }
     }
 
@@ -111,8 +111,8 @@ class WifiScanRepository(context: Context) : AutoCloseable {
             )
         } catch (_: SecurityException) {
             publishState(ScanState.PERMISSION_REQUIRED)
-        } catch (error: RuntimeException) {
-            publishState(ScanState.ERROR, error.javaClass.simpleName)
+        } catch (_: RuntimeException) {
+            publishState(ScanState.ERROR, "SCN-002")
         }
     }
 
