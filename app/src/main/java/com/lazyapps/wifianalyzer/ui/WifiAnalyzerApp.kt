@@ -8,6 +8,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.WindowInsets
@@ -54,6 +55,9 @@ import com.lazyapps.wifianalyzer.ui.navigation.DEVICE_DETAIL_ROUTE
 import com.lazyapps.wifianalyzer.ui.navigation.BACKUP_ROUTE
 import com.lazyapps.wifianalyzer.ui.navigation.EXPORT_ROUTE
 import com.lazyapps.wifianalyzer.ui.navigation.IMPORT_ROUTE
+import com.lazyapps.wifianalyzer.ui.navigation.PRO_ROUTE
+import com.lazyapps.wifianalyzer.ui.navigation.KINTONE_ROUTE
+import com.lazyapps.wifianalyzer.ui.navigation.KINTONE_INFO_ROUTE
 import com.lazyapps.wifianalyzer.ui.export.ExportScreen
 import com.lazyapps.wifianalyzer.ui.importcsv.ImportScreen
 import com.lazyapps.wifianalyzer.ui.backup.BackupScreen
@@ -66,6 +70,15 @@ import com.lazyapps.wifianalyzer.ui.screens.devices.OcrRegistrationScreen
 import com.lazyapps.wifianalyzer.ui.screens.home.HomeScreen
 import com.lazyapps.wifianalyzer.ui.screens.monitor.MonitorScreen
 import com.lazyapps.wifianalyzer.ui.screens.settings.SettingsScreen
+import com.lazyapps.wifianalyzer.ui.pro.ProScreen
+import com.lazyapps.wifianalyzer.ui.pro.KintoneScreen
+import com.lazyapps.wifianalyzer.ui.pro.KintonePluginInfoScreen
+import com.lazyapps.wifianalyzer.billing.BillingViewModel
+import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
+import com.lazyapps.wifianalyzer.review.PlayReviewCoordinator
+import com.lazyapps.wifianalyzer.review.ReviewContext
+import com.lazyapps.wifianalyzer.review.ReviewHistoryRepository
+import com.lazyapps.wifianalyzer.review.ReviewPromptController
 import com.lazyapps.wifianalyzer.ui.scan.WifiScanViewModel
 import com.lazyapps.wifianalyzer.ui.theme.ThemeViewModel
 import com.lazyapps.wifianalyzer.ui.theme.WifiAnalyzerTheme
@@ -85,17 +98,22 @@ fun WifiAnalyzerApp(
     scanViewModel: WifiScanViewModel = viewModel(),
     registryViewModel: RegistryViewModel = viewModel(),
     workspaceViewModel: WorkspaceViewModel = viewModel(),
+    billingViewModel: BillingViewModel = viewModel(),
 ) {
     val themeState by themeViewModel.uiState.collectAsStateWithLifecycle()
     val scanState by scanViewModel.uiState.collectAsStateWithLifecycle()
     val registryState by registryViewModel.uiState.collectAsStateWithLifecycle()
     val workspaceState by workspaceViewModel.uiState.collectAsStateWithLifecycle()
+    val billingState by billingViewModel.uiState.collectAsStateWithLifecycle()
     val enrichedScanState = scanState.copy(accessPoints = registryViewModel.enriched(scanState.accessPoints))
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
     val onboardingPreferences = remember(context) { OnboardingPreferencesRepository(context) }
+    val reviewHistory = remember(context) { ReviewHistoryRepository(context) }
+    val reviewController = remember(context) { ReviewPromptController(reviewHistory, PlayReviewCoordinator()) }
+    var lastRecordedScanSuccess by remember { mutableStateOf(0L) }
     val onboardingCompleted by onboardingPreferences.completed.collectAsStateWithLifecycle(initialValue = null)
     var replayOnboarding by rememberSaveable { mutableStateOf(false) }
     val permissionPreferences = remember(context) { context.getSharedPreferences("wifi_scan_permissions", Context.MODE_PRIVATE) }
@@ -133,6 +151,7 @@ fun WifiAnalyzerApp(
                 Lifecycle.Event.ON_RESUME -> {
                     scanViewModel.setForeground(true)
                     scanViewModel.updatePermissionState(currentPermissionState())
+                    billingViewModel.refresh()
                 }
                 Lifecycle.Event.ON_PAUSE -> scanViewModel.setForeground(false)
                 else -> Unit
@@ -143,6 +162,11 @@ fun WifiAnalyzerApp(
     }
     LaunchedEffect(scanState.lastUpdatedMillis, registryState.devices.map { it.updatedAt }) {
         registryViewModel.reconcile(scanState.accessPoints)
+        val updatedAt = scanState.lastUpdatedMillis ?: 0L
+        if (updatedAt > 0 && updatedAt != lastRecordedScanSuccess && scanState.accessPoints.isNotEmpty()) {
+            lastRecordedScanSuccess = updatedAt
+            reviewHistory.recordMeaningfulSuccess(updatedAt)
+        }
     }
 
     val requestPermission = { showPermissionExplanation = true }
@@ -169,6 +193,14 @@ fun WifiAnalyzerApp(
         val navController = rememberNavController()
         val backStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = backStackEntry?.destination?.route
+        LaunchedEffect(currentRoute, scanState.isRefreshing, onboardingCompleted) {
+            if (currentRoute == AppDestination.Home.route && onboardingCompleted == true && !scanState.isRefreshing) {
+                reviewController.requestIfEligible(
+                    activity,
+                    ReviewContext(onboardingCompleted = true, isBusy = false, hasModal = showPermissionExplanation),
+                )
+            }
+        }
         val showBottomBar = currentRoute in AppDestination.bottomItems.map { it.route }
 
         Scaffold(
@@ -288,6 +320,9 @@ fun WifiAnalyzerApp(
                         onOpenBackup = { navController.navigate(BACKUP_ROUTE) },
                         onOpenExport = { navController.navigate(EXPORT_ROUTE) },
                         onOpenImport = { navController.navigate(IMPORT_ROUTE) },
+                        onOpenPro = { navController.navigate(PRO_ROUTE) },
+                        onOpenKintone = { navController.navigate(KINTONE_ROUTE) },
+                        onRateApp = { context.openPlayStoreRating() },
                         permissionSummary = PermissionSummary(
                             wifiScan = when (currentPermissionState()) {
                                 ScanState.READY -> PermissionStatus.GRANTED
@@ -310,6 +345,23 @@ fun WifiAnalyzerApp(
                 }
                 composable(EXPORT_ROUTE) { ExportScreen(onBack = { navController.popBackStack() }) }
                 composable(IMPORT_ROUTE) { ImportScreen(onBack = { navController.popBackStack() }) }
+                composable(PRO_ROUTE) {
+                    ProScreen(
+                        state = billingState,
+                        onBack = { navController.popBackStack() },
+                        onPurchase = { billingViewModel.purchase(activity) },
+                        onRestore = billingViewModel::restore,
+                    )
+                }
+                composable(KINTONE_ROUTE) {
+                    KintoneScreen(
+                        access = FeatureAccessPolicy.from(billingState.entitlement),
+                        onBack = { navController.popBackStack() },
+                        onOpenPro = { navController.navigate(PRO_ROUTE) },
+                        onPluginInfo = { navController.navigate(KINTONE_INFO_ROUTE) },
+                    )
+                }
+                composable(KINTONE_INFO_ROUTE) { KintonePluginInfoScreen { navController.popBackStack() } }
                 composable(REGISTRATION_ROUTE) {
                     DeviceRegistrationScreen(
                         initial = registryState.draft,
@@ -413,6 +465,16 @@ private fun NavHostController.navigateTopLevel(route: String) {
         popUpTo(graph.findStartDestination().id) { saveState = true }
         launchSingleTop = true
         restoreState = true
+    }
+}
+
+private fun Context.openPlayStoreRating() {
+    val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName")).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NO_HISTORY or Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+    }
+    val web = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$packageName"))
+    runCatching { startActivity(market) }.recoverCatching { startActivity(web) }.onFailure {
+        Toast.makeText(this, "Playストアを開けませんでした。", Toast.LENGTH_LONG).show()
     }
 }
 
