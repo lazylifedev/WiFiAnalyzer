@@ -189,6 +189,7 @@ fun SettingsScreen(
                 SettingRow("データのエクスポート", "CSV・レポート", onClick = onOpenExport)
                 SettingRow("CSVからインポート", "CSV", onClick = onOpenImport)
                 SettingRow("バックアップと復元", "ZIP", onClick = onOpenBackup)
+                SettingRow("kintone連携", "Pro", onClick = onOpenKintone)
             }
         }
         item { SectionLabel("スキャン", Modifier.padding(horizontal = AppSpacing.large)) }
@@ -210,7 +211,6 @@ fun SettingsScreen(
         item {
             Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
                 SettingRow("Pro版", onClick = onOpenPro)
-                SettingRow("kintone連携", onClick = onOpenKintone)
                 SettingRow("Playストアで評価する", onClick = onRateApp)
             }
         }

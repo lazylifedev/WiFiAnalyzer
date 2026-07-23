@@ -8,7 +8,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [WorkspaceEntity::class, RegisteredWifiDeviceEntity::class, WifiDeviceBssidEntity::class, WifiDeviceGroupEntity::class, DevicePhotoEntity::class, PendingFileDeletionEntity::class],
+    entities = [WorkspaceEntity::class, RegisteredWifiDeviceEntity::class, WifiDeviceBssidEntity::class, WifiDeviceGroupEntity::class, DevicePhotoEntity::class, PendingFileDeletionEntity::class, KintoneConnectionEntity::class],
     version = WifiAnalyzerDatabase.VERSION,
     exportSchema = true,
 )
@@ -16,7 +16,15 @@ abstract class WifiAnalyzerDatabase : RoomDatabase() {
     abstract fun registryDao(): RegistryDao
 
     companion object {
-        const val VERSION = 2
+        const val VERSION = 3
+
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `kintone_connections` (`workspace_id` INTEGER NOT NULL, `workspace_uuid` TEXT NOT NULL, `domain` TEXT NOT NULL, `guest_space_id` INTEGER, `app_id` INTEGER NOT NULL, `plugin_id` TEXT NOT NULL, `plugin_version` TEXT NOT NULL, `template_id` TEXT NOT NULL, `template_version` INTEGER NOT NULL, `field_schema_version` INTEGER NOT NULL, `encrypted_api_token` BLOB NOT NULL, `token_iv` BLOB NOT NULL, `connected_at` INTEGER NOT NULL, `last_verified_at` INTEGER NOT NULL, `last_verification_status` TEXT NOT NULL, PRIMARY KEY(`workspace_id`), FOREIGN KEY(`workspace_id`) REFERENCES `workspaces`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_kintone_connections_workspace_id` ON `kintone_connections` (`workspace_id`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_kintone_connections_domain_app_id` ON `kintone_connections` (`domain`, `app_id`)")
+            }
+        }
 
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -60,7 +68,7 @@ abstract class WifiAnalyzerDatabase : RoomDatabase() {
                 context.applicationContext,
                 WifiAnalyzerDatabase::class.java,
                 "wifi_analyzer.db",
-            ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
         }
     }
 }

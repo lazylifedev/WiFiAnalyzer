@@ -70,6 +70,7 @@ dependencies {
     implementation(libs.androidx.exifinterface)
     implementation(libs.mlkit.text.recognition)
     implementation(libs.mlkit.text.recognition.japanese)
+    implementation(libs.mlkit.barcode.scanning)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.play.billing)
     implementation(libs.play.review)

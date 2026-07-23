@@ -18,6 +18,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +28,10 @@ import com.lazyapps.wifianalyzer.billing.BillingUiState
 import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import com.lazyapps.wifianalyzer.billing.ProEntitlementState
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
+import com.lazyapps.wifianalyzer.ui.kintone.KintoneUiState
+import com.lazyapps.wifianalyzer.ui.operation.OperationState
+import java.text.DateFormat
+import java.util.Date
 
 @Composable
 fun ProScreen(state: BillingUiState, onBack: () -> Unit, onPurchase: () -> Unit, onRestore: () -> Unit) {
@@ -67,18 +73,73 @@ fun ProScreen(state: BillingUiState, onBack: () -> Unit, onPurchase: () -> Unit,
 }
 
 @Composable
-fun KintoneScreen(access: FeatureAccessPolicy, onBack: () -> Unit, onOpenPro: () -> Unit, onPluginInfo: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(AppSpacing.large), verticalArrangement = Arrangement.spacedBy(AppSpacing.large)) {
+fun KintoneScreen(
+    access: FeatureAccessPolicy,
+    onBack: () -> Unit,
+    onOpenPro: () -> Unit,
+    onPluginInfo: () -> Unit,
+    state: KintoneUiState = KintoneUiState(),
+    onScanQr: () -> Unit = {},
+    onConfirm: () -> Unit = {},
+    onCancelPending: () -> Unit = {},
+    onVerify: () -> Unit = {},
+    onDisconnect: () -> Unit = {},
+) {
+    val confirmDisconnect = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(AppSpacing.large), verticalArrangement = Arrangement.spacedBy(AppSpacing.large)) {
         Header("kintone連携", onBack)
         if (!access.canUseKintone) {
             Text("Pro版で利用できます。", style = MaterialTheme.typography.titleLarge)
             Button(onClick = onOpenPro, modifier = Modifier.fillMaxWidth().testTag("kintone_open_pro")) { Text("Pro版について") }
         } else {
-            Text("kintone連携プラグインが必要です。", style = MaterialTheme.typography.titleLarge)
-            Button(onClick = {}, modifier = Modifier.fillMaxWidth().testTag("kintone_scan_qr")) { Text("連携QRコードを読み取る（準備中）") }
+            Text(if (state.connection == null) "状態：未接続" else "状態：接続済み", style = MaterialTheme.typography.titleLarge)
+            state.connection?.let { connection ->
+                Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+                    Text("ドメイン：${maskDomain(connection.domain)}")
+                    Text("アプリID：${connection.appId}")
+                    Text("接続先ワークスペース：${state.workspaceName}")
+                    Text("最終接続確認：${DateFormat.getDateTimeInstance().format(Date(connection.lastVerifiedAt))}")
+                } }
+                Button(onClick = onVerify, modifier = Modifier.fillMaxWidth().testTag("kintone_verify")) { Text("接続を確認") }
+                OutlinedButton(onClick = onScanQr, modifier = Modifier.fillMaxWidth().testTag("kintone_rescan_qr")) { Text("QRコードを再読取") }
+                TextButton(onClick = { confirmDisconnect.value = true }, modifier = Modifier.fillMaxWidth().testTag("kintone_disconnect")) { Text("連携を解除") }
+            } ?: Button(onClick = onScanQr, modifier = Modifier.fillMaxWidth().testTag("kintone_scan_qr")) { Text("QRコードを読み取る") }
+            if (state.operation is OperationState.Running) Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(); Text("確認中…", Modifier.padding(start = AppSpacing.small)) }
+            state.errorCode?.let { Text("接続できませんでした（${it.name}）", color = MaterialTheme.colorScheme.error) }
+            (state.operation as? OperationState.Success)?.let { Text("処理が完了しました", color = MaterialTheme.colorScheme.primary) }
             OutlinedButton(onClick = onPluginInfo, modifier = Modifier.fillMaxWidth()) { Text("プラグインについて") }
         }
     }
+    state.pending?.let { pending -> AlertDialog(
+        onDismissRequest = onCancelPending,
+        title = { Text("接続内容を確認") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+            Text("ドメイン：${maskDomain(pending.payload.domain)}")
+            Text("アプリID：${pending.payload.appId}")
+            Text("pluginVersion：${pending.payload.pluginVersion}")
+            Text("templateVersion：${pending.payload.templateVersion}")
+            Text("fieldSchemaVersion：${pending.payload.fieldSchemaVersion}")
+            Text("接続先ワークスペース：${pending.workspaceName}")
+            Text("APIトークン：設定済み")
+            if (pending.verification.warnings.isEmpty()) Text("フィールド検査：確認済み") else pending.verification.warnings.forEach { Text("警告：$it", color = MaterialTheme.colorScheme.error) }
+            if (pending.duplicateTarget) Text("警告：別のワークスペースも同じkintoneアプリに接続しています", color = MaterialTheme.colorScheme.error)
+            if (pending.replacing) Text("保存後に既存の接続設定を置き換えます")
+        } },
+        confirmButton = { Button(onClick = onConfirm) { Text("この内容で接続") } },
+        dismissButton = { TextButton(onClick = onCancelPending) { Text("キャンセル") } },
+    ) }
+    if (confirmDisconnect.value) AlertDialog(
+        onDismissRequest = { confirmDisconnect.value = false },
+        title = { Text("kintone連携を解除しますか") },
+        text = { Text("Android内の登録機器とkintone側レコードは変更しません。端末内の接続情報とAPIトークンを削除します。kintone側のAPIトークンは無効化されません。") },
+        confirmButton = { Button(onClick = { confirmDisconnect.value = false; onDisconnect() }) { Text("連携を解除") } },
+        dismissButton = { TextButton(onClick = { confirmDisconnect.value = false }) { Text("キャンセル") } },
+    )
+}
+
+private fun maskDomain(domain: String): String {
+    val parts = domain.split('.')
+    return if (parts.size < 3) domain else parts.first().take(2) + "***." + parts.drop(1).joinToString(".")
 }
 
 @Composable

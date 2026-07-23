@@ -79,7 +79,8 @@ data class OperationError(
     val category: OperationErrorCategory,
     @StringRes val operationRes: Int,
     val occurredAtMillis: Long = System.currentTimeMillis(),
+    val stableCode: String? = null,
 ) {
-    val detailCode: String get() = category.code
+    val detailCode: String get() = stableCode ?: category.code
     val retryable: Boolean get() = category.retryable
 }
