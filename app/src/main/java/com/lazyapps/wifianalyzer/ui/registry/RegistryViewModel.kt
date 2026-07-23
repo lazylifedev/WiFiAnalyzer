@@ -16,6 +16,8 @@ import com.lazyapps.wifianalyzer.domain.DeviceInput
 import com.lazyapps.wifianalyzer.domain.DeviceMatching
 import com.lazyapps.wifianalyzer.domain.RegisteredDevice
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
+import com.lazyapps.wifianalyzer.ui.operation.OperationErrorCategory
+import com.lazyapps.wifianalyzer.ui.operation.OperationErrorMapper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -186,8 +188,9 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
             } catch (_: android.database.sqlite.SQLiteConstraintException) {
                 _uiState.value = _uiState.value.copy(busy = false, errorMessage = "同じ値が既に登録されています")
             } catch (error: Exception) {
-                _uiState.value = _uiState.value.copy(busy = false, errorMessage = error.message ?: "保存できませんでした")
+                _uiState.value = _uiState.value.copy(busy = false, errorMessage = userMessage(OperationErrorMapper.classify(error)))
             }
         }
     }
+    private fun userMessage(category: OperationErrorCategory) = getApplication<Application>().getString(category.messageRes)
 }

@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
 import com.lazyapps.wifianalyzer.data.registry.WorkspaceRepository
 import com.lazyapps.wifianalyzer.importcsv.*
+import com.lazyapps.wifianalyzer.ui.operation.OperationErrorMapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -54,7 +55,7 @@ class ImportViewModel(application: Application) : AndroidViewModel(application) 
             } ?: error("CSVを開けません")
             Triple(name, data, CsvEncodingDetector.detect(data))
         } }.onSuccess { (name, data, detection) -> bytes = data; parse(name, detection.encoding, detection.hasBom) }
-            .onFailure { mutable.value = mutable.value.copy(busy = false, error = it.message) }
+            .onFailure { mutable.value = mutable.value.copy(busy = false, error = userMessage(it)) }
     } }
 
     fun setEncoding(encoding: CsvEncoding) { val name = mutable.value.fileName; parse(name, encoding, encoding == CsvEncoding.UTF8 && mutable.value.hasBom) }
@@ -67,7 +68,7 @@ class ImportViewModel(application: Application) : AndroidViewModel(application) 
                 parsedRows = records.drop(1); val mapping = preferences.loadMapping(records.first().cells) ?: CsvColumnMapper.autoMap(records.first().cells)
                 mutable.value = mutable.value.copy(step = ImportStep.ENCODING, fileName = name, encoding = encoding, hasBom = hasBom, headers = records.first().cells,
                     samples = records.drop(1).take(3).map { it.cells }, mapping = mapping, preview = null, result = null, busy = false)
-            }.onFailure { mutable.value = mutable.value.copy(busy = false, error = it.message) }
+            }.onFailure { mutable.value = mutable.value.copy(busy = false, error = userMessage(it)) }
     } }
     fun next() { when (mutable.value.step) {
         ImportStep.ENCODING -> mutable.value = mutable.value.copy(step = ImportStep.MAPPING)
@@ -83,12 +84,12 @@ class ImportViewModel(application: Application) : AndroidViewModel(application) 
     private fun buildPreview() { job = viewModelScope.launch { mutable.value = mutable.value.copy(busy = true, error = null)
         runCatching { val rows = withContext(Dispatchers.Default) { parsedRows.map { ImportValidator.map(it, mutable.value.mapping) } }; repository.plan(rows, mutable.value.settings, currentWorkspaceId) }
             .onSuccess { mutable.value = mutable.value.copy(step = ImportStep.PREVIEW, preview = it, busy = false) }
-            .onFailure { mutable.value = mutable.value.copy(busy = false, error = it.message) }
+            .onFailure { mutable.value = mutable.value.copy(busy = false, error = userMessage(it)) }
     } }
     fun execute() { if (mutable.value.busy) return; job = viewModelScope.launch { val preview = mutable.value.preview ?: return@launch; val settings = mutable.value.settings
         mutable.value = mutable.value.copy(step = ImportStep.IMPORTING, busy = true, error = null)
         runCatching { repository.execute(preview, settings) }.onSuccess { result -> preferences.save(mutable.value.fileName, settings, result, true); mutable.value = mutable.value.copy(step = ImportStep.RESULT, result = result, busy = false) }
-            .onFailure { preferences.save(mutable.value.fileName, settings, null, false); mutable.value = mutable.value.copy(step = ImportStep.CONFIRM, busy = false, error = it.message) }
+            .onFailure { preferences.save(mutable.value.fileName, settings, null, false); mutable.value = mutable.value.copy(step = ImportStep.CONFIRM, busy = false, error = userMessage(it)) }
     } }
     fun cancel() { job?.cancel(); mutable.value = mutable.value.copy(step = if (mutable.value.preview == null) ImportStep.SELECT else ImportStep.PREVIEW, busy = false, error = "処理をキャンセルしました") }
     fun writeErrorCsv(uri: Uri) { viewModelScope.launch {
@@ -102,6 +103,8 @@ class ImportViewModel(application: Application) : AndroidViewModel(application) 
                     }
                 }
             } ?: error("保存先を開けません")
-        } }.onFailure { mutable.value = mutable.value.copy(error = it.message) }
+        } }.onFailure { mutable.value = mutable.value.copy(error = userMessage(it)) }
     } }
+    private fun userMessage(error: Throwable): String =
+        getApplication<Application>().getString(OperationErrorMapper.classify(error).messageRes)
 }

@@ -12,6 +12,7 @@ import com.lazyapps.wifianalyzer.model.ScanState
 import com.lazyapps.wifianalyzer.model.SignalSample
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import com.lazyapps.wifianalyzer.model.WifiBand
+import com.lazyapps.wifianalyzer.ui.operation.OperationErrorCategory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,7 +82,7 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
                     _uiState.value = _uiState.value.copy(
                         scanState = snapshot.state,
                         selectedDetected = false,
-                        errorMessage = snapshot.message,
+                        errorMessage = scanErrorMessage(snapshot.state),
                     )
                     return@collectLatest
                 }
@@ -108,7 +109,7 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
                     selectedAccessPoint = selected ?: previousSelected,
                     selectedDetected = selected != null,
                     signalHistory = selectedBssid?.let { samplesByBssid[it]?.toList() }.orEmpty(),
-                    errorMessage = snapshot.message,
+                    errorMessage = if (snapshot.state == ScanState.THROTTLED) scanErrorMessage(snapshot.state) else null,
                     isRefreshing = snapshot.state == ScanState.SCANNING,
                 )
             }
@@ -219,6 +220,19 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
     override fun onCleared() {
         repository.close()
         super.onCleared()
+    }
+
+    private fun scanErrorMessage(state: ScanState): String? {
+        val category = when (state) {
+            ScanState.PERMISSION_REQUIRED, ScanState.PERMISSION_DENIED -> OperationErrorCategory.PERMISSION_DENIED
+            ScanState.PERMISSION_PERMANENTLY_DENIED -> OperationErrorCategory.PERMISSION_PERMANENTLY_DENIED
+            ScanState.LOCATION_DISABLED -> OperationErrorCategory.LOCATION_SERVICE_DISABLED
+            ScanState.WIFI_DISABLED -> OperationErrorCategory.WIFI_DISABLED
+            ScanState.THROTTLED -> OperationErrorCategory.SCAN_THROTTLED
+            ScanState.ERROR -> OperationErrorCategory.NETWORK_SCAN_FAILED
+            else -> return null
+        }
+        return getApplication<Application>().getString(category.messageRes)
     }
 
     companion object {
