@@ -14,6 +14,13 @@ import com.lazyapps.wifianalyzer.kintone.KintoneRepository
 import com.lazyapps.wifianalyzer.kintone.KintoneVerification
 import com.lazyapps.wifianalyzer.kintone.KintoneSyncPreview
 import com.lazyapps.wifianalyzer.kintone.KintoneSyncResult
+import com.lazyapps.wifianalyzer.kintone.KintoneAutoSyncScheduler
+import com.lazyapps.wifianalyzer.kintone.KintoneAutoSyncState
+import com.lazyapps.wifianalyzer.kintone.KintoneAutoSyncStore
+import com.lazyapps.wifianalyzer.kintone.KintoneSyncLock
+import com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus
+import com.lazyapps.wifianalyzer.kintone.KintoneSyncTrigger
+import com.lazyapps.wifianalyzer.kintone.WorkspaceUuid
 import com.lazyapps.wifianalyzer.ui.operation.OperationProgress
 import com.lazyapps.wifianalyzer.ui.operation.OperationError
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorCategory
@@ -23,6 +30,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.withLock
 
 data class PendingKintoneConnection(
     val workspaceId: Long,
@@ -42,6 +51,9 @@ data class KintoneUiState(
     val errorCode: KintoneErrorCode? = null,
     val syncPreview: KintoneSyncPreview? = null,
     val syncResult: KintoneSyncResult? = null,
+    val autoSync: KintoneAutoSyncState = KintoneAutoSyncState(),
+    val canUseKintone: Boolean = false,
+    val message: String? = null,
 )
 
 class KintoneViewModel(application: Application) : AndroidViewModel(application) {
@@ -51,10 +63,33 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
     private var observeJob: Job? = null
     private var operationJob: Job? = null
     private var eventId = 1L
+    private val autoSyncStore = KintoneAutoSyncStore(application)
+    private val autoSyncScheduler = KintoneAutoSyncScheduler(application)
+
+    init {
+        viewModelScope.launch {
+            while (true) {
+                val id = mutable.value.workspaceId
+                if (id > 0) mutable.value = mutable.value.copy(autoSync = autoSyncStore.read(WorkspaceUuid.fromId(id)))
+                delay(1_000)
+            }
+        }
+    }
+
+    fun setAccessAllowed(allowed: Boolean) {
+        if (!allowed && mutable.value.workspaceId > 0 && mutable.value.autoSync.enabled) autoSyncScheduler.disable(mutable.value.workspaceId)
+        if (mutable.value.canUseKintone != allowed) mutable.value = mutable.value.copy(canUseKintone = allowed)
+    }
 
     fun selectWorkspace(id: Long, name: String) {
-        if (id <= 0 || mutable.value.workspaceId == id) return
-        mutable.value = KintoneUiState(workspaceId = id, workspaceName = name)
+        if (id <= 0) return
+        if (mutable.value.workspaceId == id) { if (mutable.value.workspaceName != name) mutable.value = mutable.value.copy(workspaceName = name); return }
+        mutable.value = KintoneUiState(
+            workspaceId = id,
+            workspaceName = name,
+            canUseKintone = mutable.value.canUseKintone,
+            autoSync = autoSyncStore.read(WorkspaceUuid.fromId(id)),
+        )
         observeJob?.cancel()
         observeJob = viewModelScope.launch { repository.observe(id).collect { mutable.value = mutable.value.copy(connection = it) } }
     }
@@ -96,12 +131,17 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun disconnect() = launchOperation {
+        autoSyncScheduler.disable(mutable.value.workspaceId)
         repository.disconnect(mutable.value.workspaceId)
         mutable.value = mutable.value.copy(operation = OperationState.Success(R.string.kintone_disconnected, eventId++), pending = null, errorCode = null)
     }
 
     fun sync() = launchOperation {
         val records = repository.buildSyncRecords(mutable.value.workspaceId)
+        if (records.isEmpty()) {
+            mutable.value = mutable.value.copy(message = "同期する登録機器がありません", syncPreview = KintoneSyncPreview(0, 0, emptyList(), emptyList()), operation = OperationState.Idle)
+            return@launchOperation
+        }
         val hadPreview = mutable.value.syncPreview != null
         val preview = mutable.value.syncPreview ?: repository.previewSync(mutable.value.workspaceId).also {
             mutable.value = mutable.value.copy(syncPreview = it)
@@ -110,10 +150,28 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
             if (preview.valid == 0) throw KintoneException(KintoneErrorCode.KINTONE_VALIDATION_FAILED)
             return@launchOperation
         }
-        val result = repository.sync(mutable.value.workspaceId, records.filter { it.deviceUuid.isNotBlank() }) { current, total ->
-            mutable.value = mutable.value.copy(operation = OperationState.Running(R.string.kintone_verifying, progress = OperationProgress.Count(current, total), cancellable = true))
+        val result = KintoneSyncLock.mutex.withLock {
+            repository.sync(mutable.value.workspaceId, records.filter { it.deviceUuid.isNotBlank() }) { current, total ->
+                mutable.value = mutable.value.copy(operation = OperationState.Running(R.string.kintone_verifying, progress = OperationProgress.Count(current, total), cancellable = true))
+            }
         }
+        val uuid = WorkspaceUuid.fromId(mutable.value.workspaceId)
+        autoSyncStore.write(uuid, autoSyncStore.read(uuid).copy(
+            lastStartedAt = System.currentTimeMillis(), lastFinishedAt = System.currentTimeMillis(),
+            status = if (result.failed > 0) KintoneSyncStatus.PARTIAL else KintoneSyncStatus.SUCCESS,
+            trigger = KintoneSyncTrigger.MANUAL, targetCount = result.total, successCount = result.succeeded,
+            failureCount = result.failed, skippedCount = result.skipped, unsentCount = result.failed + result.skipped,
+            partiallyCompleted = result.failed > 0 && result.succeeded > 0,
+        ))
         mutable.value = mutable.value.copy(syncResult = result, operation = OperationState.Success(R.string.kintone_connected, eventId++))
+    }
+
+    fun setAutoSync(enabled: Boolean) {
+        val state = mutable.value
+        if (state.workspaceId <= 0 || state.connection == null) return
+        if (enabled) { if (!state.canUseKintone) return; autoSyncScheduler.enable(state.workspaceId) }
+        else autoSyncScheduler.disable(state.workspaceId)
+        mutable.value = state.copy(autoSync = autoSyncStore.read(WorkspaceUuid.fromId(state.workspaceId)))
     }
 
     fun cancel() { operationJob?.cancel(); operationJob = null; mutable.value = mutable.value.copy(operation = OperationState.Idle, pending = null) }

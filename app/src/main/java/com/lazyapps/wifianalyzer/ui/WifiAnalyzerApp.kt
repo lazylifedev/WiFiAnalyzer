@@ -131,6 +131,9 @@ fun WifiAnalyzerApp(
     LaunchedEffect(workspaceState.selectedId, workspaceState.selected?.name) {
         workspaceState.selected?.let { kintoneViewModel.selectWorkspace(it.id, it.name) }
     }
+    LaunchedEffect(billingState.entitlement, debugForcePro) {
+        kintoneViewModel.setAccessAllowed(FeatureAccessPolicy.from(billingState.entitlement, debugForcePro).canUseKintone)
+    }
 
     fun currentPermissionState(): ScanState {
         val permissions = AppPermissionPolicy.wifiScanPermissions()
@@ -379,6 +382,7 @@ fun WifiAnalyzerApp(
                         onVerify = kintoneViewModel::reverify,
                         onDisconnect = kintoneViewModel::disconnect,
                         onSync = kintoneViewModel::sync,
+                        onAutoSyncChange = kintoneViewModel::setAutoSync,
                         onCancelSync = kintoneViewModel::cancel,
                     )
                 }

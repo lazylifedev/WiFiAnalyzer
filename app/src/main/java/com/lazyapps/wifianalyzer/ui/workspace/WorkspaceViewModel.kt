@@ -10,6 +10,7 @@ import com.lazyapps.wifianalyzer.domain.Workspace
 import com.lazyapps.wifianalyzer.domain.WorkspaceCounts
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorCategory
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorMapper
+import com.lazyapps.wifianalyzer.kintone.KintoneAutoSyncScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +24,7 @@ data class WorkspaceUiState(
 
 class WorkspaceViewModel(application: Application) : AndroidViewModel(application) {
     val repository = WorkspaceRepository(application, WifiAnalyzerDatabase.get(application))
+    private val autoSync = KintoneAutoSyncScheduler(application)
     private val _uiState = MutableStateFlow(WorkspaceUiState())
     val uiState: StateFlow<WorkspaceUiState> = _uiState.asStateFlow()
 
@@ -37,10 +39,10 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun select(id: Long) = action { repository.select(id) }
     fun create(name: String) = action { repository.select(repository.create(name)) }
-    fun rename(id: Long, name: String) = action { repository.rename(id, name) }
+    fun rename(id: Long, name: String) = action { repository.rename(id, name); autoSync.requestChange(id) }
     fun move(id: Long, direction: Int) = action { repository.move(id, direction) }
     fun loadCounts(id: Long) { viewModelScope.launch { _uiState.value = _uiState.value.copy(deleteCounts = _uiState.value.deleteCounts + (id to repository.counts(id))) } }
-    fun delete(id: Long) = action { repository.delete(id) }
+    fun delete(id: Long) = action { autoSync.remove(id); repository.delete(id) }
 
     private fun action(block: suspend () -> Unit) {
         if (_uiState.value.busy) return

@@ -18,6 +18,7 @@ import com.lazyapps.wifianalyzer.domain.RegisteredDevice
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorCategory
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorMapper
+import com.lazyapps.wifianalyzer.kintone.KintoneAutoSyncScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,6 +45,7 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
     private val workspaceRepository = WorkspaceRepository(application, WifiAnalyzerDatabase.get(application))
     private val repository = DeviceRegistryRepository(application, WifiAnalyzerDatabase.get(application), workspaceRepository)
     private val photoRepository = PhotoRepository(application, WifiAnalyzerDatabase.get(application))
+    private val autoSync = KintoneAutoSyncScheduler(application)
     private val _uiState = MutableStateFlow(RegistryUiState())
     val uiState: StateFlow<RegistryUiState> = _uiState.asStateFlow()
 
@@ -139,12 +141,14 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
     fun save(input: DeviceInput, onSuccess: (Long) -> Unit) = launchAction {
         if (input.pendingPhotoPath != null) photoRepository.ensureCapacity(input.id)
         val id = repository.save(input)
+        val changedWorkspaceId = input.workspaceId.takeIf { it > 0 } ?: _uiState.value.currentWorkspaceId
         input.pendingPhotoPath?.let { path ->
             val source = File(path)
             try { photoRepository.save(id, input.workspaceId.takeIf { it != 0L } ?: _uiState.value.devices.firstOrNull { it.id == id }?.workspaceId ?: workspaceRepository.snapshot.first().selectedId, Uri.fromFile(source)) }
             finally { source.delete() }
         }
         onSuccess(id)
+        autoSync.requestChange(changedWorkspaceId)
     }
 
     fun deleteDevice(id: Long, onSuccess: () -> Unit = {}) = launchAction {
@@ -172,8 +176,8 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
             }
         }
     }
-    fun renameGroup(group: DeviceGroup, name: String) = launchAction { repository.renameGroup(group, name) }
-    fun deleteGroup(group: DeviceGroup) = launchAction { repository.deleteGroup(group) }
+    fun renameGroup(group: DeviceGroup, name: String) = launchAction { repository.renameGroup(group, name); autoSync.requestChange(group.workspaceId) }
+    fun deleteGroup(group: DeviceGroup) = launchAction { repository.deleteGroup(group); autoSync.requestChange(group.workspaceId) }
     fun moveGroup(group: DeviceGroup, direction: Int) = launchAction { repository.moveGroup(group, direction) }
     fun clearError() { _uiState.value = _uiState.value.copy(errorMessage = null) }
 
