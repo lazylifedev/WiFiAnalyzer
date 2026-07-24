@@ -31,4 +31,12 @@ class BillingPolicyTest {
         assertNull(access.maxWorkspaceCount)
         assertTrue(AdVisibilityPolicy(access).canShow(AdPlacement.HOME))
     }
+    @Test fun debugForceProOverridesFreeEntitlement() {
+        val access = FeatureAccessPolicy.from(ProEntitlementState.Free, debugForcePro = true)
+        assertTrue(access.canUseKintone)
+        assertTrue(access.canRemoveAds)
+    }
+    @Test fun normalFreeEntitlementDoesNotBecomePro() {
+        assertFalse(FeatureAccessPolicy.from(ProEntitlementState.Free, debugForcePro = false).isPro)
+    }
 }
