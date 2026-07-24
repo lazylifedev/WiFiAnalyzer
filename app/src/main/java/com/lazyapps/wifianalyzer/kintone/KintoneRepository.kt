@@ -73,7 +73,7 @@ class KintoneRepository(
         val batches = records.chunked(KINTONE_RECORD_BATCH_SIZE); val results = mutableListOf<KintoneBatchResult>(); var success = 0; var failed = 0
         try { batches.forEachIndexed { index, batch ->
             try { api.upsert(connection.domain, connection.appId, token.copyOf(), batch); success += batch.size; results += KintoneBatchResult(index + 1, batch.size, 0) }
-            catch (e: KintoneException) { failed += batch.size; results += KintoneBatchResult(index + 1, 0, batch.size, e.code) }
+            catch (e: KintoneException) { failed += batch.size; results += KintoneBatchResult(index + 1, 0, batch.size, e.code, e.category, e.httpStatus, e.kintoneErrorCode, e.userMessage) }
             onProgress(index + 1, batches.size)
         } } finally { token.fill('\u0000') }
         return KintoneSyncResult(records.size, success, failed, 0, results)

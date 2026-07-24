@@ -11,6 +11,8 @@ import com.lazyapps.wifianalyzer.ui.pro.KintoneScreen
 import com.lazyapps.wifianalyzer.ui.pro.ProScreen
 import com.lazyapps.wifianalyzer.ui.theme.WifiAnalyzerTheme
 import com.lazyapps.wifianalyzer.kintone.KintoneConnectionSummary
+import com.lazyapps.wifianalyzer.kintone.KintoneAutoSyncState
+import com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus
 import com.lazyapps.wifianalyzer.ui.kintone.KintoneUiState
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -73,5 +75,22 @@ class ProScreenTest {
         rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = connectedState()) } }
         rule.onNodeWithTag("kintone_auto_sync_switch").performClick()
         rule.onNodeWithText("自動同期を有効にしますか").assertIsDisplayed()
+    }
+
+    @Test fun failedSyncShowsOnlySafeJapaneseDetailsAndRecoveryActions() {
+        val state = connectedState().copy(autoSync = KintoneAutoSyncState(
+            status = KintoneSyncStatus.FAILED, targetCount = 11, failureCount = 11,
+            lastErrorCategory = "VALIDATION", lastHttpStatus = 400, lastKintoneErrorCode = "CB_VA01",
+            lastUserMessage = "送信内容がkintoneのフィールド仕様と一致しません。", requiresAttention = true,
+        ))
+        rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = state) } }
+        rule.onNodeWithText("最終同期結果: 同期失敗").assertIsDisplayed()
+        rule.onNodeWithText("11件を送信できませんでした。").assertIsDisplayed()
+        rule.onNodeWithTag("kintone_error_details").assertIsDisplayed().performClick()
+        rule.onNodeWithTag("kintone_safe_error_message").assertIsDisplayed()
+        rule.onNodeWithText("CB_VA01", substring = true).assertIsDisplayed()
+        rule.onNodeWithTag("kintone_retry_failed").assertIsDisplayed()
+        rule.onNodeWithTag("kintone_check_connection").assertIsDisplayed()
+        rule.onNodeWithText("APIトークン", substring = true).assertDoesNotExist()
     }
 }

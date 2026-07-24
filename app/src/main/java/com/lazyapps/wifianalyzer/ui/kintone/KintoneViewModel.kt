@@ -127,6 +127,8 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
 
     fun reverify() = launchOperation {
         repository.reverify(mutable.value.workspaceId)
+        val uuid = WorkspaceUuid.fromId(mutable.value.workspaceId)
+        autoSyncStore.write(uuid, autoSyncStore.read(uuid).copy(requiresAttention = false))
         mutable.value = mutable.value.copy(operation = OperationState.Success(R.string.kintone_verified, eventId++), errorCode = null)
     }
 
@@ -156,12 +158,16 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
             }
         }
         val uuid = WorkspaceUuid.fromId(mutable.value.workspaceId)
+        val failure = result.batches.firstOrNull { it.error != null }
         autoSyncStore.write(uuid, autoSyncStore.read(uuid).copy(
             lastStartedAt = System.currentTimeMillis(), lastFinishedAt = System.currentTimeMillis(),
-            status = if (result.failed > 0) KintoneSyncStatus.PARTIAL else KintoneSyncStatus.SUCCESS,
+            status = when { result.failed == 0 -> KintoneSyncStatus.SUCCESS; result.succeeded > 0 -> KintoneSyncStatus.PARTIAL; else -> KintoneSyncStatus.FAILED },
             trigger = KintoneSyncTrigger.MANUAL, targetCount = result.total, successCount = result.succeeded,
             failureCount = result.failed, skippedCount = result.skipped, unsentCount = result.failed + result.skipped,
             partiallyCompleted = result.failed > 0 && result.succeeded > 0,
+            lastErrorCategory = failure?.errorCategory?.name, lastHttpStatus = failure?.httpStatus,
+            lastKintoneErrorCode = failure?.kintoneErrorCode, lastUserMessage = failure?.userMessage,
+            failedAt = if (failure != null) System.currentTimeMillis() else 0, requiresAttention = failure != null,
         ))
         mutable.value = mutable.value.copy(syncResult = result, operation = OperationState.Success(R.string.kintone_connected, eventId++))
     }
