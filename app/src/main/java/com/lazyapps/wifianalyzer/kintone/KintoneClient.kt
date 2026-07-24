@@ -15,9 +15,14 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.add
 
 interface KintoneApi {
     suspend fun verify(domain: String, appId: Long, token: CharArray): KintoneVerification
+    suspend fun upsert(domain: String, appId: Long, token: CharArray, records: List<KintoneDeviceRecord>)
 }
 
 class HttpsKintoneApi : KintoneApi {
@@ -33,6 +38,27 @@ class HttpsKintoneApi : KintoneApi {
             verification
         } finally { token.fill('\u0000') }
     }
+
+    override suspend fun upsert(domain: String, appId: Long, token: CharArray, records: List<KintoneDeviceRecord>) = withContext(Dispatchers.IO) {
+        require(records.size <= KINTONE_RECORD_BATCH_SIZE)
+        val body = buildJsonObject {
+            put("app", appId); put("upsert", true)
+            put("records", buildJsonArray { records.forEach { item -> add(buildJsonObject {
+                put("updateKey", buildJsonObject { put("field", "機器UUID"); put("value", item.deviceUuid) })
+                put("record", buildJsonObject {
+                    put("機器UUID", value(item.deviceUuid)); put("ワークスペースUUID", value(item.workspaceUuid)); put("ワークスペース名", value(item.workspaceName))
+                    put("グループUUID", value(item.groupUuid)); put("グループ名", value(item.groupName)); put("機器名", value(item.deviceName))
+                    put("メーカー", value(item.manufacturer)); put("機種", value(item.model)); put("シリアル番号", value(item.serialNumber)); put("SSID", value(item.ssid))
+                    put("主BSSID", value(item.primaryBssid)); put("設置場所", value(item.location)); put("メモ", value(item.notes)); put("アプリ更新日時", value(item.updatedAt))
+                    put("削除状態", buildJsonObject { put("value", buildJsonArray { if (item.deleted) add("削除済") }) })
+                })
+            }) } })
+        }
+        post(domain, "/k/v1/records.json", token, body.toString())
+        token.fill('\u0000')
+    }
+
+    private fun value(value: String) = buildJsonObject { put("value", value) }
 
     private fun get(domain: String, path: String, token: CharArray): String {
         val connection = (URL("https", domain, path).openConnection() as HttpURLConnection).apply {
@@ -58,6 +84,16 @@ class HttpsKintoneApi : KintoneApi {
         catch (e: SSLException) { throw KintoneException(KintoneErrorCode.KINTONE_TLS_ERROR, e) }
         catch (e: IOException) { throw KintoneException(KintoneErrorCode.KINTONE_NETWORK_UNAVAILABLE, e) }
         finally { connection.disconnect() }
+    }
+
+    private fun post(domain: String, path: String, token: CharArray, body: String) {
+        val connection = (URL("https", domain, path).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"; connectTimeout = 10_000; readTimeout = 30_000; instanceFollowRedirects = false; doOutput = true
+            setRequestProperty("X-Cybozu-API-Token", String(token)); setRequestProperty("Content-Type", "application/json")
+        }
+        try { connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }; val status = connection.responseCode
+            if (status !in 200..299) throw KintoneException(when (status) { 401 -> KintoneErrorCode.KINTONE_AUTH_FAILED; 403 -> KintoneErrorCode.KINTONE_PERMISSION_DENIED; 404 -> KintoneErrorCode.KINTONE_APP_NOT_FOUND; 429 -> KintoneErrorCode.KINTONE_RATE_LIMITED; in 500..599 -> KintoneErrorCode.KINTONE_SERVER_ERROR; else -> KintoneErrorCode.KINTONE_BATCH_FAILED })
+        } catch (e: KintoneException) { throw e } catch (e: SocketTimeoutException) { throw KintoneException(KintoneErrorCode.KINTONE_TIMEOUT, e) } catch (e: IOException) { throw KintoneException(KintoneErrorCode.KINTONE_NETWORK_UNAVAILABLE, e) } finally { connection.disconnect() }
     }
 
     internal fun parseFields(body: String): Map<String, KintoneFieldProperty> = try {

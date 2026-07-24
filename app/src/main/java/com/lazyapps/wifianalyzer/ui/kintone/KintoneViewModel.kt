@@ -12,6 +12,8 @@ import com.lazyapps.wifianalyzer.kintone.KintoneQrParser
 import com.lazyapps.wifianalyzer.kintone.KintoneQrPayload
 import com.lazyapps.wifianalyzer.kintone.KintoneRepository
 import com.lazyapps.wifianalyzer.kintone.KintoneVerification
+import com.lazyapps.wifianalyzer.kintone.KintoneSyncPreview
+import com.lazyapps.wifianalyzer.kintone.KintoneSyncResult
 import com.lazyapps.wifianalyzer.ui.operation.OperationProgress
 import com.lazyapps.wifianalyzer.ui.operation.OperationError
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorCategory
@@ -38,6 +40,8 @@ data class KintoneUiState(
     val pending: PendingKintoneConnection? = null,
     val operation: OperationState = OperationState.Idle,
     val errorCode: KintoneErrorCode? = null,
+    val syncPreview: KintoneSyncPreview? = null,
+    val syncResult: KintoneSyncResult? = null,
 )
 
 class KintoneViewModel(application: Application) : AndroidViewModel(application) {
@@ -94,6 +98,17 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
     fun disconnect() = launchOperation {
         repository.disconnect(mutable.value.workspaceId)
         mutable.value = mutable.value.copy(operation = OperationState.Success(R.string.kintone_disconnected, eventId++), pending = null, errorCode = null)
+    }
+
+    fun sync() = launchOperation {
+        val records = repository.buildSyncRecords(mutable.value.workspaceId)
+        val preview = repository.previewSync(mutable.value.workspaceId)
+        mutable.value = mutable.value.copy(syncPreview = preview)
+        if (preview.valid == 0) throw KintoneException(KintoneErrorCode.KINTONE_VALIDATION_FAILED)
+        val result = repository.sync(mutable.value.workspaceId, records.filter { it.deviceUuid.isNotBlank() }) { current, total ->
+            mutable.value = mutable.value.copy(operation = OperationState.Running(R.string.kintone_verifying, progress = OperationProgress.Count(current, total), cancellable = true))
+        }
+        mutable.value = mutable.value.copy(syncResult = result, operation = OperationState.Success(R.string.kintone_connected, eventId++))
     }
 
     fun cancel() { operationJob?.cancel(); operationJob = null; mutable.value = mutable.value.copy(operation = OperationState.Idle, pending = null) }
