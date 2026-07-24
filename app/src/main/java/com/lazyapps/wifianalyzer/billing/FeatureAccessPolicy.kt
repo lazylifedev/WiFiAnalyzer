@@ -22,8 +22,8 @@ data class FeatureAccessPolicy(
     val maxPhotosPerDevice: Int? get() = limits.maxPhotosPerDevice
 
     companion object {
-        fun from(state: ProEntitlementState) = FeatureAccessPolicy(
-            isPro = state == ProEntitlementState.Pro ||
+        fun from(state: ProEntitlementState, debugForcePro: Boolean = false) = FeatureAccessPolicy(
+            isPro = debugForcePro || state == ProEntitlementState.Pro ||
                 (state is ProEntitlementState.Error && state.retainedPro),
         )
     }

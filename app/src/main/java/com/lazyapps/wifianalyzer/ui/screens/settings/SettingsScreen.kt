@@ -56,6 +56,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
 import com.lazyapps.wifianalyzer.R
+import com.lazyapps.wifianalyzer.BuildConfig
 import com.lazyapps.wifianalyzer.data.DistanceUnitPreference
 import com.lazyapps.wifianalyzer.model.WifiBand
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
@@ -101,6 +102,8 @@ fun SettingsScreen(
     onRequestScanPermission: () -> Unit = {},
     onOpenAppSettings: () -> Unit = {},
     onShowOnboarding: () -> Unit = {},
+    debugForcePro: Boolean = false,
+    onDebugForceProChange: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     val packageInfo = remember(context) { context.packageManager.getPackageInfo(context.packageName, 0) }
@@ -212,6 +215,19 @@ fun SettingsScreen(
             Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
                 SettingRow("Pro版", onClick = onOpenPro)
                 SettingRow("Playストアで評価する", onClick = onRateApp)
+            }
+        }
+        if (BuildConfig.DEBUG) {
+            item { SectionLabel("開発者向け", Modifier.padding(horizontal = AppSpacing.large)) }
+            item {
+                Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), border = CardDefaults.outlinedCardBorder()) {
+                    Column(Modifier.padding(AppSpacing.large)) {
+                        SettingRow("Pro状態を強制する", if (debugForcePro) "開発用Pro状態" else null, trailing = {
+                            Switch(checked = debugForcePro, onCheckedChange = onDebugForceProChange)
+                        })
+                        if (debugForcePro) Text("開発用Pro状態", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
             }
         }
     }

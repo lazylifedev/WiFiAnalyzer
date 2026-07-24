@@ -78,6 +78,7 @@ import com.lazyapps.wifianalyzer.ui.kintone.KintoneQrScreen
 import com.lazyapps.wifianalyzer.ui.kintone.KintoneViewModel
 import com.lazyapps.wifianalyzer.billing.BillingViewModel
 import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
+import com.lazyapps.wifianalyzer.billing.DebugProPreferences
 import com.lazyapps.wifianalyzer.review.PlayReviewCoordinator
 import com.lazyapps.wifianalyzer.review.ReviewContext
 import com.lazyapps.wifianalyzer.review.ReviewHistoryRepository
@@ -109,9 +110,11 @@ fun WifiAnalyzerApp(
     val registryState by registryViewModel.uiState.collectAsStateWithLifecycle()
     val workspaceState by workspaceViewModel.uiState.collectAsStateWithLifecycle()
     val billingState by billingViewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val debugProPreferences = remember(context) { DebugProPreferences(context) }
+    val debugForcePro by debugProPreferences.forcePro.collectAsStateWithLifecycle(initialValue = false)
     val kintoneState by kintoneViewModel.uiState.collectAsStateWithLifecycle()
     val enrichedScanState = scanState.copy(accessPoints = registryViewModel.enriched(scanState.accessPoints))
-    val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val lifecycleOwner = LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
@@ -342,6 +345,8 @@ fun WifiAnalyzerApp(
                         onRequestScanPermission = requestPermission,
                         onOpenAppSettings = { openSettings(ScanState.PERMISSION_PERMANENTLY_DENIED) },
                         onShowOnboarding = { replayOnboarding = true },
+                        debugForcePro = debugForcePro,
+                        onDebugForceProChange = { enabled -> coroutineScope.launch { debugProPreferences.setForcePro(enabled) } },
                     )
                 }
                 composable(BACKUP_ROUTE) {
@@ -363,7 +368,7 @@ fun WifiAnalyzerApp(
                 }
                 composable(KINTONE_ROUTE) {
                     KintoneScreen(
-                        access = FeatureAccessPolicy.from(billingState.entitlement),
+                        access = FeatureAccessPolicy.from(billingState.entitlement, debugForcePro),
                         state = kintoneState,
                         onBack = { navController.popBackStack() },
                         onOpenPro = { navController.navigate(PRO_ROUTE) },
@@ -376,7 +381,7 @@ fun WifiAnalyzerApp(
                     )
                 }
                 composable(KINTONE_QR_ROUTE) {
-                    if (!FeatureAccessPolicy.from(billingState.entitlement).canUseKintone) {
+                    if (!FeatureAccessPolicy.from(billingState.entitlement, debugForcePro).canUseKintone) {
                         LaunchedEffect(Unit) { navController.popBackStack(); navController.navigate(PRO_ROUTE) }
                     } else KintoneQrScreen(
                         onBack = { navController.popBackStack() },
