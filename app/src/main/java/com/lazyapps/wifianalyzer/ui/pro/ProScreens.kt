@@ -185,6 +185,12 @@ private fun KintoneAutoSyncSection(state: KintoneUiState, onSync: () -> Unit, on
         Text("最終同期結果: ${state.autoSync.status.name}")
         Text("現在、写真は同期されません。複数BSSIDは主BSSIDのみ同期されます。")
         Text("Androidで削除した機器のkintone反映は、現在未対応です。")
+        state.syncPreview?.let { preview ->
+            Text("送信前レビュー", style = MaterialTheme.typography.titleMedium)
+            Text("対象 ${preview.total}件 / 送信可能 ${preview.valid}件")
+            if (preview.errors.isNotEmpty()) Text("エラー ${preview.errors.size}件", color = MaterialTheme.colorScheme.error)
+            if (preview.warnings.isNotEmpty()) Text("警告 ${preview.warnings.size}件", color = MaterialTheme.colorScheme.tertiary)
+        }
         Button(onClick = onSync, enabled = state.operation !is OperationState.Running, modifier = Modifier.fillMaxWidth().testTag("kintone_sync")) { Text("今すぐ同期") }
     }
 }
