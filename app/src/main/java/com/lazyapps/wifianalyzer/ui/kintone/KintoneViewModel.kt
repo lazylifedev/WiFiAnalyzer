@@ -102,9 +102,14 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
 
     fun sync() = launchOperation {
         val records = repository.buildSyncRecords(mutable.value.workspaceId)
-        val preview = repository.previewSync(mutable.value.workspaceId)
-        mutable.value = mutable.value.copy(syncPreview = preview)
-        if (preview.valid == 0) throw KintoneException(KintoneErrorCode.KINTONE_VALIDATION_FAILED)
+        val hadPreview = mutable.value.syncPreview != null
+        val preview = mutable.value.syncPreview ?: repository.previewSync(mutable.value.workspaceId).also {
+            mutable.value = mutable.value.copy(syncPreview = it)
+        }
+        if (!hadPreview || preview.valid == 0) {
+            if (preview.valid == 0) throw KintoneException(KintoneErrorCode.KINTONE_VALIDATION_FAILED)
+            return@launchOperation
+        }
         val result = repository.sync(mutable.value.workspaceId, records.filter { it.deviceUuid.isNotBlank() }) { current, total ->
             mutable.value = mutable.value.copy(operation = OperationState.Running(R.string.kintone_verifying, progress = OperationProgress.Count(current, total), cancellable = true))
         }
