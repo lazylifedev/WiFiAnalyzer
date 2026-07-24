@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.lazyapps.wifianalyzer.data.registry.KintoneConnectionEntity
 import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
 import java.util.UUID
+import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -44,6 +45,39 @@ class KintoneRepository(
 
     suspend fun disconnect(workspaceId: Long) = dao.deleteKintoneConnection(workspaceId)
     suspend fun hasDuplicateTarget(workspaceId: Long, domain: String, appId: Long) = dao.countOtherKintoneConnections(domain, appId, workspaceId) > 0
+
+    suspend fun buildSyncRecords(workspaceId: Long): List<KintoneDeviceRecord> {
+        val workspace = dao.getWorkspace(workspaceId) ?: throw KintoneException(KintoneErrorCode.KINTONE_WORKSPACE_NOT_FOUND)
+        val groups = dao.getGroupsOnce(workspaceId).associateBy { it.id }
+        return dao.getDevicesOnce(workspaceId).map { device ->
+            val uuid = UUID.nameUUIDFromBytes("wifi-analyzer-device:$workspaceId:${device.id}".toByteArray()).toString()
+            val group = device.groupId?.let(groups::get)
+            KintoneDeviceRecord(uuid, UUID.nameUUIDFromBytes("wifi-analyzer-workspace:$workspaceId".toByteArray()).toString(), workspace.name,
+                group?.let { UUID.nameUUIDFromBytes("wifi-analyzer-group:${workspaceId}:${it.id}".toByteArray()).toString() }.orEmpty(), group?.name.orEmpty(), device.displayName,
+                device.manufacturer, device.model, device.serialNumber, device.ssid, device.primaryBssid, device.location, device.notes,
+                Instant.ofEpochMilli(device.updatedAt).toString(), !device.isEnabled)
+        }
+    }
+
+    suspend fun previewSync(workspaceId: Long): KintoneSyncPreview {
+        val records = buildSyncRecords(workspaceId)
+        val errors = records.flatMap { r -> buildList { if (r.deviceUuid.isBlank()) add("device UUID is blank"); if (r.primaryBssid.isBlank()) add("primary BSSID is blank") } }
+        val duplicateCount = records.groupingBy { it.deviceUuid }.eachCount().count { it.value > 1 }
+        return KintoneSyncPreview(records.size, records.size - errors.size - duplicateCount, errors + if (duplicateCount > 0) listOf("duplicate device UUID") else emptyList(), records.filter { it.ssid.isBlank() || it.groupName.isBlank() }.map { "optional value is not set" })
+    }
+
+    suspend fun sync(workspaceId: Long, records: List<KintoneDeviceRecord>, onProgress: (Int, Int) -> Unit = { _, _ -> }): KintoneSyncResult {
+        if (records.isEmpty()) throw KintoneException(KintoneErrorCode.KINTONE_NO_DEVICES)
+        val connection = dao.getKintoneConnection(workspaceId) ?: throw KintoneException(KintoneErrorCode.KINTONE_WORKSPACE_NOT_FOUND)
+        val token = cipher.decrypt(connection.workspaceUuid, EncryptedToken(connection.encryptedApiToken, connection.tokenIv))
+        val batches = records.chunked(KINTONE_RECORD_BATCH_SIZE); val results = mutableListOf<KintoneBatchResult>(); var success = 0; var failed = 0
+        try { batches.forEachIndexed { index, batch ->
+            try { api.upsert(connection.domain, connection.appId, token.copyOf(), batch); success += batch.size; results += KintoneBatchResult(index + 1, batch.size, 0) }
+            catch (e: KintoneException) { failed += batch.size; results += KintoneBatchResult(index + 1, 0, batch.size, e.code) }
+            onProgress(index + 1, batches.size)
+        } } finally { token.fill('\u0000') }
+        return KintoneSyncResult(records.size, success, failed, 0, results)
+    }
 
     private fun KintoneConnectionEntity.summary() = KintoneConnectionSummary(workspaceId, domain, appId, pluginVersion, templateVersion, fieldSchemaVersion, connectedAt, lastVerifiedAt, lastVerificationStatus)
 }

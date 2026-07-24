@@ -15,6 +15,8 @@ enum class KintoneErrorCode {
     KINTONE_FIELD_TYPE_MISMATCH, KINTONE_RATE_LIMITED, KINTONE_SERVER_ERROR,
     KINTONE_RESPONSE_INVALID, KINTONE_SECURE_STORAGE_FAILED,
     KINTONE_CONNECTION_CANCELLED, KINTONE_PRO_REQUIRED, KINTONE_WORKSPACE_NOT_FOUND,
+    KINTONE_NO_DEVICES, KINTONE_VALIDATION_FAILED, KINTONE_DUPLICATE_UUID,
+    KINTONE_SCHEMA_CHANGED, KINTONE_BATCH_FAILED, KINTONE_PARTIALLY_COMPLETED,
 }
 
 class KintoneException(val code: KintoneErrorCode, cause: Throwable? = null) : Exception(code.name, cause)
@@ -77,3 +79,15 @@ data class KintoneFieldProperty(
     val defaultNowValue: Boolean? = null,
     val options: Set<String> = emptySet(),
 )
+
+const val KINTONE_RECORD_BATCH_SIZE = 100
+data class KintoneDeviceRecord(
+    val deviceUuid: String, val workspaceUuid: String, val workspaceName: String,
+    val groupUuid: String, val groupName: String, val deviceName: String,
+    val manufacturer: String, val model: String, val serialNumber: String,
+    val ssid: String, val primaryBssid: String, val location: String, val notes: String,
+    val updatedAt: String, val deleted: Boolean = false,
+)
+data class KintoneSyncPreview(val total: Int, val valid: Int, val errors: List<String>, val warnings: List<String>)
+data class KintoneBatchResult(val batch: Int, val succeeded: Int, val failed: Int, val error: KintoneErrorCode? = null)
+data class KintoneSyncResult(val total: Int, val succeeded: Int, val failed: Int, val skipped: Int, val batches: List<KintoneBatchResult>)

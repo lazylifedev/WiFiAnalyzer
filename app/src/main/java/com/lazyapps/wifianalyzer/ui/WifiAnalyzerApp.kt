@@ -378,6 +378,8 @@ fun WifiAnalyzerApp(
                         onCancelPending = kintoneViewModel::cancel,
                         onVerify = kintoneViewModel::reverify,
                         onDisconnect = kintoneViewModel::disconnect,
+                        onSync = kintoneViewModel::sync,
+                        onCancelSync = kintoneViewModel::cancel,
                     )
                 }
                 composable(KINTONE_QR_ROUTE) {
