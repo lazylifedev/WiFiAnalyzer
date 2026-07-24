@@ -10,6 +10,8 @@ import com.lazyapps.wifianalyzer.billing.*
 import com.lazyapps.wifianalyzer.ui.pro.KintoneScreen
 import com.lazyapps.wifianalyzer.ui.pro.ProScreen
 import com.lazyapps.wifianalyzer.ui.theme.WifiAnalyzerTheme
+import com.lazyapps.wifianalyzer.kintone.KintoneConnectionSummary
+import com.lazyapps.wifianalyzer.ui.kintone.KintoneUiState
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -48,5 +50,28 @@ class ProScreenTest {
     @Test fun kintoneProShowsQrEntry() {
         rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}) } }
         rule.onNodeWithTag("kintone_scan_qr").assertIsDisplayed()
+    }
+
+    private fun connectedState() = KintoneUiState(
+        workspaceId = 1, workspaceName = "Main",
+        connection = KintoneConnectionSummary(1, "example.cybozu.com", 10, "1", 1, 1, 1, 1, "CONNECTED"),
+        canUseKintone = true,
+    )
+
+    @Test fun connectedProShowsManualSyncEvenWithoutDevices() {
+        rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = connectedState()) } }
+        rule.onNodeWithText("今すぐ同期").assertIsDisplayed()
+    }
+
+    @Test fun connectedProShowsAutoSyncSwitch() {
+        rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = connectedState()) } }
+        rule.onNodeWithText("登録機器を自動同期").assertIsDisplayed()
+        rule.onNodeWithTag("kintone_auto_sync").assertIsDisplayed()
+    }
+
+    @Test fun enablingAutoSyncRequiresConfirmation() {
+        rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = connectedState()) } }
+        rule.onNodeWithTag("kintone_auto_sync_switch").performClick()
+        rule.onNodeWithText("自動同期を有効にしますか").assertIsDisplayed()
     }
 }
