@@ -6,6 +6,7 @@ import com.lazyapps.wifianalyzer.kintone.KintoneException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
+import com.lazyapps.wifianalyzer.kintone.HttpsKintoneApi
 
 class KintoneErrorMessagesTest {
     @Test fun mapsHttpAndKintoneFailuresToSafeJapaneseMessages() {
@@ -30,5 +31,21 @@ class KintoneErrorMessagesTest {
     @Test fun exceptionNeverStoresRemoteIdOrResponseBody() {
         val failure = KintoneException(KintoneErrorCode.KINTONE_BATCH_FAILED, httpStatus = 400, kintoneErrorCode = "CB_VA01")
         assertFalse(failure.toString().contains("remote-id")); assertFalse(failure.userMessage.contains("remote-id"))
+    }
+
+    @Test fun parsesAllValidationDetailsWithoutResponseId() {
+        val (code, errors) = HttpsKintoneApi().parseErrorResponse("""{
+            "code":"CB_VA01","id":"secret-response-id","message":"入力内容が正しくありません。",
+            "errors":{
+              "records[0].record.アプリ更新日時.value":{"messages":["日時の形式が正しくありません。"]},
+              "records[1].updateKey.value":{"messages":["必須です。","重複しています。"]}
+            }
+        }""")
+        assertEquals("CB_VA01", code)
+        assertEquals(2, errors.size)
+        assertEquals("アプリ更新日時", errors[0].fieldCode)
+        assertEquals(0, errors[0].recordIndex)
+        assertEquals(listOf("必須です。", "重複しています。"), errors[1].messages)
+        assertFalse(errors.toString().contains("secret-response-id"))
     }
 }

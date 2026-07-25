@@ -26,9 +26,18 @@ class KintoneException(
     cause: Throwable? = null,
     val httpStatus: Int? = null,
     val kintoneErrorCode: String? = null,
+    val validationErrors: List<KintoneValidationError> = emptyList(),
     val userMessage: String = KintoneErrorMessages.forFailure(httpStatus, kintoneErrorCode, code),
 ) : Exception(code.name, cause) {
     val category = KintoneErrorMessages.category(httpStatus, kintoneErrorCode, code)
+}
+
+data class KintoneValidationError(
+    val path: String,
+    val messages: List<String>,
+) {
+    val recordIndex: Int? = Regex("records\\[(\\d+)]").find(path)?.groupValues?.get(1)?.toIntOrNull()
+    val fieldCode: String? = path.substringAfter(".record.", "").substringBefore(".value").takeIf { it.isNotBlank() }
 }
 
 object KintoneErrorMessages {
@@ -131,5 +140,7 @@ data class KintoneBatchResult(
     val batch: Int, val succeeded: Int, val failed: Int, val error: KintoneErrorCode? = null,
     val errorCategory: KintoneErrorCategory? = null, val httpStatus: Int? = null,
     val kintoneErrorCode: String? = null, val userMessage: String? = null,
+    val validationErrors: List<KintoneValidationError> = emptyList(),
+    val recordIndex: Int? = null,
 )
 data class KintoneSyncResult(val total: Int, val succeeded: Int, val failed: Int, val skipped: Int, val batches: List<KintoneBatchResult>)

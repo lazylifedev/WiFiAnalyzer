@@ -10,6 +10,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -48,6 +49,9 @@ class HttpsKintoneApi : KintoneApi {
         try { putRecords(domain, UPSERT_PATH, token, body.toString()) }
         catch (failure: KintoneException) {
             if (BuildConfig.DEBUG) Log.w("KintoneSync", "Kintone sync failed: category=${failure.category} httpStatus=${failure.httpStatus ?: "none"} code=${failure.kintoneErrorCode ?: "none"} batchSize=${records.size}")
+            if (BuildConfig.DEBUG) failure.validationErrors.forEach { detail ->
+                detail.messages.forEach { message -> Log.w("KintoneSync", "Kintone validation error: path=${detail.path} message=$message") }
+            }
             throw failure
         }
         finally { token.fill('\u0000') }
@@ -105,14 +109,24 @@ class HttpsKintoneApi : KintoneApi {
         }
         try { connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }; val status = connection.responseCode
             if (status !in 200..299) {
-                val remoteCode = runCatching {
+                val remote = runCatching {
                     connection.errorStream?.bufferedReader()?.use { it.readText().take(64 * 1024) }
-                        ?.let { json.parseToJsonElement(it).jsonObject["code"]?.jsonPrimitive?.contentOrNull }
+                        ?.let(::parseErrorResponse)
                 }.getOrNull()
                 val code = when (status) { 401 -> KintoneErrorCode.KINTONE_AUTH_FAILED; 403 -> KintoneErrorCode.KINTONE_PERMISSION_DENIED; 404 -> KintoneErrorCode.KINTONE_APP_NOT_FOUND; 429 -> KintoneErrorCode.KINTONE_RATE_LIMITED; in 500..599 -> KintoneErrorCode.KINTONE_SERVER_ERROR; else -> KintoneErrorCode.KINTONE_BATCH_FAILED }
-                throw KintoneException(code, httpStatus = status, kintoneErrorCode = remoteCode)
+                throw KintoneException(code, httpStatus = status, kintoneErrorCode = remote?.first, validationErrors = remote?.second.orEmpty())
             }
         } catch (e: KintoneException) { throw e } catch (e: SocketTimeoutException) { throw KintoneException(KintoneErrorCode.KINTONE_TIMEOUT, e) } catch (e: SSLException) { throw KintoneException(KintoneErrorCode.KINTONE_TLS_ERROR, e) } catch (e: IOException) { throw KintoneException(KintoneErrorCode.KINTONE_NETWORK_UNAVAILABLE, e) } finally { connection.disconnect() }
+    }
+
+    internal fun parseErrorResponse(body: String): Pair<String?, List<KintoneValidationError>> {
+        val root = json.parseToJsonElement(body).jsonObject
+        val errors = (root["errors"] as? JsonObject).orEmpty().mapNotNull { (path, detail) ->
+            val messages = ((detail as? JsonObject)?.get("messages") as? JsonArray)
+                ?.mapNotNull { it.jsonPrimitive.contentOrNull }.orEmpty()
+            KintoneValidationError(path, messages).takeIf { messages.isNotEmpty() }
+        }
+        return root["code"]?.jsonPrimitive?.contentOrNull to errors
     }
 
     internal fun parseFields(body: String): Map<String, KintoneFieldProperty> = try {

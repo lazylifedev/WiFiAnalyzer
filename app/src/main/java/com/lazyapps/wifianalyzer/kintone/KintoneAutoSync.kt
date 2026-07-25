@@ -46,6 +46,9 @@ data class KintoneAutoSyncState(
     val lastUserMessage: String? = null,
     val failedAt: Long = 0,
     val requiresAttention: Boolean = false,
+    val lastErrorPath: String? = null,
+    val lastErrorDetail: String? = null,
+    val lastFailedRecordIndex: Int? = null,
 )
 
 object WorkspaceUuid {
@@ -70,6 +73,8 @@ class KintoneAutoSyncStore(context: Context) {
             lastHttpStatus = prefs.getInt(p + "http_status", -1).takeIf { it >= 0 },
             lastKintoneErrorCode = prefs.getString(p + "kintone_error", null), lastUserMessage = prefs.getString(p + "user_message", null),
             failedAt = prefs.getLong(p + "failed_at", 0), requiresAttention = prefs.getBoolean(p + "requires_attention", false),
+            lastErrorPath = prefs.getString(p + "error_path", null), lastErrorDetail = prefs.getString(p + "error_detail", null),
+            lastFailedRecordIndex = prefs.getInt(p + "failed_record", -1).takeIf { it >= 0 },
         )
     }
     fun write(uuid: String, state: KintoneAutoSyncState) {
@@ -83,7 +88,9 @@ class KintoneAutoSyncStore(context: Context) {
             .putBoolean(p + "partial", state.partiallyCompleted).putString(p + "error", state.lastErrorCategory)
             .putInt(p + "http_status", state.lastHttpStatus ?: -1).putString(p + "kintone_error", state.lastKintoneErrorCode)
             .putString(p + "user_message", state.lastUserMessage).putLong(p + "failed_at", state.failedAt)
-            .putBoolean(p + "requires_attention", state.requiresAttention).apply()
+            .putBoolean(p + "requires_attention", state.requiresAttention)
+            .putString(p + "error_path", state.lastErrorPath).putString(p + "error_detail", state.lastErrorDetail)
+            .putInt(p + "failed_record", state.lastFailedRecordIndex ?: -1).apply()
     }
     fun remove(uuid: String) { val p = prefix(uuid); prefs.edit().also { e -> prefs.all.keys.filter { it.startsWith(p) }.forEach(e::remove) }.apply() }
 }
@@ -137,7 +144,8 @@ class KintoneAutoSyncWorker(context: Context, params: WorkerParameters) : Corout
                 val partial = result.failed > 0 && result.succeeded > 0
                 val failure = result.batches.firstOrNull { it.error != null }
                 val retry = KintoneRetryPolicy.shouldRetry(failure?.error)
-                store.write(uuid, store.read(uuid).copy(lastFinishedAt = System.currentTimeMillis(), status = when { partial -> KintoneSyncStatus.PARTIAL; result.failed > 0 -> KintoneSyncStatus.FAILED; else -> KintoneSyncStatus.SUCCESS }, targetCount = result.total, successCount = result.succeeded, failureCount = result.failed, skippedCount = result.skipped, unsentCount = result.failed + result.skipped, partiallyCompleted = partial, lastErrorCategory = failure?.errorCategory?.name, lastHttpStatus = failure?.httpStatus, lastKintoneErrorCode = failure?.kintoneErrorCode, lastUserMessage = failure?.userMessage, failedAt = if (failure != null) System.currentTimeMillis() else 0, requiresAttention = failure != null && !retry))
+                val detail = failure?.validationErrors?.firstOrNull()
+                store.write(uuid, store.read(uuid).copy(lastFinishedAt = System.currentTimeMillis(), status = when { partial -> KintoneSyncStatus.PARTIAL; result.failed > 0 -> KintoneSyncStatus.FAILED; else -> KintoneSyncStatus.SUCCESS }, targetCount = result.total, successCount = result.succeeded, failureCount = result.failed, skippedCount = result.skipped, unsentCount = result.failed + result.skipped, partiallyCompleted = partial, lastErrorCategory = failure?.errorCategory?.name, lastHttpStatus = failure?.httpStatus, lastKintoneErrorCode = failure?.kintoneErrorCode, lastUserMessage = failure?.userMessage, failedAt = if (failure != null) System.currentTimeMillis() else 0, requiresAttention = failure != null && !retry, lastErrorPath = detail?.path, lastErrorDetail = detail?.messages?.joinToString(" / "), lastFailedRecordIndex = failure?.recordIndex))
                 if (result.batches.any { KintoneRetryPolicy.shouldRetry(it.error) }) Result.retry() else if (result.failed > 0) Result.failure() else Result.success()
             } catch (e: KintoneException) {
                 store.write(uuid, store.read(uuid).copy(lastFinishedAt = System.currentTimeMillis(), status = KintoneSyncStatus.FAILED, lastErrorCategory = e.category.name, lastHttpStatus = e.httpStatus, lastKintoneErrorCode = e.kintoneErrorCode, lastUserMessage = e.userMessage, failureCount = 1, failedAt = System.currentTimeMillis(), requiresAttention = !KintoneRetryPolicy.shouldRetry(e.code)))

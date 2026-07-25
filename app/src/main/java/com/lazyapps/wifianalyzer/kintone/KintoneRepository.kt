@@ -73,7 +73,22 @@ class KintoneRepository(
         val batches = records.chunked(KINTONE_RECORD_BATCH_SIZE); val results = mutableListOf<KintoneBatchResult>(); var success = 0; var failed = 0
         try { batches.forEachIndexed { index, batch ->
             try { api.upsert(connection.domain, connection.appId, token.copyOf(), batch); success += batch.size; results += KintoneBatchResult(index + 1, batch.size, 0) }
-            catch (e: KintoneException) { failed += batch.size; results += KintoneBatchResult(index + 1, 0, batch.size, e.code, e.category, e.httpStatus, e.kintoneErrorCode, e.userMessage) }
+            catch (e: KintoneException) {
+                if (batch.size > 1 && e.category == KintoneErrorCategory.VALIDATION) {
+                    var singleSuccess = 0
+                    batch.forEachIndexed { recordIndex, record ->
+                        try {
+                            api.upsert(connection.domain, connection.appId, token.copyOf(), listOf(record)); success++; singleSuccess++
+                        } catch (single: KintoneException) {
+                            failed++
+                            results += KintoneBatchResult(index + 1, 0, 1, single.code, single.category, single.httpStatus, single.kintoneErrorCode, single.userMessage, single.validationErrors, recordIndex)
+                        }
+                    }
+                    if (singleSuccess > 0) results += KintoneBatchResult(index + 1, singleSuccess, 0)
+                } else {
+                    failed += batch.size; results += KintoneBatchResult(index + 1, 0, batch.size, e.code, e.category, e.httpStatus, e.kintoneErrorCode, e.userMessage, e.validationErrors)
+                }
+            }
             onProgress(index + 1, batches.size)
         } } finally { token.fill('\u0000') }
         return KintoneSyncResult(records.size, success, failed, 0, results)

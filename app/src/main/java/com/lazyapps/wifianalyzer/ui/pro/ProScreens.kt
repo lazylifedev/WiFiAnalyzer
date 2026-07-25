@@ -132,6 +132,12 @@ fun KintoneScreen(
                     Text("同期結果", style = MaterialTheme.typography.titleLarge)
                     Text("対象 ${result.total}件 / 成功 ${result.succeeded}件 / 失敗 ${result.failed}件 / 未送信 ${result.skipped}件")
                     if (result.failed > 0) Text("失敗した機器だけ再送できます。自動再試行は行いません。", color = MaterialTheme.colorScheme.error)
+                    result.batches.firstOrNull { it.validationErrors.isNotEmpty() }?.let { failure ->
+                        val detail = failure.validationErrors.first()
+                        Text("エラーフィールド：${detail.path}", modifier = Modifier.testTag("kintone_sync_error_field"))
+                        Text("内容：${detail.messages.joinToString(" / ")}", modifier = Modifier.testTag("kintone_sync_error_detail"))
+                        failure.recordIndex?.let { Text("対象：送信データの${it + 1}件目") }
+                    }
                 } }
             }
             OutlinedButton(onClick = onPluginInfo, modifier = Modifier.fillMaxWidth()) { Text("プラグインについて") }
@@ -190,6 +196,9 @@ private fun KintoneAutoSyncSection(state: KintoneUiState, onSync: () -> Unit, on
                 state.autoSync.lastUserMessage?.let { Text("原因：\n$it", modifier = Modifier.testTag("kintone_safe_error_message")) }
                 state.autoSync.lastKintoneErrorCode?.let { Text("エラーコード：\n$it", modifier = Modifier.testTag("kintone_error_code")) }
                 state.autoSync.lastHttpStatus?.let { Text("HTTPステータス：$it") }
+                state.autoSync.lastErrorPath?.let { Text("エラーフィールド：\n$it", modifier = Modifier.testTag("kintone_error_field")) }
+                state.autoSync.lastErrorDetail?.let { Text("内容：\n$it", modifier = Modifier.testTag("kintone_error_detail")) }
+                state.autoSync.lastFailedRecordIndex?.let { Text("対象：送信データの${it + 1}件目") }
             }
             if (state.autoSync.requiresAttention) Text("確認が必要", color = MaterialTheme.colorScheme.error)
             Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
