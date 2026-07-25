@@ -14,6 +14,9 @@ import com.lazyapps.wifianalyzer.kintone.KintoneApi
 import com.lazyapps.wifianalyzer.kintone.KintoneDeviceRecord
 import com.lazyapps.wifianalyzer.kintone.KintoneRepository
 import com.lazyapps.wifianalyzer.kintone.KintoneVerification
+import com.lazyapps.wifianalyzer.kintone.KintoneAutoSyncState
+import com.lazyapps.wifianalyzer.kintone.KintoneAutoSyncStore
+import com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus
 import com.lazyapps.wifianalyzer.kintone.TokenCipher
 import com.lazyapps.wifianalyzer.kintone.WorkspaceUuid
 import kotlinx.coroutines.runBlocking
@@ -65,6 +68,47 @@ class KintoneRepositoryWorkspaceTest {
         assertEquals("接続先機器", records.single().deviceName)
     }
 
+    @Test fun oneHundredOneRecordsAreSplitAndResendingUsesTheSameUpdateKeys() = runBlocking {
+        val records = (1..101).map { index ->
+            KintoneDeviceRecord(
+                deviceUuid = "device-$index", workspaceUuid = WorkspaceUuid.fromId(1), workspaceName = "default",
+                groupUuid = "", groupName = "", deviceName = "device-$index", manufacturer = "", model = "",
+                serialNumber = "", ssid = "", primaryBssid = "02:00:00:00:00:${index % 100}", location = "",
+                notes = "", updatedAt = "2026-07-25T00:00:00Z",
+            )
+        }
+        val first = repository.sync(1, records)
+        assertEquals(101, first.succeeded)
+        assertEquals(listOf(100, 1), api.batchSizes)
+        val firstKeys = api.updateKeys.toList()
+
+        api.batchSizes.clear()
+        api.updateKeys.clear()
+        val second = repository.sync(1, records)
+        assertEquals(101, second.succeeded)
+        assertEquals(listOf(100, 1), api.batchSizes)
+        assertEquals(firstKeys, api.updateKeys)
+    }
+
+    @Test fun olderWorkerCannotOverwriteTheLatestRequestedState() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val store = KintoneAutoSyncStore(context)
+        val uuid = "test-stale-worker-${System.nanoTime()}"
+        try {
+            store.write(uuid, KintoneAutoSyncState(lastRequestedAt = 2, status = KintoneSyncStatus.WAITING))
+            val published = store.writeResultIfCurrent(
+                uuid,
+                requestVersion = 1,
+                state = KintoneAutoSyncState(lastRequestedAt = 1, status = KintoneSyncStatus.FAILED),
+            )
+            assertEquals(false, published)
+            assertEquals(2, store.read(uuid).lastRequestedAt)
+            assertEquals(KintoneSyncStatus.WAITING, store.read(uuid).status)
+        } finally {
+            store.remove(uuid)
+        }
+    }
+
     private suspend fun insertDevice(workspaceId: Long, name: String) {
         db.registryDao().insertDevice(RegisteredWifiDeviceEntity(
             displayName = name, primaryBssid = "02:00:00:00:00:0$workspaceId",
@@ -74,8 +118,14 @@ class KintoneRepositoryWorkspaceTest {
 
     private class CountingApi : KintoneApi {
         var upsertCalls = 0
+        val batchSizes = mutableListOf<Int>()
+        val updateKeys = mutableListOf<String>()
         override suspend fun verify(domain: String, appId: Long, token: CharArray) = KintoneVerification(emptyMap())
-        override suspend fun upsert(domain: String, appId: Long, token: CharArray, records: List<KintoneDeviceRecord>) { upsertCalls++ }
+        override suspend fun upsert(domain: String, appId: Long, token: CharArray, records: List<KintoneDeviceRecord>) {
+            upsertCalls++
+            batchSizes += records.size
+            updateKeys += records.map { it.deviceUuid }
+        }
     }
 
     private object PlainCipher : TokenCipher {

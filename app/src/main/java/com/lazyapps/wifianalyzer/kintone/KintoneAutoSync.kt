@@ -16,11 +16,22 @@ import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 enum class KintoneSyncTrigger { MANUAL, AUTO_CHANGE, AUTO_PERIODIC, AUTO_ENABLED }
 enum class KintoneSyncStatus { NEVER, WAITING, RUNNING, SUCCESS, NO_TARGETS, PARTIAL, FAILED }
-object KintoneSyncLock { val mutex = Mutex() }
+object KintoneSyncLock {
+    private val mutexes = ConcurrentHashMap<String, Mutex>()
+
+    private fun mutex(workspaceUuid: String) = mutexes.computeIfAbsent(workspaceUuid) { Mutex() }
+
+    fun tryAcquire(workspaceUuid: String): Mutex? = mutex(workspaceUuid).takeIf { it.tryLock() }
+
+    fun release(workspaceUuid: String, mutex: Mutex) = mutex.unlock()
+
+    suspend fun <T> withLock(workspaceUuid: String, action: suspend () -> T): T = mutex(workspaceUuid).withLock { action() }
+}
 object KintoneRetryPolicy {
     private val retryable = setOf(KintoneErrorCode.KINTONE_NETWORK_UNAVAILABLE, KintoneErrorCode.KINTONE_TIMEOUT, KintoneErrorCode.KINTONE_RATE_LIMITED, KintoneErrorCode.KINTONE_SERVER_ERROR)
     fun shouldRetry(code: KintoneErrorCode?) = code in retryable
@@ -55,12 +66,17 @@ object WorkspaceUuid {
     fun fromId(workspaceId: Long): String = UUID.nameUUIDFromBytes("wifi-analyzer-workspace:$workspaceId".toByteArray()).toString()
 }
 
+object KintoneWorkNames {
+    fun oneTime(workspaceUuid: String) = "kintone-auto-sync-$workspaceUuid"
+    fun periodic(workspaceUuid: String) = "kintone-auto-sync-periodic-$workspaceUuid"
+}
+
 class KintoneAutoSyncStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("kintone_auto_sync", Context.MODE_PRIVATE)
     private fun prefix(uuid: String) = "$uuid."
-    fun read(uuid: String): KintoneAutoSyncState {
+    fun read(uuid: String): KintoneAutoSyncState = synchronized(lock) {
         val p = prefix(uuid)
-        return KintoneAutoSyncState(
+        KintoneAutoSyncState(
             enabled = prefs.getBoolean(p + "enabled", false),
             lastRequestedAt = prefs.getLong(p + "requested", 0), lastStartedAt = prefs.getLong(p + "started", 0),
             lastFinishedAt = prefs.getLong(p + "finished", 0),
@@ -77,7 +93,7 @@ class KintoneAutoSyncStore(context: Context) {
             lastFailedRecordIndex = prefs.getInt(p + "failed_record", -1).takeIf { it >= 0 },
         )
     }
-    fun write(uuid: String, state: KintoneAutoSyncState) {
+    fun write(uuid: String, state: KintoneAutoSyncState) = synchronized(lock) {
         val p = prefix(uuid)
         prefs.edit().putBoolean(p + "enabled", state.enabled).putLong(p + "requested", state.lastRequestedAt)
             .putLong(p + "started", state.lastStartedAt).putLong(p + "finished", state.lastFinishedAt)
@@ -92,14 +108,19 @@ class KintoneAutoSyncStore(context: Context) {
             .putString(p + "error_path", state.lastErrorPath).putString(p + "error_detail", state.lastErrorDetail)
             .putInt(p + "failed_record", state.lastFailedRecordIndex ?: -1).apply()
     }
-    fun remove(uuid: String) { val p = prefix(uuid); prefs.edit().also { e -> prefs.all.keys.filter { it.startsWith(p) }.forEach(e::remove) }.apply() }
+    fun writeResultIfCurrent(uuid: String, requestVersion: Long, state: KintoneAutoSyncState): Boolean = synchronized(lock) {
+        if (read(uuid).lastRequestedAt != requestVersion) return@synchronized false
+        write(uuid, state)
+        true
+    }
+    fun remove(uuid: String) = synchronized(lock) { val p = prefix(uuid); prefs.edit().also { e -> prefs.all.keys.filter { it.startsWith(p) }.forEach(e::remove) }.apply() }
+
+    private companion object { val lock = Any() }
 }
 
 class KintoneAutoSyncScheduler(private val context: Context) {
     private val workManager = WorkManager.getInstance(context.applicationContext)
     private val store = KintoneAutoSyncStore(context)
-    private fun oneTimeName(uuid: String) = "kintone-auto-sync-$uuid"
-    private fun periodicName(uuid: String) = "kintone-auto-sync-periodic-$uuid"
     private fun input(workspaceId: Long, trigger: KintoneSyncTrigger) = Data.Builder().putLong(KEY_WORKSPACE_ID, workspaceId).putString(KEY_TRIGGER, trigger.name).build()
     private val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
@@ -109,20 +130,22 @@ class KintoneAutoSyncScheduler(private val context: Context) {
         enqueue(workspaceId, KintoneSyncTrigger.AUTO_ENABLED, 0)
         val periodic = PeriodicWorkRequestBuilder<KintoneAutoSyncWorker>(15, TimeUnit.MINUTES).setConstraints(constraints)
             .setInputData(input(workspaceId, KintoneSyncTrigger.AUTO_PERIODIC)).setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS).build()
-        workManager.enqueueUniquePeriodicWork(periodicName(uuid), ExistingPeriodicWorkPolicy.UPDATE, periodic)
+        workManager.enqueueUniquePeriodicWork(KintoneWorkNames.periodic(uuid), ExistingPeriodicWorkPolicy.UPDATE, periodic)
     }
     fun requestChange(workspaceId: Long) { if (store.read(WorkspaceUuid.fromId(workspaceId)).enabled) enqueue(workspaceId, KintoneSyncTrigger.AUTO_CHANGE, 8) }
     fun disable(workspaceId: Long) {
         val uuid = WorkspaceUuid.fromId(workspaceId); store.write(uuid, store.read(uuid).copy(enabled = false, cancelled = true))
-        workManager.cancelUniqueWork(oneTimeName(uuid)); workManager.cancelUniqueWork(periodicName(uuid))
+        workManager.cancelUniqueWork(KintoneWorkNames.oneTime(uuid)); workManager.cancelUniqueWork(KintoneWorkNames.periodic(uuid))
     }
     fun remove(workspaceId: Long) { disable(workspaceId); store.remove(WorkspaceUuid.fromId(workspaceId)) }
     private fun enqueue(workspaceId: Long, trigger: KintoneSyncTrigger, delaySeconds: Long) {
         val uuid = WorkspaceUuid.fromId(workspaceId)
-        store.write(uuid, store.read(uuid).copy(lastRequestedAt = System.currentTimeMillis(), status = KintoneSyncStatus.WAITING, trigger = trigger, cancelled = false))
+        val state = store.read(uuid)
+        val requestVersion = maxOf(System.currentTimeMillis(), state.lastRequestedAt + 1)
+        store.write(uuid, state.copy(lastRequestedAt = requestVersion, status = KintoneSyncStatus.WAITING, trigger = trigger, cancelled = false))
         val request = OneTimeWorkRequestBuilder<KintoneAutoSyncWorker>().setConstraints(constraints).setInputData(input(workspaceId, trigger))
             .setInitialDelay(delaySeconds, TimeUnit.SECONDS).setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS).build()
-        workManager.enqueueUniqueWork(oneTimeName(uuid), ExistingWorkPolicy.REPLACE, request)
+        workManager.enqueueUniqueWork(KintoneWorkNames.oneTime(uuid), ExistingWorkPolicy.REPLACE, request)
     }
     companion object { const val KEY_WORKSPACE_ID = "workspace_id"; const val KEY_TRIGGER = "sync_trigger" }
 }
@@ -135,13 +158,16 @@ class KintoneAutoSyncWorker(context: Context, params: WorkerParameters) : Corout
         if (!store.read(uuid).enabled) return Result.success()
         val trigger = inputData.getString(KintoneAutoSyncScheduler.KEY_TRIGGER)?.let { runCatching { KintoneSyncTrigger.valueOf(it) }.getOrNull() } ?: KintoneSyncTrigger.AUTO_CHANGE
         if (store.read(uuid).requiresAttention) return Result.success()
-        return KintoneSyncLock.mutex.withLock {
+        val mutex = KintoneSyncLock.tryAcquire(uuid) ?: return Result.retry()
+        return try {
             val repository = KintoneRepository(WifiAnalyzerDatabase.get(applicationContext))
-            store.write(uuid, store.read(uuid).copy(lastStartedAt = System.currentTimeMillis(), status = KintoneSyncStatus.RUNNING, trigger = trigger))
+            val startedAt = System.currentTimeMillis()
+            val requestVersion = store.read(uuid).lastRequestedAt
+            store.write(uuid, store.read(uuid).copy(lastStartedAt = startedAt, status = KintoneSyncStatus.RUNNING, trigger = trigger))
             try {
                 val records = repository.buildSyncRecordsForConnection(workspaceId)
                 if (records.isEmpty()) {
-                    store.write(uuid, store.read(uuid).copy(
+                    val published = store.writeResultIfCurrent(uuid, requestVersion, store.read(uuid).copy(
                         lastFinishedAt = System.currentTimeMillis(), status = KintoneSyncStatus.NO_TARGETS,
                         targetCount = 0, successCount = 0, failureCount = 0, skippedCount = 0, unsentCount = 0,
                         partiallyCompleted = false, lastErrorCategory = null, lastHttpStatus = null,
@@ -149,19 +175,23 @@ class KintoneAutoSyncWorker(context: Context, params: WorkerParameters) : Corout
                         requiresAttention = false, lastErrorPath = null, lastErrorDetail = null,
                         lastFailedRecordIndex = null,
                     ))
-                    return@withLock Result.success()
+                    return if (published) Result.success() else Result.retry()
                 }
                 val result = repository.sync(workspaceId, records)
                 val partial = result.failed > 0 && result.succeeded > 0
                 val failure = result.batches.firstOrNull { it.error != null }
                 val retry = KintoneRetryPolicy.shouldRetry(failure?.error)
                 val detail = failure?.validationErrors?.firstOrNull()
-                store.write(uuid, store.read(uuid).copy(lastFinishedAt = System.currentTimeMillis(), status = when { partial -> KintoneSyncStatus.PARTIAL; result.failed > 0 -> KintoneSyncStatus.FAILED; else -> KintoneSyncStatus.SUCCESS }, targetCount = result.total, successCount = result.succeeded, failureCount = result.failed, skippedCount = result.skipped, unsentCount = result.failed + result.skipped, partiallyCompleted = partial, lastErrorCategory = failure?.errorCategory?.name, lastHttpStatus = failure?.httpStatus, lastKintoneErrorCode = failure?.kintoneErrorCode, lastUserMessage = failure?.userMessage, failedAt = if (failure != null) System.currentTimeMillis() else 0, requiresAttention = failure != null && !retry, lastErrorPath = detail?.path, lastErrorDetail = detail?.messages?.joinToString(" / "), lastFailedRecordIndex = failure?.recordIndex))
+                val published = store.writeResultIfCurrent(uuid, requestVersion, store.read(uuid).copy(lastFinishedAt = System.currentTimeMillis(), status = when { partial -> KintoneSyncStatus.PARTIAL; result.failed > 0 -> KintoneSyncStatus.FAILED; else -> KintoneSyncStatus.SUCCESS }, targetCount = result.total, successCount = result.succeeded, failureCount = result.failed, skippedCount = result.skipped, unsentCount = result.failed + result.skipped, partiallyCompleted = partial, lastErrorCategory = failure?.errorCategory?.name, lastHttpStatus = failure?.httpStatus, lastKintoneErrorCode = failure?.kintoneErrorCode, lastUserMessage = failure?.userMessage, failedAt = if (failure != null) System.currentTimeMillis() else 0, requiresAttention = failure != null && !retry, lastErrorPath = detail?.path, lastErrorDetail = detail?.messages?.joinToString(" / "), lastFailedRecordIndex = failure?.recordIndex))
+                if (!published) return Result.retry()
                 if (result.batches.any { KintoneRetryPolicy.shouldRetry(it.error) }) Result.retry() else if (result.failed > 0) Result.failure() else Result.success()
             } catch (e: KintoneException) {
-                store.write(uuid, store.read(uuid).copy(lastFinishedAt = System.currentTimeMillis(), status = KintoneSyncStatus.FAILED, lastErrorCategory = e.category.name, lastHttpStatus = e.httpStatus, lastKintoneErrorCode = e.kintoneErrorCode, lastUserMessage = e.userMessage, failureCount = 1, failedAt = System.currentTimeMillis(), requiresAttention = !KintoneRetryPolicy.shouldRetry(e.code)))
+                val published = store.writeResultIfCurrent(uuid, requestVersion, store.read(uuid).copy(lastFinishedAt = System.currentTimeMillis(), status = KintoneSyncStatus.FAILED, lastErrorCategory = e.category.name, lastHttpStatus = e.httpStatus, lastKintoneErrorCode = e.kintoneErrorCode, lastUserMessage = e.userMessage, failureCount = 1, failedAt = System.currentTimeMillis(), requiresAttention = !KintoneRetryPolicy.shouldRetry(e.code)))
+                if (!published) return Result.retry()
                 if (KintoneRetryPolicy.shouldRetry(e.code)) Result.retry() else Result.failure()
             }
+        } finally {
+            KintoneSyncLock.release(uuid, mutex)
         }
     }
 }

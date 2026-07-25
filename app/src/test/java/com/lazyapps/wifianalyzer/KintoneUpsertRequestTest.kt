@@ -30,8 +30,8 @@ class KintoneUpsertRequestTest {
         assertTrue(root["upsert"]!!.jsonPrimitive.boolean)
         val item = root["records"]!!.jsonArray.single().jsonObject
         assertEquals("機器UUID", item["updateKey"]!!.jsonObject["field"]!!.jsonPrimitive.content)
-        assertTrue(item["updateKey"]!!.jsonObject["value"]!!.jsonPrimitive.content.isNotBlank())
-        assertEquals(item["updateKey"]!!.jsonObject["value"], item["record"]!!.jsonObject["機器UUID"]!!.jsonObject["value"])
+        assertEquals(record().deviceUuid, item["updateKey"]!!.jsonObject["value"]!!.jsonPrimitive.content)
+        assertFalse(item["record"]!!.jsonObject.containsKey("機器UUID"))
     }
 
     @Test fun supportsOneAndOneHundredButRejectsOneHundredOne() {
@@ -42,10 +42,11 @@ class KintoneUpsertRequestTest {
 
     @Test fun sendsSupportedValuesOnly() {
         val values = api.buildUpsertBody(1, listOf(record(deleted = false)))["records"]!!.jsonArray.single().jsonObject["record"]!!.jsonObject
+        assertEquals(14, values.size)
         assertEquals("テスト\n確認", values["メモ"]!!.jsonObject["value"]!!.jsonPrimitive.content)
         assertEquals("2026-07-25T00:00:00Z", values["アプリ更新日時"]!!.jsonObject["value"]!!.jsonPrimitive.content)
         assertEquals(JsonArray(emptyList()), values["削除状態"]!!.jsonObject["value"])
-        listOf("写真", "APIトークン", "QR内容", "複数BSSID").forEach { assertFalse(values.containsKey(it)) }
+        listOf("機器UUID", "写真", "APIトークン", "QR内容", "複数BSSID").forEach { assertFalse(values.containsKey(it)) }
         assertTrue(values.values.all { it is JsonObject })
     }
 

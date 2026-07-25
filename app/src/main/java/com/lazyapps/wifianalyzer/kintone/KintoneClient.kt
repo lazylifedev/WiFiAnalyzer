@@ -63,7 +63,7 @@ class HttpsKintoneApi : KintoneApi {
             put("records", buildJsonArray { records.forEach { item -> add(buildJsonObject {
                 put("updateKey", buildJsonObject { put("field", "機器UUID"); put("value", item.deviceUuid) })
                 put("record", buildJsonObject {
-                    put("機器UUID", value(item.deviceUuid)); put("ワークスペースUUID", value(item.workspaceUuid)); put("ワークスペース名", value(item.workspaceName))
+                    put("ワークスペースUUID", value(item.workspaceUuid)); put("ワークスペース名", value(item.workspaceName))
                     put("グループUUID", value(item.groupUuid)); put("グループ名", value(item.groupName)); put("機器名", value(item.deviceName))
                     put("メーカー", value(item.manufacturer)); put("機種", value(item.model)); put("シリアル番号", value(item.serialNumber)); put("SSID", value(item.ssid))
                     put("主BSSID", value(item.primaryBssid)); put("設置場所", value(item.location)); put("メモ", value(item.notes))

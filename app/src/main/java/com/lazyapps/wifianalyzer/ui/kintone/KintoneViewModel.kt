@@ -163,12 +163,12 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
             if (preview.valid == 0) throw KintoneException(KintoneErrorCode.KINTONE_VALIDATION_FAILED)
             return@launchOperation
         }
-        val result = KintoneSyncLock.mutex.withLock {
+        val uuid = WorkspaceUuid.fromId(mutable.value.workspaceId)
+        val result = KintoneSyncLock.withLock(uuid) {
             repository.sync(mutable.value.workspaceId, records.filter { it.deviceUuid.isNotBlank() }) { current, total ->
                 mutable.value = mutable.value.copy(operation = OperationState.Running(R.string.kintone_verifying, progress = OperationProgress.Count(current, total), cancellable = true))
             }
         }
-        val uuid = WorkspaceUuid.fromId(mutable.value.workspaceId)
         val failure = result.batches.firstOrNull { it.error != null }
         autoSyncStore.write(uuid, autoSyncStore.read(uuid).copy(
             lastStartedAt = System.currentTimeMillis(), lastFinishedAt = System.currentTimeMillis(),
