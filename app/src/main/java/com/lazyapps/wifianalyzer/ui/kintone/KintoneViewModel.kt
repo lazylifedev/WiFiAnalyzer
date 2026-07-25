@@ -54,7 +54,10 @@ data class KintoneUiState(
     val autoSync: KintoneAutoSyncState = KintoneAutoSyncState(),
     val canUseKintone: Boolean = false,
     val message: String? = null,
+    val failureContext: KintoneFailureContext? = null,
 )
+
+enum class KintoneFailureContext { QR, CONNECTION, SYNC }
 
 class KintoneViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = KintoneRepository(WifiAnalyzerDatabase.get(application))
@@ -97,7 +100,7 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
     fun acceptQr(raw: String, workspaceId: Long, workspaceName: String) {
         if (operationJob?.isActive == true) return
         val payload = try { KintoneQrParser.parse(raw) } catch (e: KintoneException) {
-            fail(e.code); return
+            fail(e.code, KintoneFailureContext.QR); return
         }
         mutable.value = mutable.value.copy(workspaceId = workspaceId, workspaceName = workspaceName, errorCode = null)
         operationJob = viewModelScope.launch {
@@ -109,7 +112,7 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
                     pending = PendingKintoneConnection(workspaceId, workspaceName, payload, verification, mutable.value.connection != null, duplicate),
                     operation = OperationState.Idle,
                 )
-            } catch (e: KintoneException) { fail(e.code) }
+            } catch (e: KintoneException) { fail(e.code, KintoneFailureContext.CONNECTION) }
         }
     }
 
@@ -121,27 +124,35 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
             try {
                 repository.save(pending.workspaceId, pending.payload)
                 mutable.value = mutable.value.copy(pending = null, operation = OperationState.Success(R.string.kintone_connected, eventId++), errorCode = null)
-            } catch (e: KintoneException) { fail(e.code) }
+            } catch (e: KintoneException) { fail(e.code, KintoneFailureContext.CONNECTION) }
         }
     }
 
-    fun reverify() = launchOperation {
+    fun reverify() = launchOperation(KintoneFailureContext.CONNECTION) {
         repository.reverify(mutable.value.workspaceId)
         val uuid = WorkspaceUuid.fromId(mutable.value.workspaceId)
         autoSyncStore.write(uuid, autoSyncStore.read(uuid).copy(requiresAttention = false))
         mutable.value = mutable.value.copy(operation = OperationState.Success(R.string.kintone_verified, eventId++), errorCode = null)
     }
 
-    fun disconnect() = launchOperation {
+    fun disconnect() = launchOperation(KintoneFailureContext.CONNECTION) {
         autoSyncScheduler.disable(mutable.value.workspaceId)
         repository.disconnect(mutable.value.workspaceId)
         mutable.value = mutable.value.copy(operation = OperationState.Success(R.string.kintone_disconnected, eventId++), pending = null, errorCode = null)
     }
 
-    fun sync() = launchOperation {
-        val records = repository.buildSyncRecords(mutable.value.workspaceId)
+    fun sync() = launchOperation(KintoneFailureContext.SYNC) {
+        val records = repository.buildSyncRecordsForConnection(mutable.value.workspaceId)
         if (records.isEmpty()) {
-            mutable.value = mutable.value.copy(message = "同期する登録機器がありません", syncPreview = KintoneSyncPreview(0, 0, emptyList(), emptyList()), operation = OperationState.Idle)
+            val uuid = WorkspaceUuid.fromId(mutable.value.workspaceId)
+            autoSyncStore.write(uuid, autoSyncStore.read(uuid).copy(
+                lastFinishedAt = System.currentTimeMillis(), status = KintoneSyncStatus.NO_TARGETS,
+                targetCount = 0, successCount = 0, failureCount = 0, skippedCount = 0, unsentCount = 0,
+                partiallyCompleted = false, lastErrorCategory = null, lastHttpStatus = null,
+                lastKintoneErrorCode = null, lastUserMessage = null, failedAt = 0, requiresAttention = false,
+                lastErrorPath = null, lastErrorDetail = null, lastFailedRecordIndex = null,
+            ))
+            mutable.value = mutable.value.copy(message = "同期する登録機器がありません", syncPreview = KintoneSyncPreview(0, 0, emptyList(), emptyList()), operation = OperationState.Idle, errorCode = null, failureContext = null)
             return@launchOperation
         }
         val hadPreview = mutable.value.syncPreview != null
@@ -183,15 +194,15 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
     fun cancel() { operationJob?.cancel(); operationJob = null; mutable.value = mutable.value.copy(operation = OperationState.Idle, pending = null) }
     fun consumeEvent(id: Long) { val op = mutable.value.operation; if ((op as? OperationState.Success)?.eventId == id || (op as? OperationState.Failure)?.eventId == id) mutable.value = mutable.value.copy(operation = OperationState.Idle) }
 
-    private fun launchOperation(block: suspend () -> Unit) {
+    private fun launchOperation(context: KintoneFailureContext, block: suspend () -> Unit) {
         if (operationJob?.isActive == true) return
         operationJob = viewModelScope.launch {
             mutable.value = mutable.value.copy(operation = OperationState.Running(R.string.kintone_verifying, cancellable = true))
-            try { block() } catch (e: KintoneException) { fail(e.code) }
+            try { block() } catch (e: KintoneException) { fail(e.code, context) }
         }
     }
 
-    private fun fail(code: KintoneErrorCode) {
+    private fun fail(code: KintoneErrorCode, context: KintoneFailureContext) {
         val category = when (code) {
             KintoneErrorCode.KINTONE_NETWORK_UNAVAILABLE, KintoneErrorCode.KINTONE_TIMEOUT, KintoneErrorCode.KINTONE_TLS_ERROR -> OperationErrorCategory.NETWORK_SCAN_FAILED
             KintoneErrorCode.KINTONE_CONNECTION_CANCELLED -> OperationErrorCategory.CANCELLED
@@ -200,6 +211,8 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
         }
         mutable.value = mutable.value.copy(
             errorCode = code,
+            failureContext = context,
+            message = null,
             operation = OperationState.Failure(OperationError(category, R.string.kintone_verifying, stableCode = code.name), eventId++),
             pending = null,
         )

@@ -21,6 +21,8 @@ class KintoneAutoSyncPolicyTest {
     @Test fun allSyncTriggersRemainDistinct() = assertEquals(4, KintoneSyncTrigger.entries.distinct().size)
     @Test fun manualTriggerIsPersistableByName() = assertEquals(KintoneSyncTrigger.MANUAL, KintoneSyncTrigger.valueOf("MANUAL"))
     @Test fun partialStatusIsPersistableByName() = assertEquals(KintoneSyncStatus.PARTIAL, KintoneSyncStatus.valueOf("PARTIAL"))
+    @Test fun noTargetsIsAFirstClassNonFailureStatus() = assertEquals(KintoneSyncStatus.NO_TARGETS, KintoneSyncStatus.valueOf("NO_TARGETS"))
+    @Test fun noTargetsNeverRetries() = assertFalse(KintoneRetryPolicy.shouldRetry(KintoneErrorCode.KINTONE_NO_DEVICES))
     @Test fun onlyTransientFailuresRetry() {
         listOf(KintoneErrorCode.KINTONE_NETWORK_UNAVAILABLE, KintoneErrorCode.KINTONE_TIMEOUT, KintoneErrorCode.KINTONE_RATE_LIMITED, KintoneErrorCode.KINTONE_SERVER_ERROR).forEach { assertEquals(true, KintoneRetryPolicy.shouldRetry(it)) }
         listOf(KintoneErrorCode.KINTONE_AUTH_FAILED, KintoneErrorCode.KINTONE_PERMISSION_DENIED, KintoneErrorCode.KINTONE_SCHEMA_MISMATCH, KintoneErrorCode.KINTONE_BATCH_FAILED).forEach { assertFalse(KintoneRetryPolicy.shouldRetry(it)) }

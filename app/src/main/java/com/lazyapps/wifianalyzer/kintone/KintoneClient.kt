@@ -167,6 +167,10 @@ object KintoneFieldSchemaV1 {
         "メモ" to "MULTI_LINE_TEXT", "アプリ更新日時" to "DATETIME", "削除状態" to "CHECK_BOX",
     )
     private const val PHOTO_CODE = "写真"
+    private val systemFieldCodes = setOf(
+        "\$id", "\$revision", "レコード番号", "作成者", "更新者", "作成日時", "更新日時",
+        "ステータス", "作業者", "カテゴリー",
+    )
 
     fun validate(fields: Map<String, KintoneFieldProperty>): KintoneVerification {
         requiredFields.forEach { (code, type) ->
@@ -185,9 +189,10 @@ object KintoneFieldSchemaV1 {
             val photo = fields[PHOTO_CODE]
             if (photo == null) add("写真同期は利用できません")
             else if (photo.code != PHOTO_CODE || photo.type != "FILE") mismatch(KintoneErrorCode.KINTONE_FIELD_TYPE_MISMATCH)
-            if (fields.keys.any { it !in requiredFields && it != PHOTO_CODE }) add("未使用の追加フィールドがあります")
         }
-        return KintoneVerification(fields.mapValues { it.value.type }, warnings)
+        val hasUserFields = fields.keys.any { it !in requiredFields && it != PHOTO_CODE && it !in systemFieldCodes }
+        val information = if (hasUserFields) listOf("連携対象外の追加フィールドがあります。同期には影響しません。") else emptyList()
+        return KintoneVerification(fields.mapValues { it.value.type }, warnings, information)
     }
 
     private fun mismatch(code: KintoneErrorCode): Nothing = throw KintoneException(code)

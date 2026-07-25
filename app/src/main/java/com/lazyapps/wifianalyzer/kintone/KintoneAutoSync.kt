@@ -19,7 +19,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 enum class KintoneSyncTrigger { MANUAL, AUTO_CHANGE, AUTO_PERIODIC, AUTO_ENABLED }
-enum class KintoneSyncStatus { NEVER, WAITING, RUNNING, SUCCESS, PARTIAL, FAILED }
+enum class KintoneSyncStatus { NEVER, WAITING, RUNNING, SUCCESS, NO_TARGETS, PARTIAL, FAILED }
 object KintoneSyncLock { val mutex = Mutex() }
 object KintoneRetryPolicy {
     private val retryable = setOf(KintoneErrorCode.KINTONE_NETWORK_UNAVAILABLE, KintoneErrorCode.KINTONE_TIMEOUT, KintoneErrorCode.KINTONE_RATE_LIMITED, KintoneErrorCode.KINTONE_SERVER_ERROR)
@@ -139,8 +139,19 @@ class KintoneAutoSyncWorker(context: Context, params: WorkerParameters) : Corout
             val repository = KintoneRepository(WifiAnalyzerDatabase.get(applicationContext))
             store.write(uuid, store.read(uuid).copy(lastStartedAt = System.currentTimeMillis(), status = KintoneSyncStatus.RUNNING, trigger = trigger))
             try {
-                val records = repository.buildSyncRecords(workspaceId)
-                val result = if (records.isEmpty()) KintoneSyncResult(0, 0, 0, 0, emptyList()) else repository.sync(workspaceId, records)
+                val records = repository.buildSyncRecordsForConnection(workspaceId)
+                if (records.isEmpty()) {
+                    store.write(uuid, store.read(uuid).copy(
+                        lastFinishedAt = System.currentTimeMillis(), status = KintoneSyncStatus.NO_TARGETS,
+                        targetCount = 0, successCount = 0, failureCount = 0, skippedCount = 0, unsentCount = 0,
+                        partiallyCompleted = false, lastErrorCategory = null, lastHttpStatus = null,
+                        lastKintoneErrorCode = null, lastUserMessage = null, failedAt = 0,
+                        requiresAttention = false, lastErrorPath = null, lastErrorDetail = null,
+                        lastFailedRecordIndex = null,
+                    ))
+                    return@withLock Result.success()
+                }
+                val result = repository.sync(workspaceId, records)
                 val partial = result.failed > 0 && result.succeeded > 0
                 val failure = result.batches.firstOrNull { it.error != null }
                 val retry = KintoneRetryPolicy.shouldRetry(failure?.error)

@@ -59,6 +59,15 @@ class KintoneRepository(
         }
     }
 
+    suspend fun buildSyncRecordsForConnection(workspaceId: Long): List<KintoneDeviceRecord> {
+        val connection = dao.getKintoneConnection(workspaceId)
+            ?: throw KintoneException(KintoneErrorCode.KINTONE_WORKSPACE_NOT_FOUND)
+        val connectedWorkspaceId = dao.getWorkspacesOnce()
+            .firstOrNull { WorkspaceUuid.fromId(it.id) == connection.workspaceUuid }
+            ?.id ?: throw KintoneException(KintoneErrorCode.KINTONE_WORKSPACE_NOT_FOUND)
+        return buildSyncRecords(connectedWorkspaceId)
+    }
+
     suspend fun previewSync(workspaceId: Long): KintoneSyncPreview {
         val records = buildSyncRecords(workspaceId)
         val errors = records.flatMap { r -> buildList { if (r.deviceUuid.isBlank()) add("device UUID is blank"); if (r.primaryBssid.isBlank()) add("primary BSSID is blank") } }
@@ -67,7 +76,7 @@ class KintoneRepository(
     }
 
     suspend fun sync(workspaceId: Long, records: List<KintoneDeviceRecord>, onProgress: (Int, Int) -> Unit = { _, _ -> }): KintoneSyncResult {
-        if (records.isEmpty()) throw KintoneException(KintoneErrorCode.KINTONE_NO_DEVICES)
+        if (records.isEmpty()) return KintoneSyncResult(0, 0, 0, 0, emptyList())
         val connection = dao.getKintoneConnection(workspaceId) ?: throw KintoneException(KintoneErrorCode.KINTONE_WORKSPACE_NOT_FOUND)
         val token = cipher.decrypt(connection.workspaceUuid, EncryptedToken(connection.encryptedApiToken, connection.tokenIv))
         val batches = records.chunked(KINTONE_RECORD_BATCH_SIZE); val results = mutableListOf<KintoneBatchResult>(); var success = 0; var failed = 0

@@ -114,6 +114,7 @@ data class KintoneConnectionSummary(
 data class KintoneVerification(
     val fields: Map<String, String>,
     val warnings: List<String> = emptyList(),
+    val information: List<String> = emptyList(),
 )
 
 data class KintoneFieldProperty(

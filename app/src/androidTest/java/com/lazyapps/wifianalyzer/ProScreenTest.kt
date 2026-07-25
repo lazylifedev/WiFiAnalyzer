@@ -14,6 +14,8 @@ import com.lazyapps.wifianalyzer.kintone.KintoneConnectionSummary
 import com.lazyapps.wifianalyzer.kintone.KintoneAutoSyncState
 import com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus
 import com.lazyapps.wifianalyzer.ui.kintone.KintoneUiState
+import com.lazyapps.wifianalyzer.ui.kintone.KintoneFailureContext
+import com.lazyapps.wifianalyzer.kintone.KintoneErrorCode
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -63,6 +65,26 @@ class ProScreenTest {
     @Test fun connectedProShowsManualSyncEvenWithoutDevices() {
         rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = connectedState()) } }
         rule.onNodeWithText("今すぐ同期").assertIsDisplayed()
+    }
+
+    @Test fun noTargetsUsesJapaneseNonErrorMessageAndStatus() {
+        val state = connectedState().copy(message = "同期する登録機器がありません", autoSync = KintoneAutoSyncState(status = KintoneSyncStatus.NO_TARGETS))
+        rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = state) } }
+        rule.onNodeWithText("同期する登録機器がありません").assertIsDisplayed()
+        rule.onNodeWithText("最終同期結果: 対象なし").assertIsDisplayed()
+        rule.onNodeWithText("接続できませんでした", substring = true).assertDoesNotExist()
+    }
+
+    @Test fun connectionQrAndSyncFailuresUseDifferentMessagesWithoutCodes() {
+        val state = mutableStateOf(connectedState().copy(errorCode = KintoneErrorCode.KINTONE_TIMEOUT, failureContext = KintoneFailureContext.CONNECTION))
+        rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = state.value) } }
+        rule.onNodeWithText("接続できませんでした").assertIsDisplayed()
+        rule.onNodeWithText("KINTONE_TIMEOUT", substring = true).assertDoesNotExist()
+        rule.runOnIdle { state.value = state.value.copy(failureContext = KintoneFailureContext.SYNC) }
+        rule.onNodeWithText("kintoneへ同期できませんでした").assertIsDisplayed()
+        rule.onNodeWithText("接続できませんでした").assertDoesNotExist()
+        rule.runOnIdle { state.value = state.value.copy(failureContext = KintoneFailureContext.QR) }
+        rule.onNodeWithText("QRコードの内容を確認できませんでした").assertIsDisplayed()
     }
 
     @Test fun connectedProShowsAutoSyncSwitch() {

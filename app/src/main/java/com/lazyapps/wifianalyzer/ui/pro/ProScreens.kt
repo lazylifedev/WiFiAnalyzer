@@ -124,7 +124,14 @@ fun KintoneScreen(
                 }
                 if (running.cancellable) TextButton(onClick = onCancelSync, modifier = Modifier.testTag("kintone_cancel_sync")) { Text("キャンセル") }
             }
-            state.errorCode?.let { Text("接続できませんでした（${it.name}）", color = MaterialTheme.colorScheme.error) }
+            state.errorCode?.let {
+                val text = when (state.failureContext) {
+                    com.lazyapps.wifianalyzer.ui.kintone.KintoneFailureContext.QR -> "QRコードの内容を確認できませんでした"
+                    com.lazyapps.wifianalyzer.ui.kintone.KintoneFailureContext.SYNC -> "kintoneへ同期できませんでした"
+                    else -> "接続できませんでした"
+                }
+                Text(text, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("kintone_error_message"))
+            }
             (state.operation as? OperationState.Success)?.let { Text("処理が完了しました", color = MaterialTheme.colorScheme.primary) }
             state.message?.let { Text(it, modifier = Modifier.testTag("kintone_message")) }
             state.syncResult?.let { result ->
@@ -155,6 +162,7 @@ fun KintoneScreen(
             Text("接続先ワークスペース：${pending.workspaceName}")
             Text("APIトークン：設定済み")
             if (pending.verification.warnings.isEmpty()) Text("フィールド検査：確認済み") else pending.verification.warnings.forEach { Text("警告：$it", color = MaterialTheme.colorScheme.error) }
+            pending.verification.information.forEach { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             if (pending.duplicateTarget) Text("警告：別のワークスペースも同じkintoneアプリに接続しています", color = MaterialTheme.colorScheme.error)
             if (pending.replacing) Text("保存後に既存の接続設定を置き換えます")
         } },
@@ -224,6 +232,7 @@ private fun syncStatusLabel(status: com.lazyapps.wifianalyzer.kintone.KintoneSyn
     com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.WAITING -> "待機中"
     com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.RUNNING -> "同期中"
     com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.SUCCESS -> "同期成功"
+    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.NO_TARGETS -> "対象なし"
     com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.PARTIAL -> "一部失敗"
     com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.FAILED -> "同期失敗"
 }
