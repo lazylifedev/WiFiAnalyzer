@@ -101,7 +101,7 @@ fun KintoneScreen(
         } else {
             Text(if (state.connection == null) "状態：未接続" else "状態：接続済み", style = MaterialTheme.typography.titleLarge)
             state.connection?.let { connection ->
-                KintoneAutoSyncSection(state, onSync, onAutoSyncChange) { confirmAutoSync.value = true }
+                KintoneAutoSyncSection(state, onSync, onVerify, onAutoSyncChange) { confirmAutoSync.value = true }
                 Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
                     Text("ドメイン：${maskDomain(connection.domain)}")
                     Text("アプリID：${connection.appId}")
@@ -124,7 +124,14 @@ fun KintoneScreen(
                 }
                 if (running.cancellable) TextButton(onClick = onCancelSync, modifier = Modifier.testTag("kintone_cancel_sync")) { Text("キャンセル") }
             }
-            state.errorCode?.let { Text("接続できませんでした（${it.name}）", color = MaterialTheme.colorScheme.error) }
+            state.errorCode?.let {
+                val text = when (state.failureContext) {
+                    com.lazyapps.wifianalyzer.ui.kintone.KintoneFailureContext.QR -> "QRコードの内容を確認できませんでした"
+                    com.lazyapps.wifianalyzer.ui.kintone.KintoneFailureContext.SYNC -> "kintoneへ同期できませんでした"
+                    else -> "接続できませんでした"
+                }
+                Text(text, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("kintone_error_message"))
+            }
             (state.operation as? OperationState.Success)?.let { Text("処理が完了しました", color = MaterialTheme.colorScheme.primary) }
             state.message?.let { Text(it, modifier = Modifier.testTag("kintone_message")) }
             state.syncResult?.let { result ->
@@ -132,6 +139,12 @@ fun KintoneScreen(
                     Text("同期結果", style = MaterialTheme.typography.titleLarge)
                     Text("対象 ${result.total}件 / 成功 ${result.succeeded}件 / 失敗 ${result.failed}件 / 未送信 ${result.skipped}件")
                     if (result.failed > 0) Text("失敗した機器だけ再送できます。自動再試行は行いません。", color = MaterialTheme.colorScheme.error)
+                    result.batches.firstOrNull { it.validationErrors.isNotEmpty() }?.let { failure ->
+                        val detail = failure.validationErrors.first()
+                        Text("エラーフィールド：${detail.path}", modifier = Modifier.testTag("kintone_sync_error_field"))
+                        Text("内容：${detail.messages.joinToString(" / ")}", modifier = Modifier.testTag("kintone_sync_error_detail"))
+                        failure.recordIndex?.let { Text("対象：送信データの${it + 1}件目") }
+                    }
                 } }
             }
             OutlinedButton(onClick = onPluginInfo, modifier = Modifier.fillMaxWidth()) { Text("プラグインについて") }
@@ -149,6 +162,7 @@ fun KintoneScreen(
             Text("接続先ワークスペース：${pending.workspaceName}")
             Text("APIトークン：設定済み")
             if (pending.verification.warnings.isEmpty()) Text("フィールド検査：確認済み") else pending.verification.warnings.forEach { Text("警告：$it", color = MaterialTheme.colorScheme.error) }
+            pending.verification.information.forEach { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             if (pending.duplicateTarget) Text("警告：別のワークスペースも同じkintoneアプリに接続しています", color = MaterialTheme.colorScheme.error)
             if (pending.replacing) Text("保存後に既存の接続設定を置き換えます")
         } },
@@ -172,7 +186,8 @@ fun KintoneScreen(
 }
 
 @Composable
-private fun KintoneAutoSyncSection(state: KintoneUiState, onSync: () -> Unit, onAutoSyncChange: (Boolean) -> Unit, onConfirmEnable: () -> Unit) {
+private fun KintoneAutoSyncSection(state: KintoneUiState, onSync: () -> Unit, onVerify: () -> Unit, onAutoSyncChange: (Boolean) -> Unit, onConfirmEnable: () -> Unit) {
+    val showDetails = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.small), modifier = Modifier.fillMaxWidth().testTag("kintone_sync_section")) {
         Row(Modifier.fillMaxWidth().testTag("kintone_auto_sync"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
@@ -182,7 +197,24 @@ private fun KintoneAutoSyncSection(state: KintoneUiState, onSync: () -> Unit, on
             Switch(checked = state.autoSync.enabled, enabled = state.canUseKintone, onCheckedChange = { if (it) onConfirmEnable() else onAutoSyncChange(false) }, modifier = Modifier.testTag("kintone_auto_sync_switch"))
         }
         Text("最終同期日時: " + if (state.autoSync.lastFinishedAt > 0) DateFormat.getDateTimeInstance().format(Date(state.autoSync.lastFinishedAt)) else "未実行")
-        Text("最終同期結果: ${state.autoSync.status.name}")
+        Text("最終同期結果: ${syncStatusLabel(state.autoSync.status)}")
+        if (state.autoSync.status in setOf(com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.FAILED, com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.PARTIAL)) {
+            Text("${state.autoSync.failureCount}件を送信できませんでした。", color = MaterialTheme.colorScheme.error)
+            if (showDetails.value) {
+                state.autoSync.lastUserMessage?.let { Text("原因：\n$it", modifier = Modifier.testTag("kintone_safe_error_message")) }
+                state.autoSync.lastKintoneErrorCode?.let { Text("エラーコード：\n$it", modifier = Modifier.testTag("kintone_error_code")) }
+                state.autoSync.lastHttpStatus?.let { Text("HTTPステータス：$it") }
+                state.autoSync.lastErrorPath?.let { Text("エラーフィールド：\n$it", modifier = Modifier.testTag("kintone_error_field")) }
+                state.autoSync.lastErrorDetail?.let { Text("内容：\n$it", modifier = Modifier.testTag("kintone_error_detail")) }
+                state.autoSync.lastFailedRecordIndex?.let { Text("対象：送信データの${it + 1}件目") }
+            }
+            if (state.autoSync.requiresAttention) Text("確認が必要", color = MaterialTheme.colorScheme.error)
+            Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+                TextButton(onClick = { showDetails.value = !showDetails.value }, modifier = Modifier.testTag("kintone_error_details")) { Text("詳細を確認") }
+                TextButton(onClick = onSync, modifier = Modifier.testTag("kintone_retry_failed")) { Text("失敗分を再送") }
+                TextButton(onClick = onVerify, modifier = Modifier.testTag("kintone_check_connection")) { Text("接続を確認") }
+            }
+        }
         Text("現在、写真は同期されません。複数BSSIDは主BSSIDのみ同期されます。")
         Text("Androidで削除した機器のkintone反映は、現在未対応です。")
         state.syncPreview?.let { preview ->
@@ -193,6 +225,16 @@ private fun KintoneAutoSyncSection(state: KintoneUiState, onSync: () -> Unit, on
         }
         Button(onClick = onSync, enabled = state.operation !is OperationState.Running, modifier = Modifier.fillMaxWidth().testTag("kintone_sync")) { Text("今すぐ同期") }
     }
+}
+
+private fun syncStatusLabel(status: com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus) = when (status) {
+    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.NEVER -> "未実行"
+    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.WAITING -> "待機中"
+    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.RUNNING -> "同期中"
+    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.SUCCESS -> "同期成功"
+    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.NO_TARGETS -> "対象なし"
+    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.PARTIAL -> "一部失敗"
+    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.FAILED -> "同期失敗"
 }
 
 @Composable

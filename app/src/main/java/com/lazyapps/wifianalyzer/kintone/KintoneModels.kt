@@ -19,7 +19,54 @@ enum class KintoneErrorCode {
     KINTONE_SCHEMA_CHANGED, KINTONE_BATCH_FAILED, KINTONE_PARTIALLY_COMPLETED,
 }
 
-class KintoneException(val code: KintoneErrorCode, cause: Throwable? = null) : Exception(code.name, cause)
+enum class KintoneErrorCategory { AUTHENTICATION, PERMISSION, NOT_FOUND, VALIDATION, SCHEMA, RATE_LIMIT, SERVER, NETWORK, TIMEOUT, UNKNOWN }
+
+class KintoneException(
+    val code: KintoneErrorCode,
+    cause: Throwable? = null,
+    val httpStatus: Int? = null,
+    val kintoneErrorCode: String? = null,
+    val validationErrors: List<KintoneValidationError> = emptyList(),
+    val userMessage: String = KintoneErrorMessages.forFailure(httpStatus, kintoneErrorCode, code),
+) : Exception(code.name, cause) {
+    val category = KintoneErrorMessages.category(httpStatus, kintoneErrorCode, code)
+}
+
+data class KintoneValidationError(
+    val path: String,
+    val messages: List<String>,
+) {
+    val recordIndex: Int? = Regex("records\\[(\\d+)]").find(path)?.groupValues?.get(1)?.toIntOrNull()
+    val fieldCode: String? = path.substringAfter(".record.", "").substringBefore(".value").takeIf { it.isNotBlank() }
+}
+
+object KintoneErrorMessages {
+    fun category(status: Int?, remoteCode: String?, code: KintoneErrorCode): KintoneErrorCategory = when {
+        status == 401 || code == KintoneErrorCode.KINTONE_AUTH_FAILED -> KintoneErrorCategory.AUTHENTICATION
+        status == 403 || code == KintoneErrorCode.KINTONE_PERMISSION_DENIED -> KintoneErrorCategory.PERMISSION
+        status == 404 || code == KintoneErrorCode.KINTONE_APP_NOT_FOUND -> KintoneErrorCategory.NOT_FOUND
+        remoteCode == "CB_VA01" || remoteCode == "GAIA_RE20" -> KintoneErrorCategory.VALIDATION
+        code in setOf(KintoneErrorCode.KINTONE_SCHEMA_MISMATCH, KintoneErrorCode.KINTONE_SCHEMA_CHANGED, KintoneErrorCode.KINTONE_FIELD_TYPE_MISMATCH, KintoneErrorCode.KINTONE_REQUIRED_FIELD_MISSING) -> KintoneErrorCategory.SCHEMA
+        status == 429 || code == KintoneErrorCode.KINTONE_RATE_LIMITED -> KintoneErrorCategory.RATE_LIMIT
+        (status != null && status >= 500) || code == KintoneErrorCode.KINTONE_SERVER_ERROR -> KintoneErrorCategory.SERVER
+        code == KintoneErrorCode.KINTONE_TIMEOUT -> KintoneErrorCategory.TIMEOUT
+        code in setOf(KintoneErrorCode.KINTONE_NETWORK_UNAVAILABLE, KintoneErrorCode.KINTONE_TLS_ERROR) -> KintoneErrorCategory.NETWORK
+        else -> KintoneErrorCategory.UNKNOWN
+    }
+
+    fun forFailure(status: Int?, remoteCode: String?, code: KintoneErrorCode): String = when {
+        status == 401 || code == KintoneErrorCode.KINTONE_AUTH_FAILED -> "APIトークンが無効です。QRコードを再生成してください。"
+        status == 403 || code == KintoneErrorCode.KINTONE_PERMISSION_DENIED -> "APIトークンにレコード追加・編集権限がありません。"
+        status == 404 || code == KintoneErrorCode.KINTONE_APP_NOT_FOUND -> "接続先のkintoneアプリが見つかりません。"
+        status == 429 || code == KintoneErrorCode.KINTONE_RATE_LIMITED -> "kintoneへのアクセスが集中しています。時間をおいて再試行します。"
+        remoteCode == "CB_VA01" -> "送信内容がkintoneのフィールド仕様と一致しません。"
+        remoteCode == "GAIA_RE20" -> "更新キーに一致するレコードが見つかりません。UPSERT設定を確認してください。"
+        category(status, remoteCode, code) == KintoneErrorCategory.SCHEMA -> "kintoneアプリのフィールド構成が変更されています。接続を確認してください。"
+        code == KintoneErrorCode.KINTONE_TIMEOUT -> "kintoneから時間内に応答がありませんでした。"
+        code in setOf(KintoneErrorCode.KINTONE_NETWORK_UNAVAILABLE, KintoneErrorCode.KINTONE_TLS_ERROR) -> "ネットワークへ接続できません。"
+        else -> "kintoneへの同期に失敗しました。"
+    }
+}
 
 @Serializable
 internal data class KintoneQrWire(
@@ -67,6 +114,7 @@ data class KintoneConnectionSummary(
 data class KintoneVerification(
     val fields: Map<String, String>,
     val warnings: List<String> = emptyList(),
+    val information: List<String> = emptyList(),
 )
 
 data class KintoneFieldProperty(
@@ -89,5 +137,11 @@ data class KintoneDeviceRecord(
     val updatedAt: String, val deleted: Boolean = false,
 )
 data class KintoneSyncPreview(val total: Int, val valid: Int, val errors: List<String>, val warnings: List<String>)
-data class KintoneBatchResult(val batch: Int, val succeeded: Int, val failed: Int, val error: KintoneErrorCode? = null)
+data class KintoneBatchResult(
+    val batch: Int, val succeeded: Int, val failed: Int, val error: KintoneErrorCode? = null,
+    val errorCategory: KintoneErrorCategory? = null, val httpStatus: Int? = null,
+    val kintoneErrorCode: String? = null, val userMessage: String? = null,
+    val validationErrors: List<KintoneValidationError> = emptyList(),
+    val recordIndex: Int? = null,
+)
 data class KintoneSyncResult(val total: Int, val succeeded: Int, val failed: Int, val skipped: Int, val batches: List<KintoneBatchResult>)

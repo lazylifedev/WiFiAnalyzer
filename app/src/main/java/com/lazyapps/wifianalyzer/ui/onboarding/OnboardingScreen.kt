@@ -1,5 +1,6 @@
 package com.lazyapps.wifianalyzer.ui.onboarding
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,6 +17,7 @@ import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.PrivacyTip
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -50,16 +52,16 @@ fun OnboardingScreen(onComplete: () -> Unit) {
     var page by rememberSaveable { mutableIntStateOf(0) }
     val item = onboardingPages[page]
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(AppSpacing.xLarge),
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).verticalScroll(rememberScrollState()).padding(AppSpacing.xLarge),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onComplete, modifier = Modifier.testTag("onboarding_skip")) { Text("スキップ") }
+            TextButton(onClick = onComplete, modifier = Modifier.testTag("onboarding_skip")) { Text("スキップ", color = MaterialTheme.colorScheme.primary) }
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(AppSpacing.large)) {
             Icon(item.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Text(item.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text(item.body, style = MaterialTheme.typography.bodyLarge)
+            Text(item.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+            Text(item.body, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
                 "${page + 1} / ${onboardingPages.size}",
                 modifier = Modifier.semantics { contentDescription = "${onboardingPages.size}ページ中${page + 1}ページ" }.testTag("onboarding_indicator"),
@@ -72,6 +74,7 @@ fun OnboardingScreen(onComplete: () -> Unit) {
             Button(
                 onClick = { if (page == onboardingPages.lastIndex) onComplete() else page++ },
                 modifier = Modifier.weight(1f).testTag(if (page == onboardingPages.lastIndex) "onboarding_complete" else "onboarding_next"),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary),
             ) { Text(if (page == onboardingPages.lastIndex) "利用を開始" else "次へ") }
         }
     }

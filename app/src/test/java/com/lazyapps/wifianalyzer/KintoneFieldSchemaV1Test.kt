@@ -25,7 +25,18 @@ class KintoneFieldSchemaV1Test {
     @Test fun extraDeletionOptionIsAllowed() { assertTrue(validate(change("削除状態", options = setOf("削除済", "その他"))).warnings.isEmpty()) }
     @Test fun photoFileExists() { assertEquals("FILE", validate().fields["写真"]) }
     @Test fun missingPhotoWarnsButConnects() { assertEquals(listOf("写真同期は利用できません"), validate(fields() - "写真").warnings) }
-    @Test fun unknownFieldWarns() { assertTrue(validate(fields() + ("将来項目" to field("将来項目", "NUMBER"))).warnings.any { it.contains("追加") }) }
+    @Test fun userAddedFieldIsInformationOnly() {
+        val result = validate(fields() + ("将来項目" to field("将来項目", "NUMBER")))
+        assertTrue(result.warnings.isEmpty())
+        assertEquals(listOf("連携対象外の追加フィールドがあります。同期には影響しません。"), result.information)
+    }
+    @Test fun systemFieldsAreNotReportedAsAdditionalFields() {
+        val systemFields = listOf("\$id", "\$revision", "レコード番号", "作成者", "更新者", "作成日時", "更新日時", "ステータス", "作業者", "カテゴリー")
+            .associateWith { field(it, "RECORD_NUMBER") }
+        val result = validate(fields() + systemFields)
+        assertTrue(result.warnings.isEmpty())
+        assertTrue(result.information.isEmpty())
+    }
     @Test fun changedLabelDoesNotMatter() { assertTrue(validate(change("機器名", label = "表示名だけ変更")).warnings.isEmpty()) }
     @Test fun defaultNowMissingWarns() { assertTrue(validate(change("アプリ更新日時", defaultNowValue = false)).warnings.any { it.contains("現在日時") }) }
 

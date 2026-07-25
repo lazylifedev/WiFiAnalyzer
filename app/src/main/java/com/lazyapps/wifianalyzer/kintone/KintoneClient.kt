@@ -10,6 +10,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -19,6 +20,9 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.add
+import java.time.Instant
+import android.util.Log
+import com.lazyapps.wifianalyzer.BuildConfig
 
 interface KintoneApi {
     suspend fun verify(domain: String, appId: Long, token: CharArray): KintoneVerification
@@ -41,24 +45,36 @@ class HttpsKintoneApi : KintoneApi {
 
     override suspend fun upsert(domain: String, appId: Long, token: CharArray, records: List<KintoneDeviceRecord>) = withContext(Dispatchers.IO) {
         require(records.size <= KINTONE_RECORD_BATCH_SIZE)
-        val body = buildJsonObject {
+        val body = buildUpsertBody(appId, records)
+        try { putRecords(domain, UPSERT_PATH, token, body.toString()) }
+        catch (failure: KintoneException) {
+            if (BuildConfig.DEBUG) Log.w("KintoneSync", "Kintone sync failed: category=${failure.category} httpStatus=${failure.httpStatus ?: "none"} code=${failure.kintoneErrorCode ?: "none"} batchSize=${records.size}")
+            if (BuildConfig.DEBUG) failure.validationErrors.forEach { detail ->
+                detail.messages.forEach { message -> Log.w("KintoneSync", "Kintone validation error: path=${detail.path} message=$message") }
+            }
+            throw failure
+        }
+        finally { token.fill('\u0000') }
+    }
+
+    internal fun buildUpsertBody(appId: Long, records: List<KintoneDeviceRecord>) = buildJsonObject {
+            require(records.size <= KINTONE_RECORD_BATCH_SIZE)
             put("app", appId); put("upsert", true)
             put("records", buildJsonArray { records.forEach { item -> add(buildJsonObject {
                 put("updateKey", buildJsonObject { put("field", "機器UUID"); put("value", item.deviceUuid) })
                 put("record", buildJsonObject {
-                    put("機器UUID", value(item.deviceUuid)); put("ワークスペースUUID", value(item.workspaceUuid)); put("ワークスペース名", value(item.workspaceName))
+                    put("ワークスペースUUID", value(item.workspaceUuid)); put("ワークスペース名", value(item.workspaceName))
                     put("グループUUID", value(item.groupUuid)); put("グループ名", value(item.groupName)); put("機器名", value(item.deviceName))
                     put("メーカー", value(item.manufacturer)); put("機種", value(item.model)); put("シリアル番号", value(item.serialNumber)); put("SSID", value(item.ssid))
-                    put("主BSSID", value(item.primaryBssid)); put("設置場所", value(item.location)); put("メモ", value(item.notes)); put("アプリ更新日時", value(item.updatedAt))
+                    put("主BSSID", value(item.primaryBssid)); put("設置場所", value(item.location)); put("メモ", value(item.notes))
+                    item.updatedAt.takeIf(::isUtcInstant)?.let { put("アプリ更新日時", value(it)) }
                     put("削除状態", buildJsonObject { put("value", buildJsonArray { if (item.deleted) add("削除済") }) })
                 })
             }) } })
         }
-        post(domain, "/k/v1/records.json", token, body.toString())
-        token.fill('\u0000')
-    }
 
     private fun value(value: String) = buildJsonObject { put("value", value) }
+    private fun isUtcInstant(value: String) = value.isNotBlank() && runCatching { Instant.parse(value) }.isSuccess
 
     private fun get(domain: String, path: String, token: CharArray): String {
         val connection = (URL("https", domain, path).openConnection() as HttpURLConnection).apply {
@@ -86,14 +102,31 @@ class HttpsKintoneApi : KintoneApi {
         finally { connection.disconnect() }
     }
 
-    private fun post(domain: String, path: String, token: CharArray, body: String) {
+    private fun putRecords(domain: String, path: String, token: CharArray, body: String) {
         val connection = (URL("https", domain, path).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; connectTimeout = 10_000; readTimeout = 30_000; instanceFollowRedirects = false; doOutput = true
+            requestMethod = UPSERT_METHOD; connectTimeout = 10_000; readTimeout = 30_000; instanceFollowRedirects = false; doOutput = true
             setRequestProperty("X-Cybozu-API-Token", String(token)); setRequestProperty("Content-Type", "application/json")
         }
         try { connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }; val status = connection.responseCode
-            if (status !in 200..299) throw KintoneException(when (status) { 401 -> KintoneErrorCode.KINTONE_AUTH_FAILED; 403 -> KintoneErrorCode.KINTONE_PERMISSION_DENIED; 404 -> KintoneErrorCode.KINTONE_APP_NOT_FOUND; 429 -> KintoneErrorCode.KINTONE_RATE_LIMITED; in 500..599 -> KintoneErrorCode.KINTONE_SERVER_ERROR; else -> KintoneErrorCode.KINTONE_BATCH_FAILED })
-        } catch (e: KintoneException) { throw e } catch (e: SocketTimeoutException) { throw KintoneException(KintoneErrorCode.KINTONE_TIMEOUT, e) } catch (e: IOException) { throw KintoneException(KintoneErrorCode.KINTONE_NETWORK_UNAVAILABLE, e) } finally { connection.disconnect() }
+            if (status !in 200..299) {
+                val remote = runCatching {
+                    connection.errorStream?.bufferedReader()?.use { it.readText().take(64 * 1024) }
+                        ?.let(::parseErrorResponse)
+                }.getOrNull()
+                val code = when (status) { 401 -> KintoneErrorCode.KINTONE_AUTH_FAILED; 403 -> KintoneErrorCode.KINTONE_PERMISSION_DENIED; 404 -> KintoneErrorCode.KINTONE_APP_NOT_FOUND; 429 -> KintoneErrorCode.KINTONE_RATE_LIMITED; in 500..599 -> KintoneErrorCode.KINTONE_SERVER_ERROR; else -> KintoneErrorCode.KINTONE_BATCH_FAILED }
+                throw KintoneException(code, httpStatus = status, kintoneErrorCode = remote?.first, validationErrors = remote?.second.orEmpty())
+            }
+        } catch (e: KintoneException) { throw e } catch (e: SocketTimeoutException) { throw KintoneException(KintoneErrorCode.KINTONE_TIMEOUT, e) } catch (e: SSLException) { throw KintoneException(KintoneErrorCode.KINTONE_TLS_ERROR, e) } catch (e: IOException) { throw KintoneException(KintoneErrorCode.KINTONE_NETWORK_UNAVAILABLE, e) } finally { connection.disconnect() }
+    }
+
+    internal fun parseErrorResponse(body: String): Pair<String?, List<KintoneValidationError>> {
+        val root = json.parseToJsonElement(body).jsonObject
+        val errors = (root["errors"] as? JsonObject).orEmpty().mapNotNull { (path, detail) ->
+            val messages = ((detail as? JsonObject)?.get("messages") as? JsonArray)
+                ?.mapNotNull { it.jsonPrimitive.contentOrNull }.orEmpty()
+            KintoneValidationError(path, messages).takeIf { messages.isNotEmpty() }
+        }
+        return root["code"]?.jsonPrimitive?.contentOrNull to errors
     }
 
     internal fun parseFields(body: String): Map<String, KintoneFieldProperty> = try {
@@ -118,6 +151,8 @@ class HttpsKintoneApi : KintoneApi {
 
     private fun JsonObject.string(name: String) = get(name)?.jsonPrimitive?.contentOrNull
     private fun JsonObject.boolean(name: String) = get(name)?.jsonPrimitive?.let { it.booleanOrNull ?: it.contentOrNull?.toBooleanStrictOrNull() }
+
+    internal companion object { const val UPSERT_METHOD = "PUT"; const val UPSERT_PATH = "/k/v1/records.json" }
 }
 
 object KintoneFieldSchemaV1 {
@@ -132,6 +167,10 @@ object KintoneFieldSchemaV1 {
         "メモ" to "MULTI_LINE_TEXT", "アプリ更新日時" to "DATETIME", "削除状態" to "CHECK_BOX",
     )
     private const val PHOTO_CODE = "写真"
+    private val systemFieldCodes = setOf(
+        "\$id", "\$revision", "レコード番号", "作成者", "更新者", "作成日時", "更新日時",
+        "ステータス", "作業者", "カテゴリー",
+    )
 
     fun validate(fields: Map<String, KintoneFieldProperty>): KintoneVerification {
         requiredFields.forEach { (code, type) ->
@@ -150,9 +189,10 @@ object KintoneFieldSchemaV1 {
             val photo = fields[PHOTO_CODE]
             if (photo == null) add("写真同期は利用できません")
             else if (photo.code != PHOTO_CODE || photo.type != "FILE") mismatch(KintoneErrorCode.KINTONE_FIELD_TYPE_MISMATCH)
-            if (fields.keys.any { it !in requiredFields && it != PHOTO_CODE }) add("未使用の追加フィールドがあります")
         }
-        return KintoneVerification(fields.mapValues { it.value.type }, warnings)
+        val hasUserFields = fields.keys.any { it !in requiredFields && it != PHOTO_CODE && it !in systemFieldCodes }
+        val information = if (hasUserFields) listOf("連携対象外の追加フィールドがあります。同期には影響しません。") else emptyList()
+        return KintoneVerification(fields.mapValues { it.value.type }, warnings, information)
     }
 
     private fun mismatch(code: KintoneErrorCode): Nothing = throw KintoneException(code)
