@@ -36,7 +36,7 @@ class HomeRegisteredBadgeTest {
         val badge = rule.onNodeWithTag("home_registered_$bssid", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         assert(badge.top >= ssid.bottom)
         rule.onNodeWithTag("home_access_point_$bssid").assertContentDescriptionEquals(
-            "登録済み、SSID ${accessPoint.ssid}、信号強度 -39 デシベルミリワット",
+            "登録済み、SSID ${accessPoint.ssid}、信号強度 -39 デシベルミリワット、非常に良好、推定距離約1～3m、登録名 DIRECT-E3-EPSON、グループ 東大阪本社",
         )
     }
 }

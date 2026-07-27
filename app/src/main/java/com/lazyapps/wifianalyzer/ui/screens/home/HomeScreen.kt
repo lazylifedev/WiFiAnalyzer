@@ -145,24 +145,25 @@ private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Un
         SignalQuality.FAIR -> MaterialTheme.colorScheme.tertiary
         SignalQuality.WEAK -> MaterialTheme.colorScheme.error
     }
-    val registeredDescription = if (accessPoint.isRegistered) "登録済み、" else ""
+    val registeredDescription = if (accessPoint.isRegistered) "登録済み" else "未登録"
+    val registeredNameDescription = accessPoint.registeredDeviceName?.let { "、登録名 $it" }.orEmpty()
+    val groupDescription = accessPoint.registeredGroupName?.let { "、グループ $it" }.orEmpty()
+    val distanceDescription = accessPoint.distanceRange.displayLabel(feet)
     Card(
         modifier = modifier.fillMaxWidth()
             .testTag("home_access_point_${accessPoint.bssid}")
-            .semantics { contentDescription = "${registeredDescription}SSID ${accessPoint.ssid}、信号強度 ${accessPoint.rssi} デシベルミリワット" }
+            .semantics { contentDescription = "$registeredDescription、SSID ${accessPoint.ssid}、信号強度 ${accessPoint.rssi} デシベルミリワット、${accessPoint.signalQuality.label}、推定距離$distanceDescription$registeredNameDescription$groupDescription" }
             .clickable { onClick(accessPoint.bssid) },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = CardDefaults.outlinedCardBorder(),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(AppSpacing.medium),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(AppSpacing.medium),
-        ) {
-            Icon(Icons.Rounded.Wifi, contentDescription = null, tint = signalColor)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(accessPoint.ssid, modifier = Modifier.testTag("home_ssid_${accessPoint.bssid}"), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-                if (accessPoint.isRegistered) RegisteredBadge(Modifier.testTag("home_registered_${accessPoint.bssid}").clearAndSetSemantics { })
+        Column(Modifier.fillMaxWidth().padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppSpacing.medium)) {
+                Icon(Icons.Rounded.Wifi, contentDescription = null, tint = signalColor)
+                Text(accessPoint.ssid, modifier = Modifier.weight(1f).testTag("home_ssid_${accessPoint.bssid}"), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(AppSpacing.medium)) {
+                Column(Modifier.weight(1f).padding(start = 40.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 accessPoint.registeredDeviceName?.let { name ->
                     Text("登録名: $name", maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                     Text("グループ: ${accessPoint.registeredGroupName ?: "未分類"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
@@ -183,11 +184,13 @@ private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Un
                 } else {
                     TextButton(onClick = { onRegister(accessPoint) }) { Text("機器として登録") }
                 }
-            }
-            Column(horizontalAlignment = Alignment.End) {
+                }
+                Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(top = AppSpacing.small)) {
+                if (accessPoint.isRegistered) RegisteredBadge(Modifier.testTag("home_registered_${accessPoint.bssid}").clearAndSetSemantics { })
                 Text("${accessPoint.rssi} dBm", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = signalColor)
                 Text(accessPoint.signalQuality.label, style = MaterialTheme.typography.labelSmall, color = signalColor)
                 Text(stringResource(R.string.estimated_prefix, accessPoint.distanceRange.displayLabel(feet)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }
