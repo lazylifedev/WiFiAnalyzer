@@ -28,6 +28,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -83,7 +87,7 @@ fun HomeScreen(
         RefreshProgress(state)
         PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
         LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().testTag("home_access_point_list"),
         contentPadding = PaddingValues(bottom = AppSpacing.xLarge),
         verticalArrangement = Arrangement.spacedBy(AppSpacing.small),
     ) {
@@ -141,8 +145,12 @@ private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Un
         SignalQuality.FAIR -> MaterialTheme.colorScheme.tertiary
         SignalQuality.WEAK -> MaterialTheme.colorScheme.error
     }
+    val registeredDescription = if (accessPoint.isRegistered) "登録済み、" else ""
     Card(
-        modifier = modifier.fillMaxWidth().clickable { onClick(accessPoint.bssid) },
+        modifier = modifier.fillMaxWidth()
+            .testTag("home_access_point_${accessPoint.bssid}")
+            .semantics { contentDescription = "${registeredDescription}SSID ${accessPoint.ssid}、信号強度 ${accessPoint.rssi} デシベルミリワット" }
+            .clickable { onClick(accessPoint.bssid) },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = CardDefaults.outlinedCardBorder(),
     ) {
@@ -153,10 +161,8 @@ private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Un
         ) {
             Icon(Icons.Rounded.Wifi, contentDescription = null, tint = signalColor)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-                    Text(accessPoint.ssid, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-                    if (accessPoint.isRegistered) RegisteredBadge()
-                }
+                Text(accessPoint.ssid, modifier = Modifier.testTag("home_ssid_${accessPoint.bssid}"), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+                if (accessPoint.isRegistered) RegisteredBadge(Modifier.testTag("home_registered_${accessPoint.bssid}").clearAndSetSemantics { })
                 accessPoint.registeredDeviceName?.let { name ->
                     Text("登録名: $name", maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                     Text("グループ: ${accessPoint.registeredGroupName ?: "未分類"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
