@@ -385,6 +385,7 @@ fun WifiAnalyzerApp(
                         onAutoSyncChange = kintoneViewModel::setAutoSync,
                         onPhotoAutoSyncChange = kintoneViewModel::setPhotoAutoSync,
                         onWorkspaceSelected = { option -> kintoneViewModel.selectWorkspace(option.id, option.name) },
+                        onManualWorkspacesSelected = kintoneViewModel::setManualSyncWorkspaces,
                         onCancelSync = kintoneViewModel::cancel,
                     )
                 }

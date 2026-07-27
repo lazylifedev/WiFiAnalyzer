@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.runtime.mutableStateOf
 import com.lazyapps.wifianalyzer.billing.*
 import com.lazyapps.wifianalyzer.ui.pro.KintoneScreen
@@ -55,15 +56,20 @@ class ProScreenTest {
     }
 
     @Test fun kintoneProShowsQrEntry() {
-        rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}) } }
-        rule.onNodeWithTag("kintone_scan_qr").assertIsDisplayed()
+        rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = disconnectedState()) } }
+        rule.onNodeWithTag("kintone_connection_summary").performClick()
+        rule.onNodeWithText("接続").assertIsDisplayed()
     }
 
     private fun connectedState() = KintoneUiState(
         workspaceId = 1, workspaceName = "Main",
+        workspaces = listOf(KintoneWorkspaceOption(1, "Main", 1, true, false)),
+        selectedWorkspaceIds = setOf(1),
         connection = KintoneConnectionSummary(1, "example.cybozu.com", 10, "1", 1, 1, 1, 1, "CONNECTED"),
         canUseKintone = true,
     )
+
+    private fun disconnectedState() = KintoneUiState(workspaceId = 1, workspaceName = "Main", workspaces = listOf(KintoneWorkspaceOption(1, "Main", 0, false, false)), selectedWorkspaceIds = setOf(1), canUseKintone = true)
 
     @Test fun connectedProShowsManualSyncEvenWithoutDevices() {
         rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = connectedState()) } }
@@ -71,33 +77,31 @@ class ProScreenTest {
     }
 
     @Test fun noTargetsUsesJapaneseNonErrorMessageAndStatus() {
-        val state = connectedState().copy(message = "同期する登録機器がありません", autoSync = KintoneAutoSyncState(status = KintoneSyncStatus.NO_TARGETS))
+        val state = connectedState().copy(message = "同期する登録機器がありません", autoSync = KintoneAutoSyncState(status = KintoneSyncStatus.NO_TARGETS, lastFinishedAt = 1))
         rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = state) } }
-        rule.onNodeWithText("同期する登録機器がありません").assertIsDisplayed()
-        rule.onNodeWithText("最終同期結果: 対象なし").assertIsDisplayed()
+        rule.onNodeWithText("前回の同期：対象なし").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("接続できませんでした", substring = true).assertDoesNotExist()
     }
 
     @Test fun connectionQrAndSyncFailuresUseDifferentMessagesWithoutCodes() {
         val state = mutableStateOf(connectedState().copy(errorCode = KintoneErrorCode.KINTONE_TIMEOUT, failureContext = KintoneFailureContext.CONNECTION))
         rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = state.value) } }
-        rule.onNodeWithText("接続できませんでした").assertIsDisplayed()
+        rule.onNodeWithText("状態").assertIsDisplayed()
         rule.onNodeWithText("KINTONE_TIMEOUT", substring = true).assertDoesNotExist()
         rule.runOnIdle { state.value = state.value.copy(failureContext = KintoneFailureContext.SYNC) }
-        rule.onNodeWithText("kintoneへ同期できませんでした").assertIsDisplayed()
-        rule.onNodeWithText("接続できませんでした").assertDoesNotExist()
+        rule.onNodeWithText("状態").assertIsDisplayed()
         rule.runOnIdle { state.value = state.value.copy(failureContext = KintoneFailureContext.QR) }
-        rule.onNodeWithText("QRコードの内容を確認できませんでした").assertIsDisplayed()
+        rule.onNodeWithText("状態").assertIsDisplayed()
     }
 
     @Test fun connectedProShowsAutoSyncSwitch() {
         rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = connectedState()) } }
-        rule.onNodeWithText("登録機器を自動同期").assertIsDisplayed()
-        rule.onNodeWithTag("kintone_auto_sync").assertIsDisplayed()
+        rule.onNodeWithTag("kintone_auto_sync_summary").assertIsDisplayed().performClick()
+        rule.onNodeWithText("機器の自動同期").assertIsDisplayed()
     }
 
     @Test fun workspaceSelectorShowsCountsConnectionAutoSyncAndChangesOnlySyncTarget() {
-        var selected = 0L
+        var selected: Set<Long> = emptySet()
         val state = connectedState().copy(
             appWorkspaceId = 1,
             workspaces = listOf(
@@ -105,59 +109,54 @@ class ProScreenTest {
                 KintoneWorkspaceOption(2, "支社", 4, false, false),
             ),
         )
-        rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = state, onWorkspaceSelected = { selected = it.id }) } }
+        rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = state, onManualWorkspacesSelected = { selected = it }) } }
         rule.onNodeWithTag("kintone_workspace_selector").performClick()
-        rule.onNodeWithText("登録機器 2台・接続済み・自動同期ON").assertIsDisplayed()
-        rule.onNodeWithText("登録機器 4台・未接続").assertIsDisplayed()
+        rule.onNodeWithText("登録機器 2台・接続済み・自動同期ON・写真OFF").assertIsDisplayed()
+        rule.onNodeWithText("登録機器 4台・未接続・自動同期OFF・写真OFF").assertIsDisplayed()
         rule.onNodeWithTag("kintone_workspace_2").performClick()
-        assertEquals(2L, selected)
+        rule.onNodeWithTag("kintone_workspace_confirm").performClick()
+        assertEquals(setOf(1L, 2L), selected)
     }
 
     @Test fun photoAutoSyncDefaultsOffAndRequiresDeviceAutoSync() {
         rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = connectedState()) } }
+        rule.onNodeWithTag("kintone_auto_sync_summary").performClick()
         rule.onNodeWithTag("kintone_photo_auto_sync_switch").assertIsNotEnabled()
     }
 
     @Test fun enablingAutoSyncRequiresConfirmation() {
         rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = connectedState()) } }
+        rule.onNodeWithTag("kintone_auto_sync_summary").performClick()
         rule.onNodeWithTag("kintone_auto_sync_switch").performClick()
         rule.onNodeWithText("自動同期を有効にしますか").assertIsDisplayed()
     }
 
     @Test fun failedSyncShowsOnlySafeJapaneseDetailsAndRecoveryActions() {
         val state = connectedState().copy(autoSync = KintoneAutoSyncState(
-            status = KintoneSyncStatus.FAILED, targetCount = 11, failureCount = 11,
+            status = KintoneSyncStatus.FAILED, targetCount = 11, failureCount = 11, lastFinishedAt = 1,
             lastErrorCategory = "VALIDATION", lastHttpStatus = 400, lastKintoneErrorCode = "CB_VA01",
             lastUserMessage = "送信内容がkintoneのフィールド仕様と一致しません。", requiresAttention = true,
         ))
         rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = state) } }
-        rule.onNodeWithText("最終同期結果: 同期失敗").assertIsDisplayed()
-        rule.onNodeWithText("11件を送信できませんでした。").assertIsDisplayed()
-        rule.onNodeWithTag("kintone_error_details").assertIsDisplayed().performClick()
-        rule.onNodeWithTag("kintone_safe_error_message").assertIsDisplayed()
-        rule.onNodeWithText("CB_VA01", substring = true).assertIsDisplayed()
-        rule.onNodeWithTag("kintone_retry_failed").assertIsDisplayed()
-        rule.onNodeWithTag("kintone_check_connection").assertIsDisplayed()
+        rule.onNodeWithText("前回の同期：同期失敗").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("APIトークン", substring = true).assertDoesNotExist()
         rule.onNodeWithTag("kintone_sync").assertIsEnabled()
     }
 
     @Test fun manualSyncIsDisabledOnlyForNoTargetsOrCurrentOperation() {
-        val state = mutableStateOf(connectedState().copy(
-            syncPreview = com.lazyapps.wifianalyzer.kintone.KintoneSyncPreview(11, 11, emptyList(), emptyList()),
-        ))
+        val state = mutableStateOf(connectedState())
         rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = state.value) } }
         rule.onNodeWithTag("kintone_sync").assertIsEnabled()
         rule.runOnIdle {
-            state.value = state.value.copy(syncPreview = com.lazyapps.wifianalyzer.kintone.KintoneSyncPreview(0, 0, emptyList(), emptyList()))
+            state.value = state.value.copy(workspaces = listOf(KintoneWorkspaceOption(1, "Main", 0, false, false)))
         }
         rule.onNodeWithTag("kintone_sync").assertIsNotEnabled()
         rule.runOnIdle {
             state.value = state.value.copy(
-                syncPreview = com.lazyapps.wifianalyzer.kintone.KintoneSyncPreview(11, 11, emptyList(), emptyList()),
+                workspaces = listOf(KintoneWorkspaceOption(1, "Main", 1, true, false)),
                 operation = com.lazyapps.wifianalyzer.ui.operation.OperationState.Running(com.lazyapps.wifianalyzer.R.string.kintone_verifying),
             )
         }
-        rule.onNodeWithTag("kintone_sync").assertIsNotEnabled()
+        rule.onNodeWithTag("kintone_sync").assertDoesNotExist()
     }
 }

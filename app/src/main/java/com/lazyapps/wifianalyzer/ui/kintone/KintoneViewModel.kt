@@ -21,6 +21,9 @@ import com.lazyapps.wifianalyzer.kintone.KintoneSyncLock
 import com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus
 import com.lazyapps.wifianalyzer.kintone.KintoneSyncTrigger
 import com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceOption
+import com.lazyapps.wifianalyzer.kintone.KintoneManualSyncSelectionStore
+import com.lazyapps.wifianalyzer.kintone.KintoneMultiSyncResult
+import com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncResult
 import com.lazyapps.wifianalyzer.kintone.WorkspaceUuid
 import com.lazyapps.wifianalyzer.ui.operation.OperationProgress
 import com.lazyapps.wifianalyzer.ui.operation.OperationError
@@ -54,6 +57,9 @@ data class KintoneUiState(
     val errorCode: KintoneErrorCode? = null,
     val syncPreview: KintoneSyncPreview? = null,
     val syncResult: KintoneSyncResult? = null,
+    val selectedWorkspaceIds: Set<Long> = emptySet(),
+    val multiSyncResult: KintoneMultiSyncResult? = null,
+    val syncingWorkspaceIndex: Int = 0,
     val autoSync: KintoneAutoSyncState = KintoneAutoSyncState(),
     val canUseKintone: Boolean = false,
     val message: String? = null,
@@ -71,12 +77,14 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
     private var eventId = 1L
     private val autoSyncStore = KintoneAutoSyncStore(application)
     private val autoSyncScheduler = KintoneAutoSyncScheduler(application)
+    private val manualSelectionStore = KintoneManualSyncSelectionStore(application)
 
     init {
         viewModelScope.launch {
             while (true) {
                 val id = mutable.value.workspaceId
                 val options = repository.workspaceOptions(autoSyncStore)
+                val selected = manualSelectionStore.reconcile(options.map { it.id }, mutable.value.appWorkspaceId.takeIf { it > 0 } ?: id)
                 if (id > 0 && options.none { it.id == id }) {
                     options.firstOrNull()?.let { selectWorkspace(it.id, it.name) }
                 } else if (id > 0) {
@@ -84,9 +92,10 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
                         workspaceName = options.firstOrNull { it.id == id }?.name ?: mutable.value.workspaceName,
                         autoSync = autoSyncStore.read(WorkspaceUuid.fromId(id)),
                         workspaces = options,
+                        selectedWorkspaceIds = selected,
                     )
                 } else {
-                    mutable.value = mutable.value.copy(workspaces = options)
+                    mutable.value = mutable.value.copy(workspaces = options, selectedWorkspaceIds = selected)
                 }
                 delay(1_000)
             }
@@ -106,11 +115,20 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
             workspaceName = name,
             appWorkspaceId = if (fromAppSelection) id else mutable.value.appWorkspaceId,
             workspaces = mutable.value.workspaces,
+            selectedWorkspaceIds = mutable.value.selectedWorkspaceIds,
             canUseKintone = mutable.value.canUseKintone,
             autoSync = autoSyncStore.read(WorkspaceUuid.fromId(id)),
         )
         observeJob?.cancel()
         observeJob = viewModelScope.launch { repository.observe(id).collect { mutable.value = mutable.value.copy(connection = it) } }
+    }
+
+    fun setManualSyncWorkspaces(ids: Set<Long>) {
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            val ordered = manualSelectionStore.write(ids, mutable.value.workspaces.map { it.id })
+            mutable.value = mutable.value.copy(selectedWorkspaceIds = ordered, syncPreview = null, multiSyncResult = null)
+        }
     }
 
     fun acceptQr(raw: String, workspaceId: Long, workspaceName: String) {
@@ -157,7 +175,7 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
         mutable.value = mutable.value.copy(operation = OperationState.Success(R.string.kintone_disconnected, eventId++), pending = null, errorCode = null)
     }
 
-    fun sync() = launchOperation(KintoneFailureContext.SYNC) {
+    private fun legacySingleWorkspaceSync() = launchOperation(KintoneFailureContext.SYNC) {
         mutable.value = mutable.value.copy(message = "データ確認中")
         val records = repository.buildSyncRecordsForConnection(mutable.value.workspaceId)
         if (records.isEmpty()) {
@@ -213,6 +231,59 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
         mutable.value = mutable.value.copy(message = "完了", syncResult = result, operation = OperationState.Success(R.string.kintone_connected, eventId++))
     }
 
+    fun sync() = launchOperation(KintoneFailureContext.SYNC) {
+        val selected = mutable.value.workspaces.filter { it.id in mutable.value.selectedWorkspaceIds }
+        val results = mutableListOf<KintoneWorkspaceSyncResult>()
+        selected.forEachIndexed { index, option ->
+            mutable.value = mutable.value.copy(syncingWorkspaceIndex = index + 1, message = "同期中 ${index + 1}/${selected.size}ワークスペース")
+            val uuid = WorkspaceUuid.fromId(option.id)
+            if (!option.connected) {
+                results += KintoneWorkspaceSyncResult(option.id, uuid, option.name, com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncStatus.NOT_CONNECTED)
+                return@forEachIndexed
+            }
+            val records = try { repository.buildSyncRecordsForConnection(option.id) } catch (e: KintoneException) {
+                results += KintoneWorkspaceSyncResult(option.id, uuid, option.name, com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncStatus.FAILED, safeError = e.userMessage)
+                return@forEachIndexed
+            }
+            if (records.isEmpty()) {
+                results += KintoneWorkspaceSyncResult(option.id, uuid, option.name, com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncStatus.NO_TARGETS)
+                persistManualResult(uuid, null)
+                return@forEachIndexed
+            }
+            val mutex = KintoneSyncLock.tryAcquire(uuid)
+            if (mutex == null) {
+                results += KintoneWorkspaceSyncResult(option.id, uuid, option.name, com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncStatus.FAILED, safeError = "別の同期処理が実行中です")
+                return@forEachIndexed
+            }
+            try {
+                val result = repository.sync(option.id, records, includePhotos = true) { stage, current, total ->
+                    mutable.value = mutable.value.copy(message = "$stage（${index + 1}/${selected.size}ワークスペース）", operation = OperationState.Running(R.string.kintone_verifying, progress = OperationProgress.Count(current, total.coerceAtLeast(1)), cancellable = true))
+                }
+                val status = when { result.failed == 0 -> com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncStatus.SUCCESS; result.succeeded > 0 -> com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncStatus.PARTIAL; else -> com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncStatus.FAILED }
+                results += KintoneWorkspaceSyncResult(option.id, uuid, option.name, status, result)
+                persistManualResult(uuid, result)
+            } catch (e: KintoneException) {
+                results += KintoneWorkspaceSyncResult(option.id, uuid, option.name, com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncStatus.FAILED, safeError = e.userMessage)
+            } finally { KintoneSyncLock.release(uuid, mutex) }
+        }
+        val overall = com.lazyapps.wifianalyzer.kintone.aggregateMultiSyncStatus(results)
+        mutable.value = mutable.value.copy(message = null, multiSyncResult = KintoneMultiSyncResult(overall, results), operation = OperationState.Success(R.string.kintone_connected, eventId++))
+    }
+
+    private fun persistManualResult(uuid: String, result: KintoneSyncResult?) {
+        val failure = result?.batches?.firstOrNull { it.error != null }
+        autoSyncStore.write(uuid, autoSyncStore.read(uuid).copy(
+            lastStartedAt = System.currentTimeMillis(), lastFinishedAt = System.currentTimeMillis(),
+            status = when { result == null -> KintoneSyncStatus.NO_TARGETS; result.failed == 0 -> KintoneSyncStatus.SUCCESS; result.succeeded > 0 -> KintoneSyncStatus.PARTIAL; else -> KintoneSyncStatus.FAILED },
+            trigger = KintoneSyncTrigger.MANUAL, targetCount = result?.total ?: 0, successCount = result?.succeeded ?: 0,
+            failureCount = result?.failed ?: 0, skippedCount = result?.skipped ?: 0, unsentCount = (result?.failed ?: 0) + (result?.skipped ?: 0),
+            partiallyCompleted = result != null && result.failed > 0 && result.succeeded > 0,
+            lastErrorCategory = failure?.errorCategory?.name, lastHttpStatus = failure?.httpStatus,
+            lastKintoneErrorCode = failure?.kintoneErrorCode, lastUserMessage = failure?.userMessage,
+            failedAt = if (failure != null) System.currentTimeMillis() else 0, requiresAttention = failure != null,
+        ))
+    }
+
     fun setAutoSync(enabled: Boolean) {
         val state = mutable.value
         if (state.workspaceId <= 0 || state.connection == null) return
@@ -240,7 +311,18 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
             } catch (e: KintoneException) {
                 fail(e.code, context)
             } catch (e: CancellationException) {
-                mutable.value = mutable.value.copy(operation = OperationState.Idle)
+                if (context == KintoneFailureContext.SYNC) {
+                    val completed = mutable.value.multiSyncResult?.workspaces.orEmpty()
+                    val completedIds = completed.mapTo(mutableSetOf()) { it.workspaceId }
+                    val cancelled = mutable.value.workspaces.filter { it.id in mutable.value.selectedWorkspaceIds && it.id !in completedIds }.map {
+                        KintoneWorkspaceSyncResult(it.id, WorkspaceUuid.fromId(it.id), it.name, com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncStatus.CANCELLED)
+                    }
+                    mutable.value = mutable.value.copy(
+                        operation = OperationState.Idle,
+                        message = null,
+                        multiSyncResult = KintoneMultiSyncResult(com.lazyapps.wifianalyzer.kintone.KintoneMultiSyncStatus.CANCELLED, completed + cancelled),
+                    )
+                } else mutable.value = mutable.value.copy(operation = OperationState.Idle)
                 throw e
             } catch (_: Exception) {
                 fail(KintoneErrorCode.KINTONE_BATCH_FAILED, context)

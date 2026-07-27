@@ -125,8 +125,40 @@ data class KintoneVerification(
 )
 data class KintoneWorkspaceOption(
     val id: Long, val name: String, val deviceCount: Int,
-    val connected: Boolean, val autoSyncEnabled: Boolean,
+    val connected: Boolean, val autoSyncEnabled: Boolean, val photoAutoSyncEnabled: Boolean = false,
 )
+
+enum class KintoneWorkspaceSyncStatus { SUCCESS, PARTIAL, FAILED, NOT_CONNECTED, NO_TARGETS, CANCELLED }
+
+data class KintoneWorkspaceSyncResult(
+    val workspaceId: Long, val workspaceUuid: String, val workspaceName: String,
+    val status: KintoneWorkspaceSyncStatus, val result: KintoneSyncResult? = null,
+    val safeError: String? = null,
+)
+
+enum class KintoneMultiSyncStatus { SUCCESS, PARTIAL, FAILED, NO_TARGETS, CANCELLED }
+
+data class KintoneMultiSyncResult(
+    val status: KintoneMultiSyncStatus, val workspaces: List<KintoneWorkspaceSyncResult>,
+) {
+    val totalDevices get() = workspaces.sumOf { it.result?.total ?: 0 }
+    val succeededDevices get() = workspaces.sumOf { it.result?.succeeded ?: 0 }
+    val failedDevices get() = workspaces.sumOf { it.result?.failed ?: 0 }
+}
+
+fun aggregateMultiSyncStatus(results: List<KintoneWorkspaceSyncResult>): KintoneMultiSyncStatus {
+    if (results.isEmpty()) return KintoneMultiSyncStatus.NO_TARGETS
+    val completed = results.count { it.status == KintoneWorkspaceSyncStatus.SUCCESS }
+    val noTargets = results.count { it.status == KintoneWorkspaceSyncStatus.NO_TARGETS }
+    val failed = results.count { it.status in setOf(KintoneWorkspaceSyncStatus.FAILED, KintoneWorkspaceSyncStatus.PARTIAL, KintoneWorkspaceSyncStatus.NOT_CONNECTED) }
+    return when {
+        results.any { it.status == KintoneWorkspaceSyncStatus.CANCELLED } -> KintoneMultiSyncStatus.CANCELLED
+        failed == 0 && completed > 0 -> KintoneMultiSyncStatus.SUCCESS
+        failed == 0 && noTargets == results.size -> KintoneMultiSyncStatus.NO_TARGETS
+        completed > 0 || noTargets > 0 -> KintoneMultiSyncStatus.PARTIAL
+        else -> KintoneMultiSyncStatus.FAILED
+    }
+}
 
 data class KintoneFieldProperty(
     val code: String,

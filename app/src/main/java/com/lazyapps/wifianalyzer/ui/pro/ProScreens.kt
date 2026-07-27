@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
@@ -25,6 +27,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,16 +98,32 @@ fun KintoneScreen(
     onAutoSyncChange: (Boolean) -> Unit = {},
     onPhotoAutoSyncChange: (Boolean) -> Unit = {},
     onWorkspaceSelected: (KintoneWorkspaceOption) -> Unit = {},
+    onManualWorkspacesSelected: (Set<Long>) -> Unit = {},
 ) {
     val confirmDisconnect = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val confirmAutoSync = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val showWorkspaceSelector = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val workspaceDraft = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Set<Long>>(emptySet()) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(AppSpacing.large), verticalArrangement = Arrangement.spacedBy(AppSpacing.large)) {
         Header("kintone連携", onBack)
         if (!access.canUseKintone) {
             Text("Pro版で利用できます。", style = MaterialTheme.typography.titleLarge)
             Button(onClick = onOpenPro, modifier = Modifier.fillMaxWidth().testTag("kintone_open_pro")) { Text("Pro版について") }
         } else {
+            KintoneDashboard(
+                state = state,
+                onChangeTargets = { workspaceDraft.value = state.selectedWorkspaceIds; showWorkspaceSelector.value = true },
+                onSync = onSync,
+                onCancelSync = onCancelSync,
+                onWorkspaceSelected = onWorkspaceSelected,
+                onScanQr = onScanQr,
+                onVerify = onVerify,
+                onDisconnect = { confirmDisconnect.value = true },
+                onAutoSyncChange = onAutoSyncChange,
+                onPhotoAutoSyncChange = onPhotoAutoSyncChange,
+                onConfirmAutoSync = { confirmAutoSync.value = true },
+            )
+            return@Column
             Text("同期対象ワークスペース", style = MaterialTheme.typography.titleMedium)
             OutlinedButton(onClick = { showWorkspaceSelector.value = true }, modifier = Modifier.fillMaxWidth().testTag("kintone_workspace_selector")) { Text("${state.workspaceName} ▼") }
             Text("この画面の同期・接続操作は、選択したワークスペースに対して行われます。", style = MaterialTheme.typography.bodySmall)
@@ -164,17 +183,22 @@ fun KintoneScreen(
         onDismissRequest = { showWorkspaceSelector.value = false },
         title = { Text("同期対象ワークスペース") },
         text = { Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+            TextButton(onClick = { workspaceDraft.value = state.workspaces.mapTo(linkedSetOf()) { it.id } }) { Text("すべて選択") }
             state.workspaces.forEach { option ->
-                Row(Modifier.fillMaxWidth().clickable { onWorkspaceSelected(option); showWorkspaceSelector.value = false }.testTag("kintone_workspace_${option.id}"), verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(selected = option.id == state.workspaceId, onClick = { onWorkspaceSelected(option); showWorkspaceSelector.value = false })
+                val checked = option.id in workspaceDraft.value
+                Row(Modifier.fillMaxWidth().clickable {
+                    workspaceDraft.value = if (checked) workspaceDraft.value - option.id else workspaceDraft.value + option.id
+                }.testTag("kintone_workspace_${option.id}"), verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = checked, onCheckedChange = { value -> workspaceDraft.value = if (value) workspaceDraft.value + option.id else workspaceDraft.value - option.id })
                     Column(Modifier.weight(1f)) {
                         Text(option.name)
-                        Text("登録機器 ${option.deviceCount}台・${if (option.connected) "接続済み" else "未接続"}${if (option.autoSyncEnabled) "・自動同期ON" else ""}", style = MaterialTheme.typography.bodySmall)
+                        Text("登録機器 ${option.deviceCount}台・${if (option.connected) "接続済み" else "未接続"}・自動同期${if (option.autoSyncEnabled) "ON" else "OFF"}・写真${if (option.photoAutoSyncEnabled) "ON" else "OFF"}", style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
         } },
-        confirmButton = { TextButton(onClick = { showWorkspaceSelector.value = false }) { Text("閉じる") } },
+        confirmButton = { Button(onClick = { onManualWorkspacesSelected(workspaceDraft.value); showWorkspaceSelector.value = false }, enabled = workspaceDraft.value.isNotEmpty(), modifier = Modifier.testTag("kintone_workspace_confirm")) { Text("選択を確定") } },
+        dismissButton = { TextButton(onClick = { showWorkspaceSelector.value = false }) { Text("キャンセル") } },
     )
     state.pending?.let { pending -> AlertDialog(
         onDismissRequest = onCancelPending,
@@ -209,6 +233,125 @@ fun KintoneScreen(
         confirmButton = { Button(onClick = { confirmAutoSync.value = false; onAutoSyncChange(true) }) { Text("有効にする") } },
         dismissButton = { TextButton(onClick = { confirmAutoSync.value = false }) { Text("キャンセル") } },
     )
+}
+
+@Composable
+private fun KintoneDashboard(
+    state: KintoneUiState,
+    onChangeTargets: () -> Unit,
+    onSync: () -> Unit,
+    onCancelSync: () -> Unit,
+    onWorkspaceSelected: (KintoneWorkspaceOption) -> Unit,
+    onScanQr: () -> Unit,
+    onVerify: () -> Unit,
+    onDisconnect: () -> Unit,
+    onAutoSyncChange: (Boolean) -> Unit,
+    onPhotoAutoSyncChange: (Boolean) -> Unit,
+    onConfirmAutoSync: () -> Unit,
+) {
+    val autoExpanded = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val connectionsExpanded = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val infoDialog = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    val selected = state.workspaces.filter { it.id in state.selectedWorkspaceIds }
+    val disconnected = selected.count { !it.connected }
+    val connectedSelected = selected.any { it.connected }
+    val totalDevices = selected.sumOf { it.deviceCount }
+
+    Card(Modifier.fillMaxWidth().clickable(onClick = onChangeTargets).testTag("kintone_workspace_selector")) {
+        Row(Modifier.fillMaxWidth().padding(AppSpacing.medium), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Column(Modifier.weight(1f)) {
+                Text("同期対象", style = MaterialTheme.typography.titleMedium)
+                Text(if (selected.size == 1) selected.first().name else "${selected.size}ワークスペース", style = MaterialTheme.typography.titleLarge)
+                Text("登録機器 ${totalDevices}台" + if (disconnected > 0) "・${disconnected}件未接続" else "", style = MaterialTheme.typography.bodySmall)
+            }
+            Text("変更", color = MaterialTheme.colorScheme.primary)
+        }
+    }
+
+    Card(Modifier.fillMaxWidth().testTag("kintone_status_summary")) {
+        Column(Modifier.padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+            Text("状態", style = MaterialTheme.typography.titleMedium)
+            val multi = state.multiSyncResult
+            if (multi != null) {
+                Text(when (multi.status) {
+                    com.lazyapps.wifianalyzer.kintone.KintoneMultiSyncStatus.SUCCESS -> "前回の同期は成功しました"
+                    com.lazyapps.wifianalyzer.kintone.KintoneMultiSyncStatus.PARTIAL -> "前回の同期は一部失敗しました"
+                    com.lazyapps.wifianalyzer.kintone.KintoneMultiSyncStatus.FAILED -> "前回の同期に失敗しました"
+                    com.lazyapps.wifianalyzer.kintone.KintoneMultiSyncStatus.NO_TARGETS -> "前回の同期は対象がありませんでした"
+                    com.lazyapps.wifianalyzer.kintone.KintoneMultiSyncStatus.CANCELLED -> "前回の同期をキャンセルしました"
+                }, style = MaterialTheme.typography.titleMedium)
+                Text("${multi.workspaces.size}ワークスペース・${multi.succeededDevices}台を同期", style = MaterialTheme.typography.bodySmall)
+                multi.workspaces.forEach { item ->
+                    Text("${workspaceResultMark(item.status)} ${item.workspaceName}  ${workspaceResultLabel(item)}", style = MaterialTheme.typography.bodySmall)
+                }
+            } else {
+                Text(if (state.autoSync.lastFinishedAt > 0) "前回の同期：${syncStatusLabel(state.autoSync.status)}" else "まだ同期していません")
+                if (state.autoSync.lastFinishedAt > 0) Text(DateFormat.getDateTimeInstance().format(Date(state.autoSync.lastFinishedAt)), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+
+    if (state.operation is OperationState.Running) {
+        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        Text(state.message ?: "同期中 ${state.syncingWorkspaceIndex}/${selected.size}ワークスペース")
+        TextButton(onClick = onCancelSync, modifier = Modifier.testTag("kintone_cancel_sync")) { Text("キャンセル") }
+    } else {
+        Button(onClick = onSync, enabled = connectedSelected && selected.isNotEmpty(), modifier = Modifier.fillMaxWidth().testTag("kintone_sync")) { Text("今すぐ同期") }
+        Text(if (connectedSelected) "選択中の${selected.size}ワークスペースを同期します" else "接続済みのワークスペースがありません", style = MaterialTheme.typography.bodySmall)
+    }
+
+    SummaryExpandableCard("自動同期", "${state.workspaces.count { it.autoSyncEnabled }}ワークスペースでON", autoExpanded.value, { autoExpanded.value = !autoExpanded.value }, "kintone_auto_sync_summary") {
+        state.workspaces.forEach { option ->
+            WorkspaceSettingRow(option, onWorkspaceSelected) {
+                if (option.id == state.workspaceId && option.connected) {
+                    Row(Modifier.fillMaxWidth().testTag("kintone_auto_sync"), horizontalArrangement = Arrangement.SpaceBetween) { Text("機器の自動同期"); Switch(state.autoSync.enabled, onCheckedChange = { if (it) onConfirmAutoSync() else onAutoSyncChange(false) }, modifier = Modifier.testTag("kintone_auto_sync_switch")) }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("写真の自動同期"); Switch(state.autoSync.photoEnabled, enabled = state.autoSync.enabled, onCheckedChange = onPhotoAutoSyncChange, modifier = Modifier.testTag("kintone_photo_auto_sync_switch")) }
+                }
+            }
+        }
+    }
+    SummaryExpandableCard("接続設定", "${state.workspaces.count { it.connected }}/${state.workspaces.size}ワークスペース接続済み", connectionsExpanded.value, { connectionsExpanded.value = !connectionsExpanded.value }, "kintone_connection_summary") {
+        state.workspaces.forEach { option ->
+            WorkspaceSettingRow(option, onWorkspaceSelected) {
+                if (option.id == state.workspaceId) Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+                    TextButton(onClick = onScanQr) { Text(if (option.connected) "再接続" else "接続") }
+                    if (option.connected) { TextButton(onClick = onVerify) { Text("接続確認") }; TextButton(onClick = onDisconnect) { Text("接続解除") } }
+                }
+            }
+        }
+    }
+    Card(Modifier.fillMaxWidth().clickable { infoDialog.value = "写真同期" }.testTag("kintone_photo_info")) { Row(Modifier.fillMaxWidth().padding(AppSpacing.medium), horizontalArrangement = Arrangement.SpaceBetween) { Text("写真同期について"); Text("確認", color = MaterialTheme.colorScheme.primary) } }
+    Card(Modifier.fillMaxWidth().clickable { infoDialog.value = "連携仕様" }.testTag("kintone_link_spec")) { Row(Modifier.fillMaxWidth().padding(AppSpacing.medium), horizontalArrangement = Arrangement.SpaceBetween) { Text("連携仕様"); Text("確認", color = MaterialTheme.colorScheme.primary) } }
+    infoDialog.value?.let { title -> AlertDialog(onDismissRequest = { infoDialog.value = null }, title = { Text(title) }, text = { Text(if (title == "写真同期") "Androidの並び順で同期します。キャプションとメイン写真設定は保存しません。Android側で写真を変更するとkintoneの写真を置き換えます。写真の自動同期は通信量が増え、kintone側で手動追加した写真が消える可能性があります。" else "複数BSSIDは主BSSIDのみ同期します。Androidで削除した機器のkintone反映は現在未対応です。") }, confirmButton = { TextButton(onClick = { infoDialog.value = null }) { Text("閉じる") } }) }
+}
+
+@Composable
+private fun SummaryExpandableCard(title: String, summary: String, expanded: Boolean, onToggle: () -> Unit, tag: String, content: @Composable () -> Unit) {
+    Card(Modifier.fillMaxWidth().testTag(tag)) { Column(Modifier.fillMaxWidth().padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+        Row(Modifier.fillMaxWidth().clickable(onClick = onToggle), horizontalArrangement = Arrangement.SpaceBetween) { Column { Text(title, style = MaterialTheme.typography.titleMedium); Text(summary, style = MaterialTheme.typography.bodySmall) }; Text(if (expanded) "閉じる" else "展開", color = MaterialTheme.colorScheme.primary) }
+        if (expanded) { HorizontalDivider(); content() }
+    } }
+}
+
+@Composable
+private fun WorkspaceSettingRow(option: KintoneWorkspaceOption, onSelect: (KintoneWorkspaceOption) -> Unit, content: @Composable () -> Unit) {
+    Column(Modifier.fillMaxWidth().clickable { onSelect(option) }.padding(vertical = AppSpacing.small)) { Text(option.name, style = MaterialTheme.typography.titleSmall); Text(if (option.connected) "接続済み" else "未接続", style = MaterialTheme.typography.bodySmall); content() }
+}
+
+private fun workspaceResultMark(status: com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncStatus) = when (status) {
+    com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncStatus.SUCCESS -> "✓"
+    com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncStatus.PARTIAL -> "△"
+    com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncStatus.FAILED -> "×"
+    else -> "－"
+}
+
+private fun workspaceResultLabel(item: com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncResult) = when (item.status) {
+    com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncStatus.SUCCESS -> "${item.result?.succeeded ?: 0}台成功"
+    com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncStatus.PARTIAL -> "${item.result?.succeeded ?: 0}台成功／${item.result?.failed ?: 0}台失敗"
+    com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncStatus.NOT_CONNECTED -> "未接続のためスキップ"
+    com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncStatus.NO_TARGETS -> "対象なし"
+    com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceSyncStatus.CANCELLED -> "キャンセル"
+    else -> "失敗"
 }
 
 @Composable

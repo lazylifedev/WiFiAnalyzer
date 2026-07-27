@@ -56,7 +56,8 @@ class KintoneRepository(
     suspend fun hasDuplicateTarget(workspaceId: Long, domain: String, appId: Long) = dao.countOtherKintoneConnections(domain, appId, workspaceId) > 0
 
     suspend fun workspaceOptions(autoSyncStore: KintoneAutoSyncStore): List<KintoneWorkspaceOption> = dao.getWorkspacesOnce().map { workspace ->
-        KintoneWorkspaceOption(workspace.id, workspace.name, dao.countDevices(workspace.id), dao.getKintoneConnection(workspace.id) != null, autoSyncStore.read(WorkspaceUuid.fromId(workspace.id)).enabled)
+        val auto = autoSyncStore.read(WorkspaceUuid.fromId(workspace.id))
+        KintoneWorkspaceOption(workspace.id, workspace.name, dao.countDevices(workspace.id), dao.getKintoneConnection(workspace.id) != null, auto.enabled, auto.photoEnabled)
     }
 
     suspend fun buildSyncRecords(workspaceId: Long): List<KintoneDeviceRecord> {
