@@ -15,6 +15,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class KintoneUpsertRequestTest {
+    @Test fun photoKeysAreIncludedInAndroidOrderWhenChanged() {
+        val record = record().copy(photoFileKeys = listOf("first", "second"))
+        val body = HttpsKintoneApi().buildUpsertBody(287, listOf(record)).toString()
+        assertTrue(body.contains("\"写真\":{\"value\":[{\"fileKey\":\"first\"},{\"fileKey\":\"second\"}]}"))
+    }
+
+    @Test fun emptyPhotoKeysExplicitlyClearAttachments() {
+        val body = HttpsKintoneApi().buildUpsertBody(287, listOf(record().copy(photoFileKeys = emptyList()))).toString()
+        assertTrue(body.contains("\"写真\":{\"value\":[]}"))
+    }
     private val api = HttpsKintoneApi()
     private fun record(index: Int = 1, updatedAt: String = "2026-07-25T00:00:00Z", deleted: Boolean = false) = KintoneDeviceRecord(
         deviceUuid = "00000000-0000-0000-0000-${index.toString().padStart(12, '0')}", workspaceUuid = "workspace", workspaceName = "管理",

@@ -1,6 +1,7 @@
 package com.lazyapps.wifianalyzer.kintone
 
 import java.io.IOException
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.SocketTimeoutException
 import java.net.URL
@@ -27,6 +28,8 @@ import com.lazyapps.wifianalyzer.BuildConfig
 interface KintoneApi {
     suspend fun verify(domain: String, appId: Long, token: CharArray): KintoneVerification
     suspend fun upsert(domain: String, appId: Long, token: CharArray, records: List<KintoneDeviceRecord>)
+    suspend fun uploadFile(domain: String, token: CharArray, file: File, fileName: String): String =
+        throw KintoneException(KintoneErrorCode.KINTONE_FILE_UPLOAD_FAILED)
 }
 
 class HttpsKintoneApi : KintoneApi {
@@ -57,6 +60,49 @@ class HttpsKintoneApi : KintoneApi {
         finally { token.fill('\u0000') }
     }
 
+    override suspend fun uploadFile(domain: String, token: CharArray, file: File, fileName: String): String = withContext(Dispatchers.IO) {
+        try {
+            if (!file.exists()) throw KintoneException(KintoneErrorCode.KINTONE_FILE_NOT_FOUND)
+            if (!file.isFile || !file.canRead()) throw KintoneException(KintoneErrorCode.KINTONE_FILE_UNREADABLE)
+            if (file.length() <= 0) throw KintoneException(KintoneErrorCode.KINTONE_FILE_INVALID)
+            val boundary = "----WifiAnalyzer${java.util.UUID.randomUUID().toString().replace("-", "")}"
+            val connection = (URL("https", domain, "/k/v1/file.json").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"; connectTimeout = 10_000; readTimeout = 60_000
+                instanceFollowRedirects = false; doOutput = true
+                setRequestProperty("X-Cybozu-API-Token", String(token))
+                setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+                setChunkedStreamingMode(64 * 1024)
+            }
+            try {
+                connection.outputStream.buffered().use { output ->
+                    output.write("--$boundary\r\n".toByteArray())
+                    output.write("Content-Disposition: form-data; name=\"file\"; filename=\"$fileName\"\r\n".toByteArray())
+                    output.write("Content-Type: image/jpeg\r\n\r\n".toByteArray())
+                    file.inputStream().buffered().use { it.copyTo(output, 64 * 1024) }
+                    output.write("\r\n--$boundary--\r\n".toByteArray())
+                }
+                val status = connection.responseCode
+                if (status in 300..399) throw KintoneException(KintoneErrorCode.KINTONE_FILE_UPLOAD_FAILED, httpStatus = status)
+                if (status !in 200..299) throw KintoneException(when (status) {
+                    401 -> KintoneErrorCode.KINTONE_AUTH_FAILED
+                    403 -> KintoneErrorCode.KINTONE_PERMISSION_DENIED
+                    413 -> KintoneErrorCode.KINTONE_FILE_TOO_LARGE
+                    429 -> KintoneErrorCode.KINTONE_RATE_LIMITED
+                    in 500..599 -> KintoneErrorCode.KINTONE_SERVER_ERROR
+                    else -> KintoneErrorCode.KINTONE_FILE_UPLOAD_FAILED
+                }, httpStatus = status)
+                val body = connection.inputStream.bufferedReader().use { it.readText().take(64 * 1024) }
+                json.parseToJsonElement(body).jsonObject["fileKey"]?.jsonPrimitive?.contentOrNull
+                    ?.takeIf { it.isNotBlank() }
+                    ?: throw KintoneException(KintoneErrorCode.KINTONE_FILE_RESPONSE_INVALID)
+            } finally { connection.disconnect() }
+        } catch (e: KintoneException) { throw e }
+        catch (e: SocketTimeoutException) { throw KintoneException(KintoneErrorCode.KINTONE_FILE_UPLOAD_TIMEOUT, e) }
+        catch (e: SSLException) { throw KintoneException(KintoneErrorCode.KINTONE_TLS_ERROR, e) }
+        catch (e: IOException) { throw KintoneException(KintoneErrorCode.KINTONE_NETWORK_UNAVAILABLE, e) }
+        finally { token.fill('\u0000') }
+    }
+
     internal fun buildUpsertBody(appId: Long, records: List<KintoneDeviceRecord>) = buildJsonObject {
             require(records.size <= KINTONE_RECORD_BATCH_SIZE)
             put("app", appId); put("upsert", true)
@@ -69,6 +115,7 @@ class HttpsKintoneApi : KintoneApi {
                     put("主BSSID", value(item.primaryBssid)); put("設置場所", value(item.location)); put("メモ", value(item.notes))
                     item.updatedAt.takeIf(::isUtcInstant)?.let { put("アプリ更新日時", value(it)) }
                     put("削除状態", buildJsonObject { put("value", buildJsonArray { if (item.deleted) add("削除済") }) })
+                    item.photoFileKeys?.let { keys -> put("写真", buildJsonObject { put("value", buildJsonArray { keys.forEach { key -> add(buildJsonObject { put("fileKey", key) }) } }) }) }
                 })
             }) } })
         }

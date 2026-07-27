@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.Button
@@ -23,6 +24,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.RadioButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +34,7 @@ import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import com.lazyapps.wifianalyzer.billing.ProEntitlementState
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 import com.lazyapps.wifianalyzer.ui.kintone.KintoneUiState
+import com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceOption
 import com.lazyapps.wifianalyzer.ui.operation.OperationState
 import java.text.DateFormat
 import java.util.Date
@@ -90,18 +93,34 @@ fun KintoneScreen(
     onSync: () -> Unit = {},
     onCancelSync: () -> Unit = {},
     onAutoSyncChange: (Boolean) -> Unit = {},
+    onPhotoAutoSyncChange: (Boolean) -> Unit = {},
+    onWorkspaceSelected: (KintoneWorkspaceOption) -> Unit = {},
 ) {
     val confirmDisconnect = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val confirmAutoSync = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    val showWorkspaceSelector = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(AppSpacing.large), verticalArrangement = Arrangement.spacedBy(AppSpacing.large)) {
         Header("kintone連携", onBack)
         if (!access.canUseKintone) {
             Text("Pro版で利用できます。", style = MaterialTheme.typography.titleLarge)
             Button(onClick = onOpenPro, modifier = Modifier.fillMaxWidth().testTag("kintone_open_pro")) { Text("Pro版について") }
         } else {
+            Text("同期対象ワークスペース", style = MaterialTheme.typography.titleMedium)
+            OutlinedButton(onClick = { showWorkspaceSelector.value = true }, modifier = Modifier.fillMaxWidth().testTag("kintone_workspace_selector")) { Text("${state.workspaceName} ▼") }
+            Text("この画面の同期・接続操作は、選択したワークスペースに対して行われます。", style = MaterialTheme.typography.bodySmall)
+            if (state.appWorkspaceId > 0 && state.appWorkspaceId != state.workspaceId) Text("アプリで現在使用中のワークスペースとは異なる同期対象を選択しています。", color = MaterialTheme.colorScheme.tertiary)
             Text(if (state.connection == null) "状態：未接続" else "状態：接続済み", style = MaterialTheme.typography.titleLarge)
+            state.errorCode?.let {
+                val text = when (state.failureContext) {
+                    com.lazyapps.wifianalyzer.ui.kintone.KintoneFailureContext.QR -> "QRコードの内容を確認できませんでした"
+                    com.lazyapps.wifianalyzer.ui.kintone.KintoneFailureContext.SYNC -> "kintoneへ同期できませんでした"
+                    else -> "接続できませんでした"
+                }
+                Text(text, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("kintone_error_message"))
+            }
+            state.message?.let { Text(it, modifier = Modifier.testTag("kintone_message")) }
             state.connection?.let { connection ->
-                KintoneAutoSyncSection(state, onSync, onVerify, onAutoSyncChange) { confirmAutoSync.value = true }
+                KintoneAutoSyncSection(state, onSync, onVerify, onAutoSyncChange, onPhotoAutoSyncChange) { confirmAutoSync.value = true }
                 Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
                     Text("ドメイン：${maskDomain(connection.domain)}")
                     Text("アプリID：${connection.appId}")
@@ -124,16 +143,7 @@ fun KintoneScreen(
                 }
                 if (running.cancellable) TextButton(onClick = onCancelSync, modifier = Modifier.testTag("kintone_cancel_sync")) { Text("キャンセル") }
             }
-            state.errorCode?.let {
-                val text = when (state.failureContext) {
-                    com.lazyapps.wifianalyzer.ui.kintone.KintoneFailureContext.QR -> "QRコードの内容を確認できませんでした"
-                    com.lazyapps.wifianalyzer.ui.kintone.KintoneFailureContext.SYNC -> "kintoneへ同期できませんでした"
-                    else -> "接続できませんでした"
-                }
-                Text(text, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("kintone_error_message"))
-            }
             (state.operation as? OperationState.Success)?.let { Text("処理が完了しました", color = MaterialTheme.colorScheme.primary) }
-            state.message?.let { Text(it, modifier = Modifier.testTag("kintone_message")) }
             state.syncResult?.let { result ->
                 Card(Modifier.fillMaxWidth().testTag("kintone_sync_result")) { Column(Modifier.padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
                     Text("同期結果", style = MaterialTheme.typography.titleLarge)
@@ -150,6 +160,22 @@ fun KintoneScreen(
             OutlinedButton(onClick = onPluginInfo, modifier = Modifier.fillMaxWidth()) { Text("プラグインについて") }
         }
     }
+    if (showWorkspaceSelector.value) AlertDialog(
+        onDismissRequest = { showWorkspaceSelector.value = false },
+        title = { Text("同期対象ワークスペース") },
+        text = { Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+            state.workspaces.forEach { option ->
+                Row(Modifier.fillMaxWidth().clickable { onWorkspaceSelected(option); showWorkspaceSelector.value = false }.testTag("kintone_workspace_${option.id}"), verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = option.id == state.workspaceId, onClick = { onWorkspaceSelected(option); showWorkspaceSelector.value = false })
+                    Column(Modifier.weight(1f)) {
+                        Text(option.name)
+                        Text("登録機器 ${option.deviceCount}台・${if (option.connected) "接続済み" else "未接続"}${if (option.autoSyncEnabled) "・自動同期ON" else ""}", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        } },
+        confirmButton = { TextButton(onClick = { showWorkspaceSelector.value = false }) { Text("閉じる") } },
+    )
     state.pending?.let { pending -> AlertDialog(
         onDismissRequest = onCancelPending,
         title = { Text("接続内容を確認") },
@@ -186,7 +212,7 @@ fun KintoneScreen(
 }
 
 @Composable
-private fun KintoneAutoSyncSection(state: KintoneUiState, onSync: () -> Unit, onVerify: () -> Unit, onAutoSyncChange: (Boolean) -> Unit, onConfirmEnable: () -> Unit) {
+private fun KintoneAutoSyncSection(state: KintoneUiState, onSync: () -> Unit, onVerify: () -> Unit, onAutoSyncChange: (Boolean) -> Unit, onPhotoAutoSyncChange: (Boolean) -> Unit, onConfirmEnable: () -> Unit) {
     val showDetails = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.small), modifier = Modifier.fillMaxWidth().testTag("kintone_sync_section")) {
         Row(Modifier.fillMaxWidth().testTag("kintone_auto_sync"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
@@ -195,6 +221,10 @@ private fun KintoneAutoSyncSection(state: KintoneUiState, onSync: () -> Unit, on
                 Text("登録・編集された機器をkintoneへ自動送信します", style = MaterialTheme.typography.bodySmall)
             }
             Switch(checked = state.autoSync.enabled, enabled = state.canUseKintone, onCheckedChange = { if (it) onConfirmEnable() else onAutoSyncChange(false) }, modifier = Modifier.testTag("kintone_auto_sync_switch"))
+        }
+        Row(Modifier.fillMaxWidth().testTag("kintone_photo_auto_sync"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            Column(Modifier.weight(1f)) { Text("写真も自動同期", style = MaterialTheme.typography.titleMedium); Text("写真の自動同期は通信量が増える場合があります。", style = MaterialTheme.typography.bodySmall) }
+            Switch(checked = state.autoSync.photoEnabled, enabled = state.canUseKintone && state.autoSync.enabled, onCheckedChange = onPhotoAutoSyncChange, modifier = Modifier.testTag("kintone_photo_auto_sync_switch"))
         }
         Text("最終同期日時: " + if (state.autoSync.lastFinishedAt > 0) DateFormat.getDateTimeInstance().format(Date(state.autoSync.lastFinishedAt)) else "未実行")
         Text("最終同期結果: ${syncStatusLabel(state.autoSync.status)}")
@@ -215,11 +245,14 @@ private fun KintoneAutoSyncSection(state: KintoneUiState, onSync: () -> Unit, on
                 TextButton(onClick = onVerify, modifier = Modifier.testTag("kintone_check_connection")) { Text("接続を確認") }
             }
         }
-        Text("現在、写真は同期されません。複数BSSIDは主BSSIDのみ同期されます。")
+        Text("写真はAndroid側の並び順で同期されます。キャプションとメイン写真設定はkintoneには保存されません。")
+        Text("Android側の写真を変更して同期すると、kintoneの写真はAndroid側の写真で置き換わります。")
+        Text("選択した機器の写真も同期します。複数BSSIDは主BSSIDのみ同期されます。")
         Text("Androidで削除した機器のkintone反映は、現在未対応です。")
         state.syncPreview?.let { preview ->
             Text("送信前レビュー", style = MaterialTheme.typography.titleMedium)
             Text("対象 ${preview.total}件 / 送信可能 ${preview.valid}件")
+            Text("写真同期対象：${preview.photoDeviceCount}台 / 写真アップロード：${preview.photoCount}枚")
             if (preview.errors.isNotEmpty()) Text("エラー ${preview.errors.size}件", color = MaterialTheme.colorScheme.error)
             if (preview.warnings.isNotEmpty()) Text("警告 ${preview.warnings.size}件", color = MaterialTheme.colorScheme.tertiary)
         }

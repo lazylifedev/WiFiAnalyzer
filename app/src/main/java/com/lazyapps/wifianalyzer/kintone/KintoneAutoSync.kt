@@ -33,12 +33,13 @@ object KintoneSyncLock {
     suspend fun <T> withLock(workspaceUuid: String, action: suspend () -> T): T = mutex(workspaceUuid).withLock { action() }
 }
 object KintoneRetryPolicy {
-    private val retryable = setOf(KintoneErrorCode.KINTONE_NETWORK_UNAVAILABLE, KintoneErrorCode.KINTONE_TIMEOUT, KintoneErrorCode.KINTONE_RATE_LIMITED, KintoneErrorCode.KINTONE_SERVER_ERROR)
+    private val retryable = setOf(KintoneErrorCode.KINTONE_NETWORK_UNAVAILABLE, KintoneErrorCode.KINTONE_TIMEOUT, KintoneErrorCode.KINTONE_FILE_UPLOAD_TIMEOUT, KintoneErrorCode.KINTONE_RATE_LIMITED, KintoneErrorCode.KINTONE_SERVER_ERROR)
     fun shouldRetry(code: KintoneErrorCode?) = code in retryable
 }
 
 data class KintoneAutoSyncState(
     val enabled: Boolean = false,
+    val photoEnabled: Boolean = false,
     val lastRequestedAt: Long = 0,
     val lastStartedAt: Long = 0,
     val lastFinishedAt: Long = 0,
@@ -78,6 +79,7 @@ class KintoneAutoSyncStore(context: Context) {
         val p = prefix(uuid)
         KintoneAutoSyncState(
             enabled = prefs.getBoolean(p + "enabled", false),
+            photoEnabled = prefs.getBoolean(p + "photo_enabled", false),
             lastRequestedAt = prefs.getLong(p + "requested", 0), lastStartedAt = prefs.getLong(p + "started", 0),
             lastFinishedAt = prefs.getLong(p + "finished", 0),
             status = runCatching { KintoneSyncStatus.valueOf(prefs.getString(p + "status", "NEVER")!!) }.getOrDefault(KintoneSyncStatus.NEVER),
@@ -95,7 +97,7 @@ class KintoneAutoSyncStore(context: Context) {
     }
     fun write(uuid: String, state: KintoneAutoSyncState) = synchronized(lock) {
         val p = prefix(uuid)
-        prefs.edit().putBoolean(p + "enabled", state.enabled).putLong(p + "requested", state.lastRequestedAt)
+        prefs.edit().putBoolean(p + "enabled", state.enabled).putBoolean(p + "photo_enabled", state.photoEnabled).putLong(p + "requested", state.lastRequestedAt)
             .putLong(p + "started", state.lastStartedAt).putLong(p + "finished", state.lastFinishedAt)
             .putString(p + "status", state.status.name).putString(p + "trigger", state.trigger?.name)
             .putInt(p + "target", state.targetCount).putInt(p + "success", state.successCount)
@@ -133,8 +135,14 @@ class KintoneAutoSyncScheduler(private val context: Context) {
         workManager.enqueueUniquePeriodicWork(KintoneWorkNames.periodic(uuid), ExistingPeriodicWorkPolicy.UPDATE, periodic)
     }
     fun requestChange(workspaceId: Long) { if (store.read(WorkspaceUuid.fromId(workspaceId)).enabled) enqueue(workspaceId, KintoneSyncTrigger.AUTO_CHANGE, 8) }
+    fun requestPhotoChange(workspaceId: Long) { val state = store.read(WorkspaceUuid.fromId(workspaceId)); if (state.enabled && state.photoEnabled) enqueue(workspaceId, KintoneSyncTrigger.AUTO_CHANGE, 8) }
+    fun setPhotoEnabled(workspaceId: Long, enabled: Boolean) {
+        val uuid = WorkspaceUuid.fromId(workspaceId); val state = store.read(uuid)
+        store.write(uuid, state.copy(photoEnabled = enabled && state.enabled))
+        if (enabled && state.enabled) enqueue(workspaceId, KintoneSyncTrigger.AUTO_CHANGE, 0)
+    }
     fun disable(workspaceId: Long) {
-        val uuid = WorkspaceUuid.fromId(workspaceId); store.write(uuid, store.read(uuid).copy(enabled = false, cancelled = true))
+        val uuid = WorkspaceUuid.fromId(workspaceId); store.write(uuid, store.read(uuid).copy(enabled = false, photoEnabled = false, cancelled = true))
         workManager.cancelUniqueWork(KintoneWorkNames.oneTime(uuid)); workManager.cancelUniqueWork(KintoneWorkNames.periodic(uuid))
     }
     fun remove(workspaceId: Long) { disable(workspaceId); store.remove(WorkspaceUuid.fromId(workspaceId)) }
@@ -160,7 +168,7 @@ class KintoneAutoSyncWorker(context: Context, params: WorkerParameters) : Corout
         if (store.read(uuid).requiresAttention) return Result.success()
         val mutex = KintoneSyncLock.tryAcquire(uuid) ?: return Result.retry()
         return try {
-            val repository = KintoneRepository(WifiAnalyzerDatabase.get(applicationContext))
+            val repository = KintoneRepository(WifiAnalyzerDatabase.get(applicationContext), context = applicationContext)
             val startedAt = System.currentTimeMillis()
             val requestVersion = store.read(uuid).lastRequestedAt
             store.write(uuid, store.read(uuid).copy(lastStartedAt = startedAt, status = KintoneSyncStatus.RUNNING, trigger = trigger))
@@ -177,7 +185,7 @@ class KintoneAutoSyncWorker(context: Context, params: WorkerParameters) : Corout
                     ))
                     return if (published) Result.success() else Result.retry()
                 }
-                val result = repository.sync(workspaceId, records)
+                val result = repository.sync(workspaceId, records, includePhotos = store.read(uuid).photoEnabled)
                 val partial = result.failed > 0 && result.succeeded > 0
                 val failure = result.batches.firstOrNull { it.error != null }
                 val retry = KintoneRetryPolicy.shouldRetry(failure?.error)

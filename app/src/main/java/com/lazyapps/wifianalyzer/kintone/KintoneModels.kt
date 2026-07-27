@@ -17,6 +17,10 @@ enum class KintoneErrorCode {
     KINTONE_CONNECTION_CANCELLED, KINTONE_PRO_REQUIRED, KINTONE_WORKSPACE_NOT_FOUND,
     KINTONE_NO_DEVICES, KINTONE_VALIDATION_FAILED, KINTONE_DUPLICATE_UUID,
     KINTONE_SCHEMA_CHANGED, KINTONE_BATCH_FAILED, KINTONE_PARTIALLY_COMPLETED,
+    KINTONE_FILE_NOT_FOUND, KINTONE_FILE_UNREADABLE, KINTONE_FILE_INVALID,
+    KINTONE_FILE_UPLOAD_FAILED, KINTONE_FILE_UPLOAD_TIMEOUT, KINTONE_FILE_TOO_LARGE,
+    KINTONE_FILE_RESPONSE_INVALID, KINTONE_PHOTO_SYNC_FAILED,
+    KINTONE_PHOTO_PARTIAL_UPLOAD, KINTONE_PHOTO_FINGERPRINT_FAILED,
 }
 
 enum class KintoneErrorCategory { AUTHENTICATION, PERMISSION, NOT_FOUND, VALIDATION, SCHEMA, RATE_LIMIT, SERVER, NETWORK, TIMEOUT, UNKNOWN }
@@ -63,6 +67,9 @@ object KintoneErrorMessages {
         remoteCode == "GAIA_RE20" -> "更新キーに一致するレコードが見つかりません。UPSERT設定を確認してください。"
         category(status, remoteCode, code) == KintoneErrorCategory.SCHEMA -> "kintoneアプリのフィールド構成が変更されています。接続を確認してください。"
         code == KintoneErrorCode.KINTONE_TIMEOUT -> "kintoneから時間内に応答がありませんでした。"
+        code == KintoneErrorCode.KINTONE_FILE_UPLOAD_TIMEOUT -> "写真のアップロードが時間内に完了しませんでした。"
+        code in setOf(KintoneErrorCode.KINTONE_FILE_NOT_FOUND, KintoneErrorCode.KINTONE_FILE_UNREADABLE, KintoneErrorCode.KINTONE_FILE_INVALID) -> "端末内の写真を読み込めません。写真を確認してください。"
+        code in setOf(KintoneErrorCode.KINTONE_FILE_UPLOAD_FAILED, KintoneErrorCode.KINTONE_FILE_TOO_LARGE, KintoneErrorCode.KINTONE_FILE_RESPONSE_INVALID, KintoneErrorCode.KINTONE_PHOTO_SYNC_FAILED, KintoneErrorCode.KINTONE_PHOTO_PARTIAL_UPLOAD, KintoneErrorCode.KINTONE_PHOTO_FINGERPRINT_FAILED) -> "写真をkintoneへ同期できませんでした。"
         code in setOf(KintoneErrorCode.KINTONE_NETWORK_UNAVAILABLE, KintoneErrorCode.KINTONE_TLS_ERROR) -> "ネットワークへ接続できません。"
         else -> "kintoneへの同期に失敗しました。"
     }
@@ -116,6 +123,10 @@ data class KintoneVerification(
     val warnings: List<String> = emptyList(),
     val information: List<String> = emptyList(),
 )
+data class KintoneWorkspaceOption(
+    val id: Long, val name: String, val deviceCount: Int,
+    val connected: Boolean, val autoSyncEnabled: Boolean,
+)
 
 data class KintoneFieldProperty(
     val code: String,
@@ -135,8 +146,13 @@ data class KintoneDeviceRecord(
     val manufacturer: String, val model: String, val serialNumber: String,
     val ssid: String, val primaryBssid: String, val location: String, val notes: String,
     val updatedAt: String, val deleted: Boolean = false,
+    val localDeviceId: Long = 0,
+    val photoFileKeys: List<String>? = null,
 )
-data class KintoneSyncPreview(val total: Int, val valid: Int, val errors: List<String>, val warnings: List<String>)
+data class KintoneSyncPreview(
+    val total: Int, val valid: Int, val errors: List<String>, val warnings: List<String>,
+    val photoDeviceCount: Int = 0, val photoCount: Int = 0,
+)
 data class KintoneBatchResult(
     val batch: Int, val succeeded: Int, val failed: Int, val error: KintoneErrorCode? = null,
     val errorCategory: KintoneErrorCategory? = null, val httpStatus: Int? = null,
@@ -144,4 +160,8 @@ data class KintoneBatchResult(
     val validationErrors: List<KintoneValidationError> = emptyList(),
     val recordIndex: Int? = null,
 )
-data class KintoneSyncResult(val total: Int, val succeeded: Int, val failed: Int, val skipped: Int, val batches: List<KintoneBatchResult>)
+data class KintoneSyncResult(
+    val total: Int, val succeeded: Int, val failed: Int, val skipped: Int,
+    val batches: List<KintoneBatchResult>, val photoDeviceCount: Int = 0,
+    val photoCount: Int = 0, val uploadedPhotoCount: Int = 0,
+)
