@@ -129,7 +129,7 @@ fun WifiAnalyzerApp(
         mutableStateOf(permissionPreferences.getBoolean("requested_once", false))
     }
     LaunchedEffect(workspaceState.selectedId, workspaceState.selected?.name) {
-        workspaceState.selected?.let { kintoneViewModel.selectWorkspace(it.id, it.name) }
+        workspaceState.selected?.let { kintoneViewModel.selectWorkspace(it.id, it.name, fromAppSelection = true) }
     }
     LaunchedEffect(billingState.entitlement, debugForcePro) {
         kintoneViewModel.setAccessAllowed(FeatureAccessPolicy.from(billingState.entitlement, debugForcePro).canUseKintone)
@@ -383,6 +383,8 @@ fun WifiAnalyzerApp(
                         onDisconnect = kintoneViewModel::disconnect,
                         onSync = kintoneViewModel::sync,
                         onAutoSyncChange = kintoneViewModel::setAutoSync,
+                        onPhotoAutoSyncChange = kintoneViewModel::setPhotoAutoSync,
+                        onWorkspaceSelected = { option -> kintoneViewModel.selectWorkspace(option.id, option.name) },
                         onCancelSync = kintoneViewModel::cancel,
                     )
                 }
@@ -392,7 +394,7 @@ fun WifiAnalyzerApp(
                     } else KintoneQrScreen(
                         onBack = { navController.popBackStack() },
                         onQr = { raw ->
-                            val target = workspaceState.selected ?: return@KintoneQrScreen
+                            val target = kintoneState.workspaces.firstOrNull { it.id == kintoneState.workspaceId } ?: return@KintoneQrScreen
                             navController.popBackStack()
                             kintoneViewModel.acceptQr(raw, target.id, target.name)
                         },

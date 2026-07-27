@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.lazyapps.wifianalyzer.data.registry.KintoneConnectionEntity
+import com.lazyapps.wifianalyzer.data.registry.DevicePhotoEntity
 import com.lazyapps.wifianalyzer.data.registry.RegisteredWifiDeviceEntity
 import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
 import com.lazyapps.wifianalyzer.data.registry.WorkspaceEntity
@@ -14,12 +15,15 @@ import com.lazyapps.wifianalyzer.kintone.KintoneApi
 import com.lazyapps.wifianalyzer.kintone.KintoneDeviceRecord
 import com.lazyapps.wifianalyzer.kintone.KintoneRepository
 import com.lazyapps.wifianalyzer.kintone.KintoneVerification
+import com.lazyapps.wifianalyzer.kintone.KintoneException
+import com.lazyapps.wifianalyzer.kintone.KintoneErrorCode
 import com.lazyapps.wifianalyzer.kintone.KintoneAutoSyncState
 import com.lazyapps.wifianalyzer.kintone.KintoneAutoSyncStore
 import com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus
 import com.lazyapps.wifianalyzer.kintone.TokenCipher
 import com.lazyapps.wifianalyzer.kintone.WorkspaceUuid
 import kotlinx.coroutines.runBlocking
+import java.io.File
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -31,9 +35,11 @@ class KintoneRepositoryWorkspaceTest {
     private lateinit var db: WifiAnalyzerDatabase
     private lateinit var api: CountingApi
     private lateinit var repository: KintoneRepository
+    private lateinit var context: Context
 
     @Before fun setup() = runBlocking {
-        val context = ApplicationProvider.getApplicationContext<Context>()
+        context = ApplicationProvider.getApplicationContext()
+        context.getSharedPreferences("kintone_photo_sync", Context.MODE_PRIVATE).edit().clear().commit()
         db = Room.inMemoryDatabaseBuilder(context, WifiAnalyzerDatabase::class.java).allowMainThreadQueries().build()
         val dao = db.registryDao()
         dao.insertWorkspace(WorkspaceEntity(1, "default", "default", 0, 1, 1))
@@ -43,7 +49,7 @@ class KintoneRepositoryWorkspaceTest {
             KINTONE_TEMPLATE_ID, 1, 1, byteArrayOf(1), byteArrayOf(2), 1, 1, "CONNECTED",
         ))
         api = CountingApi()
-        repository = KintoneRepository(db, api, PlainCipher)
+        repository = KintoneRepository(db, api, PlainCipher, context)
     }
 
     @After fun close() = db.close()
@@ -90,6 +96,43 @@ class KintoneRepositoryWorkspaceTest {
         assertEquals(firstKeys, api.updateKeys)
     }
 
+    @Test fun changedPhotoUploadsOnceAndUnchangedSyncOmitsPhotoField() = runBlocking {
+        val deviceId = insertDevice(1, "写真機器")
+        insertPhoto(deviceId, byteArrayOf(0xff.toByte(), 0xd8.toByte(), 1, 0xff.toByte(), 0xd9.toByte()))
+        val records = repository.buildSyncRecordsForConnection(1)
+        val first = repository.sync(1, records)
+        assertEquals(1, first.uploadedPhotoCount)
+        assertEquals(listOf("uploaded-1"), api.lastRecords.single().photoFileKeys)
+        val uploads = api.uploadCalls
+        repository.sync(1, records)
+        assertEquals(uploads, api.uploadCalls)
+        assertEquals(null, api.lastRecords.single().photoFileKeys)
+    }
+
+    @Test fun removingPreviouslySyncedLastPhotoSendsEmptyArray() = runBlocking {
+        val deviceId = insertDevice(1, "削除機器")
+        val photoId = insertPhoto(deviceId, byteArrayOf(0xff.toByte(), 0xd8.toByte(), 0xff.toByte(), 0xd9.toByte()))
+        val records = repository.buildSyncRecordsForConnection(1)
+        repository.sync(1, records)
+        val photo = db.registryDao().getPhoto(photoId)!!
+        File(context.filesDir, "devices/1/$deviceId/photos/${photo.fileName}").delete()
+        db.registryDao().deletePhoto(photoId)
+        repository.sync(1, records)
+        assertEquals(emptyList<String>(), api.lastRecords.single().photoFileKeys)
+    }
+
+    @Test fun failedUpsertDoesNotCommitFingerprintAndNextSyncReuploads() = runBlocking {
+        val deviceId = insertDevice(1, "再送機器")
+        insertPhoto(deviceId, byteArrayOf(0xff.toByte(), 0xd8.toByte(), 2, 0xff.toByte(), 0xd9.toByte()))
+        val records = repository.buildSyncRecordsForConnection(1)
+        api.failUpsert = true
+        repository.sync(1, records)
+        val firstUploads = api.uploadCalls
+        api.failUpsert = false
+        repository.sync(1, records)
+        assertEquals(firstUploads + 1, api.uploadCalls)
+    }
+
     @Test fun olderWorkerCannotOverwriteTheLatestRequestedState() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val store = KintoneAutoSyncStore(context)
@@ -109,22 +152,37 @@ class KintoneRepositoryWorkspaceTest {
         }
     }
 
-    private suspend fun insertDevice(workspaceId: Long, name: String) {
-        db.registryDao().insertDevice(RegisteredWifiDeviceEntity(
+    private suspend fun insertDevice(workspaceId: Long, name: String): Long {
+        return db.registryDao().insertDevice(RegisteredWifiDeviceEntity(
             displayName = name, primaryBssid = "02:00:00:00:00:0$workspaceId",
             createdAt = 1, updatedAt = 1, workspaceId = workspaceId,
         ))
+    }
+
+    private suspend fun insertPhoto(deviceId: Long, bytes: ByteArray): Long {
+        val directory = File(context.filesDir, "devices/1/$deviceId/photos").apply { mkdirs() }
+        val file = File(directory, "photo-$deviceId-${System.nanoTime()}.jpg").apply { writeBytes(bytes) }
+        return db.registryDao().insertPhoto(DevicePhotoEntity(deviceId = deviceId, workspaceId = 1, fileName = file.name, mimeType = "image/jpeg", width = 1, height = 1, fileSize = file.length(), sortOrder = 0, isPrimary = true, createdAt = 1, updatedAt = 1))
     }
 
     private class CountingApi : KintoneApi {
         var upsertCalls = 0
         val batchSizes = mutableListOf<Int>()
         val updateKeys = mutableListOf<String>()
+        var uploadCalls = 0
+        var failUpsert = false
+        var lastRecords = emptyList<KintoneDeviceRecord>()
         override suspend fun verify(domain: String, appId: Long, token: CharArray) = KintoneVerification(emptyMap())
         override suspend fun upsert(domain: String, appId: Long, token: CharArray, records: List<KintoneDeviceRecord>) {
+            if (failUpsert) throw KintoneException(KintoneErrorCode.KINTONE_BATCH_FAILED)
             upsertCalls++
+            lastRecords = records
             batchSizes += records.size
             updateKeys += records.map { it.deviceUuid }
+        }
+        override suspend fun uploadFile(domain: String, token: CharArray, file: File, fileName: String): String {
+            uploadCalls++
+            return "uploaded-$uploadCalls"
         }
     }
 
