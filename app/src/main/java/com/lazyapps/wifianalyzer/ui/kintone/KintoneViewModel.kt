@@ -26,12 +26,12 @@ import com.lazyapps.wifianalyzer.ui.operation.OperationError
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorCategory
 import com.lazyapps.wifianalyzer.ui.operation.OperationState
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.sync.withLock
 
 data class PendingKintoneConnection(
     val workspaceId: Long,
@@ -161,13 +161,24 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
         }
         if (!hadPreview || preview.valid == 0) {
             if (preview.valid == 0) throw KintoneException(KintoneErrorCode.KINTONE_VALIDATION_FAILED)
+            mutable.value = mutable.value.copy(operation = OperationState.Idle, message = null)
             return@launchOperation
         }
         val uuid = WorkspaceUuid.fromId(mutable.value.workspaceId)
-        val result = KintoneSyncLock.withLock(uuid) {
+        val mutex = KintoneSyncLock.tryAcquire(uuid)
+        if (mutex == null) {
+            mutable.value = mutable.value.copy(
+                operation = OperationState.Idle,
+                message = "自動同期が完了してから再試行してください",
+            )
+            return@launchOperation
+        }
+        val result = try {
             repository.sync(mutable.value.workspaceId, records.filter { it.deviceUuid.isNotBlank() }) { current, total ->
                 mutable.value = mutable.value.copy(operation = OperationState.Running(R.string.kintone_verifying, progress = OperationProgress.Count(current, total), cancellable = true))
             }
+        } finally {
+            KintoneSyncLock.release(uuid, mutex)
         }
         val failure = result.batches.firstOrNull { it.error != null }
         autoSyncStore.write(uuid, autoSyncStore.read(uuid).copy(
@@ -198,7 +209,18 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
         if (operationJob?.isActive == true) return
         operationJob = viewModelScope.launch {
             mutable.value = mutable.value.copy(operation = OperationState.Running(R.string.kintone_verifying, cancellable = true))
-            try { block() } catch (e: KintoneException) { fail(e.code, context) }
+            try {
+                block()
+            } catch (e: KintoneException) {
+                fail(e.code, context)
+            } catch (e: CancellationException) {
+                mutable.value = mutable.value.copy(operation = OperationState.Idle)
+                throw e
+            } catch (_: Exception) {
+                fail(KintoneErrorCode.KINTONE_BATCH_FAILED, context)
+            } finally {
+                operationJob = null
+            }
         }
     }
 

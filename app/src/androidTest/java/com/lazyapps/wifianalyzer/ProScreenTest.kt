@@ -1,6 +1,8 @@
 package com.lazyapps.wifianalyzer
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -114,5 +116,25 @@ class ProScreenTest {
         rule.onNodeWithTag("kintone_retry_failed").assertIsDisplayed()
         rule.onNodeWithTag("kintone_check_connection").assertIsDisplayed()
         rule.onNodeWithText("APIトークン", substring = true).assertDoesNotExist()
+        rule.onNodeWithTag("kintone_sync").assertIsEnabled()
+    }
+
+    @Test fun manualSyncIsDisabledOnlyForNoTargetsOrCurrentOperation() {
+        val state = mutableStateOf(connectedState().copy(
+            syncPreview = com.lazyapps.wifianalyzer.kintone.KintoneSyncPreview(11, 11, emptyList(), emptyList()),
+        ))
+        rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = state.value) } }
+        rule.onNodeWithTag("kintone_sync").assertIsEnabled()
+        rule.runOnIdle {
+            state.value = state.value.copy(syncPreview = com.lazyapps.wifianalyzer.kintone.KintoneSyncPreview(0, 0, emptyList(), emptyList()))
+        }
+        rule.onNodeWithTag("kintone_sync").assertIsNotEnabled()
+        rule.runOnIdle {
+            state.value = state.value.copy(
+                syncPreview = com.lazyapps.wifianalyzer.kintone.KintoneSyncPreview(11, 11, emptyList(), emptyList()),
+                operation = com.lazyapps.wifianalyzer.ui.operation.OperationState.Running(com.lazyapps.wifianalyzer.R.string.kintone_verifying),
+            )
+        }
+        rule.onNodeWithTag("kintone_sync").assertIsNotEnabled()
     }
 }

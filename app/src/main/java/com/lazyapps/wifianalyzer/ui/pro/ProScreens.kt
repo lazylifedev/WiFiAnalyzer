@@ -223,7 +223,12 @@ private fun KintoneAutoSyncSection(state: KintoneUiState, onSync: () -> Unit, on
             if (preview.errors.isNotEmpty()) Text("エラー ${preview.errors.size}件", color = MaterialTheme.colorScheme.error)
             if (preview.warnings.isNotEmpty()) Text("警告 ${preview.warnings.size}件", color = MaterialTheme.colorScheme.tertiary)
         }
-        Button(onClick = onSync, enabled = state.operation !is OperationState.Running, modifier = Modifier.fillMaxWidth().testTag("kintone_sync")) { Text("今すぐ同期") }
+        val hasSendableTargets = state.syncPreview?.valid?.let { it > 0 } ?: true
+        Button(
+            onClick = onSync,
+            enabled = state.connection != null && state.canUseKintone && hasSendableTargets && state.operation !is OperationState.Running,
+            modifier = Modifier.fillMaxWidth().testTag("kintone_sync"),
+        ) { Text("今すぐ同期") }
     }
 }
 
