@@ -1,10 +1,8 @@
 package com.lazyapps.wifianalyzer.ui.screens.channel
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,31 +14,30 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import com.lazyapps.wifianalyzer.R
-import com.lazyapps.wifianalyzer.model.ChannelOccupancy
-import com.lazyapps.wifianalyzer.model.ScanState
-import com.lazyapps.wifianalyzer.model.WifiBand
-import com.lazyapps.wifianalyzer.model.WifiAccessPoint
-import com.lazyapps.wifianalyzer.model.displayLabel
+import com.lazyapps.wifianalyzer.data.ChannelDisplayMode
 import com.lazyapps.wifianalyzer.data.DistanceUnitPreference
-import com.lazyapps.wifianalyzer.ui.components.RegisteredBadge
+import com.lazyapps.wifianalyzer.domain.ChannelRecommendation
+import com.lazyapps.wifianalyzer.model.ScanState
+import com.lazyapps.wifianalyzer.model.WifiAccessPoint
+import com.lazyapps.wifianalyzer.model.WifiBand
 import com.lazyapps.wifianalyzer.ui.components.BandSelector
+import com.lazyapps.wifianalyzer.ui.components.RefreshProgress
 import com.lazyapps.wifianalyzer.ui.components.ScanStatusCard
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
-import com.lazyapps.wifianalyzer.ui.components.RefreshProgress
 import com.lazyapps.wifianalyzer.ui.scan.ScanUiState
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 import com.lazyapps.wifianalyzer.ui.theme.ThemeMode
@@ -53,89 +50,104 @@ fun ChannelScreen(
     onRequestPermission: () -> Unit,
     onOpenSettings: (ScanState) -> Unit,
     onSelectAccessPoint: (String) -> Unit,
+    onClearAccessPointSelection: () -> Unit,
+    onOpenAccessPoint: (String) -> Unit,
     onRegisterAccessPoint: (WifiAccessPoint) -> Unit,
+    onDisplayModeChange: (ChannelDisplayMode) -> Unit,
     workspaceName: String? = null,
     selectedBand: WifiBand = state.channelBand,
     onBandSelected: (WifiBand) -> Unit = {},
 ) {
-    val band = selectedBand
-    val occupancy = state.occupancyFor(band)
+    val accessPoints = remember(state.accessPoints, selectedBand) { state.accessPointsFor(selectedBand) }
+    val occupancy = remember(state.accessPoints, selectedBand) { state.occupancyFor(selectedBand) }
+    val candidate = remember(accessPoints, selectedBand) { ChannelRecommendation.bestCandidate(accessPoints, selectedBand) }
+    val selected = accessPoints.firstOrNull { it.bssid == state.selectedBssid }
+    LaunchedEffect(selectedBand, state.selectedBssid, accessPoints) {
+        if (state.selectedBssid != null && selected == null) onClearAccessPointSelection()
+    }
+
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(stringResource(R.string.screen_channel), listOfNotNull(workspaceName, stringResource(R.string.estimated_congestion)).joinToString(" ・ ")) {
             IconButton(onClick = onRefresh) { Icon(Icons.Rounded.Refresh, stringResource(R.string.refresh_scan)) }
         }
-        BandSelector(band, onBandSelected, Modifier.padding(horizontal = AppSpacing.large), state.visibleBands)
+        BandSelector(selectedBand, onBandSelected, Modifier.padding(horizontal = AppSpacing.large), state.visibleBands)
         RefreshProgress(state)
         PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
-        LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = AppSpacing.xLarge),
-        verticalArrangement = Arrangement.spacedBy(AppSpacing.medium),
-    ) {
-        item {
-            ScanStatusCard(
-                state.scanState, state.accessPoints.isNotEmpty(), onRequestPermission, onOpenSettings, onRefresh,
-                Modifier.padding(horizontal = AppSpacing.large),
-            )
-        }
-        item {
-            Row(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("${stringResource(R.string.estimated_congestion)}: ${stringResource(R.string.occupancy_legend_free)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                Text(stringResource(R.string.occupancy_legend_busy), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-            }
-        }
-        if (occupancy.isEmpty() && state.scanState in setOf(ScanState.READY, ScanState.THROTTLED, ScanState.SCANNING)) {
-            item { Text(stringResource(R.string.band_empty, band.label), Modifier.padding(horizontal = AppSpacing.large), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-        items(occupancy, key = { it.channel }) { usage ->
-            ChannelCard(usage, onSelectAccessPoint, onRegisterAccessPoint, state.distanceUnit == DistanceUnitPreference.FEET, Modifier.padding(horizontal = AppSpacing.large))
-        }
-        }
-        }
-    }
-}
-
-@Composable
-private fun ChannelCard(usage: ChannelOccupancy, onSelect: (String) -> Unit, onRegister: (WifiAccessPoint) -> Unit, feet: Boolean, modifier: Modifier = Modifier) {
-    val barColor = when {
-        usage.estimatedCongestion >= .8f -> MaterialTheme.colorScheme.error
-        usage.estimatedCongestion >= .55f -> MaterialTheme.colorScheme.tertiary
-        else -> MaterialTheme.colorScheme.primary
-    }
-    Card(modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
-        Column(Modifier.padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                Text(stringResource(R.string.channel_format, usage.channel), style = MaterialTheme.typography.titleLarge)
-                Text("  ${usage.frequencyMhz} MHz", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                Text("${stringResource(R.string.estimated_congestion)} ${(usage.estimatedCongestion * 100).toInt()}%", color = barColor, fontWeight = FontWeight.Bold)
-            }
-            LinearProgressIndicator(
-                progress = { usage.estimatedCongestion },
-                modifier = Modifier.fillMaxWidth(),
-                color = barColor,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                gapSize = 0.dp,
-                drawStopIndicator = {},
-            )
-            Text(stringResource(R.string.network_count, usage.accessPoints.size), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            usage.accessPoints.forEach { accessPoint ->
-                Row(
-                    Modifier.fillMaxWidth().clickable { onSelect(accessPoint.bssid) }.padding(vertical = AppSpacing.small),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(AppSpacing.small),
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-                            Text(accessPoint.ssid, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
-                            if (accessPoint.isRegistered) RegisteredBadge()
-                        }
-                        accessPoint.registeredDeviceName?.let { Text("$it · ${accessPoint.registeredGroupName ?: "未分類"}", maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
-                        Text(accessPoint.bssid, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = AppSpacing.xLarge),
+                verticalArrangement = Arrangement.spacedBy(AppSpacing.medium),
+            ) {
+                item {
+                    ScanStatusCard(
+                        state.scanState, state.accessPoints.isNotEmpty(), onRequestPermission, onOpenSettings, onRefresh,
+                        Modifier.padding(horizontal = AppSpacing.large),
+                    )
+                }
+                item {
+                    DisplayModeSelector(state.channelDisplayMode, onDisplayModeChange, Modifier.padding(horizontal = AppSpacing.large))
+                }
+                if (state.channelDisplayMode == ChannelDisplayMode.GRAPH) {
+                    item {
+                        ChannelSummaryCard(accessPoints.size, candidate, Modifier.padding(horizontal = AppSpacing.large))
                     }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text("${accessPoint.rssi} dBm", style = MaterialTheme.typography.labelMedium)
-                        Text("推定 ${accessPoint.distanceRange.displayLabel(feet)}", maxLines = 1, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (!accessPoint.isRegistered) TextButton(onClick = { onRegister(accessPoint) }) { Text("登録") }
+                    item {
+                        Card(
+                            Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = CardDefaults.outlinedCardBorder(),
+                        ) {
+                            ChannelGraph(
+                                selectedBand,
+                                accessPoints,
+                                state.selectedBssid,
+                                candidate,
+                                onSelectAccessPoint,
+                                onClearAccessPointSelection,
+                                Modifier.padding(AppSpacing.small),
+                            )
+                        }
+                    }
+                    if (accessPoints.isEmpty() && state.scanState in setOf(ScanState.READY, ScanState.THROTTLED, ScanState.SCANNING, ScanState.EMPTY)) {
+                        item {
+                            Text(
+                                stringResource(R.string.band_empty, selectedBand.label),
+                                Modifier.padding(horizontal = AppSpacing.large),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    selected?.let { ap ->
+                        item {
+                            SelectedAccessPointCard(
+                                ap,
+                                state.distanceUnit == DistanceUnitPreference.FEET,
+                                { onOpenAccessPoint(ap.bssid) },
+                                onRegisterAccessPoint,
+                                Modifier.padding(horizontal = AppSpacing.large).testTag("channel_selected_ap"),
+                            )
+                        }
+                    }
+                    item {
+                        Text(
+                            "山の高さは電波の強さ、幅は使用帯域を表します。山をタップすると詳細を確認できます。",
+                            Modifier.padding(horizontal = AppSpacing.large),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                } else {
+                    if (occupancy.isEmpty()) {
+                        item {
+                            Text(
+                                stringResource(R.string.band_empty, selectedBand.label),
+                                Modifier.padding(horizontal = AppSpacing.large),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    items(occupancy, key = { "${selectedBand.name}_${it.channel}" }) { usage ->
+                        ChannelOccupancyCard(selectedBand, usage, onOpenAccessPoint, Modifier.padding(horizontal = AppSpacing.large))
                     }
                 }
             }
@@ -143,8 +155,28 @@ private fun ChannelCard(usage: ChannelOccupancy, onSelect: (String) -> Unit, onR
     }
 }
 
+@Composable
+private fun DisplayModeSelector(
+    selected: ChannelDisplayMode,
+    onSelected: (ChannelDisplayMode) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val options = ChannelDisplayMode.entries
+    SingleChoiceSegmentedButtonRow(modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, mode ->
+            SegmentedButton(
+                modifier = Modifier.testTag("channel_mode_${mode.name.lowercase()}"),
+                selected = selected == mode,
+                onClick = { onSelected(mode) },
+                shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                label = { Text(if (mode == ChannelDisplayMode.GRAPH) "グラフ" else "混雑状況") },
+            )
+        }
+    }
+}
+
 @Preview(showBackground = true, backgroundColor = 0xFF07111F)
 @Composable
 private fun ChannelPreview() = WifiAnalyzerTheme(mode = ThemeMode.DARK) {
-    ChannelScreen(ScanUiState(scanState = ScanState.EMPTY), {}, {}, {}, {}, {})
+    ChannelScreen(ScanUiState(scanState = ScanState.EMPTY), {}, {}, {}, {}, {}, {}, {}, {})
 }

@@ -17,9 +17,19 @@ data class WifiUiPreferences(
     val refreshIntervalMillis: Long = WifiUiPreferencesRepository.DEFAULT_REFRESH_INTERVAL_MILLIS,
     val distanceUnit: DistanceUnitPreference = DistanceUnitPreference.METERS,
     val visibleBands: Set<WifiBand> = WifiBand.entries.toSet(),
+    val channelDisplayMode: ChannelDisplayMode = ChannelDisplayMode.GRAPH,
 )
 
 enum class DistanceUnitPreference { METERS, FEET }
+enum class ChannelDisplayMode {
+    GRAPH,
+    OCCUPANCY;
+
+    companion object {
+        fun fromStored(value: String?): ChannelDisplayMode =
+            value?.let { runCatching { valueOf(it) }.getOrNull() } ?: GRAPH
+    }
+}
 
 class WifiUiPreferencesRepository(private val context: Context) {
     val preferences: Flow<WifiUiPreferences> = context.wifiUiDataStore.data.map { values ->
@@ -38,11 +48,14 @@ class WifiUiPreferencesRepository(private val context: Context) {
                 ?.let { runCatching { DistanceUnitPreference.valueOf(it) }.getOrNull() }
                 ?: DistanceUnitPreference.METERS,
             visibleBands = visibleBands,
+            channelDisplayMode = ChannelDisplayMode.fromStored(values[CHANNEL_DISPLAY_MODE]),
         )
     }
 
     suspend fun setHomeBand(band: WifiBand) = context.wifiUiDataStore.edit { it[HOME_BAND] = band.name }
     suspend fun setChannelBand(band: WifiBand) = context.wifiUiDataStore.edit { it[CHANNEL_BAND] = band.name }
+    suspend fun setChannelDisplayMode(mode: ChannelDisplayMode) =
+        context.wifiUiDataStore.edit { it[CHANNEL_DISPLAY_MODE] = mode.name }
     suspend fun setRefreshInterval(milliseconds: Long) {
         context.wifiUiDataStore.edit { it[REFRESH_SECONDS] = encodeRefreshIntervalSeconds(milliseconds) }
     }
@@ -81,5 +94,6 @@ class WifiUiPreferencesRepository(private val context: Context) {
         private val REFRESH_SECONDS = intPreferencesKey("refresh_interval_seconds")
         private val DISTANCE_UNIT = stringPreferencesKey("distance_unit")
         private val VISIBLE_BANDS = stringPreferencesKey("visible_bands")
+        private val CHANNEL_DISPLAY_MODE = stringPreferencesKey("channel_display_mode")
     }
 }
