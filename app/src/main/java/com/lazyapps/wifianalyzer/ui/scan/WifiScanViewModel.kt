@@ -1,8 +1,10 @@
 package com.lazyapps.wifianalyzer.ui.scan
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.lazyapps.wifianalyzer.BuildConfig
 import com.lazyapps.wifianalyzer.data.WifiScanRepository
 import com.lazyapps.wifianalyzer.data.WifiUiPreferencesRepository
 import com.lazyapps.wifianalyzer.data.DistanceUnitPreference
@@ -87,9 +89,13 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
                     return@collectLatest
                 }
                 val now = System.currentTimeMillis()
+                var addedHistoryCount = 0
                 val withDistances = snapshot.accessPoints.map { ap ->
                     val queue = samplesByBssid.getOrPut(ap.bssid) { ArrayDeque() }
-                    if (queue.lastOrNull()?.timestampMillis != ap.observedAtMillis) queue.addLast(SignalSample(ap.observedAtMillis, ap.rssi))
+                    if (ap.bssid in snapshot.newMeasurementBssids) {
+                        queue.addLast(SignalSample(ap.observedAtMillis, ap.rssi))
+                        addedHistoryCount++
+                    }
                     while (queue.size > MAX_HISTORY_SAMPLES || queue.firstOrNull()?.timestampMillis?.let { now - it > HISTORY_WINDOW_MS } == true) {
                         queue.removeFirst()
                     }
@@ -112,6 +118,9 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
                     errorMessage = if (snapshot.state == ScanState.THROTTLED) scanErrorMessage(snapshot.state) else null,
                     isRefreshing = snapshot.state == ScanState.SCANNING,
                 )
+                if (BuildConfig.DEBUG) {
+                    Log.d(TAG, "history samples added=$addedHistoryCount")
+                }
             }
         }
     }
@@ -120,11 +129,12 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
         require(state in PERMISSION_STATES)
         permissionState = state
         if (state == ScanState.READY) {
-            repository.refreshEnvironment()
+            if (foreground) repository.startMonitoring()
             if (autoRefreshJob?.isActive != true) {
                 scheduleAutoRefresh()
             }
         } else {
+            repository.stopMonitoring()
             autoRefreshJob?.cancel()
             autoRefreshJob = null
             _uiState.value = _uiState.value.copy(scanState = state, selectedDetected = false)
@@ -170,7 +180,11 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
 
     fun setForeground(isForeground: Boolean) {
         foreground = isForeground
-        if (isForeground) scheduleAutoRefresh() else {
+        if (isForeground) {
+            if (permissionState == ScanState.READY) repository.startMonitoring()
+            scheduleAutoRefresh()
+        } else {
+            repository.stopMonitoring()
             autoRefreshJob?.cancel()
             autoRefreshJob = null
         }
@@ -236,6 +250,7 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
     }
 
     companion object {
+        private const val TAG = "WifiCacheMonitor"
         const val HISTORY_WINDOW_MS = 15 * 60_000L
         const val DETECTION_TIMEOUT_MS = 45_000L
         const val MAX_HISTORY_SAMPLES = 900

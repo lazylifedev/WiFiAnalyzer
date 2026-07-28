@@ -28,7 +28,7 @@ import java.util.*
     val open=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let(vm::inspect)}
     Scaffold(topBar={TopAppBar(title={Text("バックアップと復元")},navigationIcon={IconButton(onClick=onBack){Icon(Icons.AutoMirrored.Rounded.ArrowBack,"戻る")}})}){padding->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(AppSpacing.large),verticalArrangement=Arrangement.spacedBy(AppSpacing.medium)){
-            Text("テーマ、距離単位、表示帯域、更新間隔は管理データのバックアップ対象外です。",style=MaterialTheme.typography.bodySmall)
+            Text("テーマ、距離単位、表示帯域、スキャン要求間隔は管理データのバックアップ対象外です。",style=MaterialTheme.typography.bodySmall)
             Text("暗号化されません。機器写真にはパスワード等が写っている可能性があります。安全な場所に保管してください。",color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
             Text(if(state.history.timestamp>0) "最終バックアップ: ${date(state.history.timestamp)} / ${if(state.history.succeeded) "成功" else "失敗"}" else "最終バックアップ: なし",style=MaterialTheme.typography.bodySmall)
             Card(Modifier.fillMaxWidth()){Column(Modifier.padding(AppSpacing.large),verticalArrangement=Arrangement.spacedBy(AppSpacing.small)){Text("全データ",style=MaterialTheme.typography.titleMedium);Text("ワークスペース ${workspaceState.workspaces.size}");Button(enabled=!state.busy,onClick={workspaceExport=false;create.launch(fileName("Backup"))},modifier=Modifier.testTag("backup_all")){Text("全データをバックアップ")}}}

@@ -20,7 +20,11 @@ fun RefreshProgress(state: ScanUiState, modifier: Modifier = Modifier) {
                     .fillMaxWidth()
                     .height(3.dp)
                     .semantics {
-                        contentDescription = if (state.isRefreshing) "Wi-Fiを更新中" else state.refreshSecondsRemaining?.let { "更新まであと${it}秒" }.orEmpty()
+                        contentDescription = if (state.isRefreshing) {
+                            "Wi-Fiスキャンを要求中"
+                        } else {
+                            state.refreshSecondsRemaining?.let { "次のスキャン要求まであと${it}秒" }.orEmpty()
+                        }
                     }
             if (state.isRefreshing) LinearProgressIndicator(
                 modifier = progressModifier,
