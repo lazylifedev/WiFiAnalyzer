@@ -253,14 +253,7 @@ class WifiScanRepository(context: Context) : AutoCloseable {
 
     private fun ScanResult.toAccessPoint(readAt: Long): WifiAccessPoint? {
         val band = WifiAnalysis.bandFromFrequency(frequency) ?: return null
-        val width = when (channelWidth) {
-            ScanResult.CHANNEL_WIDTH_40MHZ -> 40
-            ScanResult.CHANNEL_WIDTH_80MHZ -> 80
-            ScanResult.CHANNEL_WIDTH_160MHZ -> 160
-            ScanResult.CHANNEL_WIDTH_80MHZ_PLUS_MHZ -> 160
-            if (Build.VERSION.SDK_INT >= 33) ScanResult.CHANNEL_WIDTH_320MHZ else -1 -> 320
-            else -> 20
-        }
+        val width = WifiAnalysis.channelWidthMhzFromScanResult(channelWidth)
         val standard = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             when (wifiStandard) {
                 ScanResult.WIFI_STANDARD_LEGACY -> WifiStandard.LEGACY

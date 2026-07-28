@@ -271,6 +271,10 @@ fun WifiAnalyzerApp(
                         onOpenSettings = openSettings,
                         onSelectAccessPoint = { bssid ->
                             scanViewModel.selectAccessPoint(bssid)
+                        },
+                        onClearAccessPointSelection = scanViewModel::clearAccessPointSelection,
+                        onOpenAccessPoint = { bssid ->
+                            scanViewModel.selectAccessPoint(bssid)
                             navController.navigateTopLevel(AppDestination.Monitor.route)
                         },
                         onRegisterAccessPoint = { accessPoint ->
@@ -280,6 +284,7 @@ fun WifiAnalyzerApp(
                         workspaceName = workspaceState.selected?.name,
                         selectedBand = scanState.channelBand,
                         onBandSelected = scanViewModel::selectChannelBand,
+                        onDisplayModeChange = scanViewModel::setChannelDisplayMode,
                     )
                 }
                 composable(AppDestination.Monitor.route) {

@@ -9,6 +9,7 @@ import com.lazyapps.wifianalyzer.BuildConfig
 import com.lazyapps.wifianalyzer.data.WifiScanRepository
 import com.lazyapps.wifianalyzer.data.WifiUiPreferencesRepository
 import com.lazyapps.wifianalyzer.data.DistanceUnitPreference
+import com.lazyapps.wifianalyzer.data.ChannelDisplayMode
 import com.lazyapps.wifianalyzer.domain.WifiAnalysis
 import com.lazyapps.wifianalyzer.model.ChannelOccupancy
 import com.lazyapps.wifianalyzer.model.ScanState
@@ -42,6 +43,7 @@ data class ScanUiState(
     val distanceUnit: DistanceUnitPreference = DistanceUnitPreference.METERS,
     val visibleBands: Set<WifiBand> = WifiBand.entries.toSet(),
     val signalHistoryRangeMillis: Long = 30_000L,
+    val channelDisplayMode: ChannelDisplayMode = ChannelDisplayMode.GRAPH,
 ) {
     fun accessPointsFor(band: WifiBand): List<WifiAccessPoint> = accessPoints.filter { it.band == band }
     fun occupancyFor(band: WifiBand): List<ChannelOccupancy> = WifiAnalysis.channelOccupancy(accessPoints, band)
@@ -68,6 +70,7 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
                     refreshIntervalMillis = value.refreshIntervalMillis,
                     distanceUnit = value.distanceUnit,
                     visibleBands = value.visibleBands,
+                    channelDisplayMode = value.channelDisplayMode,
                 )
                 if (intervalChanged) scheduleAutoRefresh()
             }
@@ -161,6 +164,20 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
     fun selectChannelBand(band: WifiBand) {
         _uiState.value = _uiState.value.copy(channelBand = band)
         viewModelScope.launch { preferences.setChannelBand(band) }
+    }
+
+    fun setChannelDisplayMode(mode: ChannelDisplayMode) {
+        _uiState.value = _uiState.value.copy(channelDisplayMode = mode)
+        viewModelScope.launch { preferences.setChannelDisplayMode(mode) }
+    }
+
+    fun clearAccessPointSelection() {
+        _uiState.value = _uiState.value.copy(
+            selectedBssid = null,
+            selectedAccessPoint = null,
+            selectedDetected = false,
+            signalHistory = emptyList(),
+        )
     }
 
     fun setRefreshInterval(milliseconds: Long) {

@@ -23,6 +23,18 @@ object WifiAnalysis {
         else -> 0
     }
 
+    /** Maps Android ScanResult.CHANNEL_WIDTH_* values without leaking Android APIs into analysis code. */
+    fun channelWidthMhzFromScanResult(channelWidth: Int): Int = when (channelWidth) {
+        1 -> 40
+        2 -> 80
+        3, 4 -> 160
+        5 -> 320
+        else -> 20
+    }
+
+    fun safeChannelWidthMhz(widthMhz: Int): Int =
+        widthMhz.takeIf { it in setOf(20, 40, 80, 160, 320) } ?: 20
+
     fun bandFromFrequency(frequencyMhz: Int): WifiBand? = when (frequencyMhz) {
         in 2400..2500 -> WifiBand.BAND_24
         in 4900..5899 -> WifiBand.BAND_5
