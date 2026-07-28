@@ -5,7 +5,10 @@ import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 data class ScanObservationDecision(
     val accessPoints: List<WifiAccessPoint>,
     val newMeasurementBssids: Set<String>,
+    val timestampChangedBssids: Set<String>,
+    val rssiChangedBssids: Set<String>,
     val ignoredSameTimestampCount: Int,
+    val ignoredRollbackCount: Int,
     val uiChanged: Boolean,
 )
 
@@ -29,7 +32,10 @@ class WifiScanObservationPolicy(
 
         val adopted = mutableMapOf<String, WifiAccessPoint>()
         val newMeasurements = mutableSetOf<String>()
+        val timestampChanged = mutableSetOf<String>()
+        val rssiChanged = mutableSetOf<String>()
         var ignoredSameTimestamp = 0
+        var ignoredRollback = 0
 
         current.forEach { (bssid, reading) ->
             val previous = retained[bssid]
@@ -41,6 +47,7 @@ class WifiScanObservationPolicy(
 
             if (isOlder && previous != null) {
                 adopted[bssid] = previous
+                ignoredRollback++
                 return@forEach
             }
 
@@ -50,13 +57,16 @@ class WifiScanObservationPolicy(
             missingSince.remove(bssid)
             when {
                 previousIdentity == null -> newMeasurements += bssid
-                timestampIsUsable && reading.timestampMicros > previousIdentity.timestampMicros ->
+                timestampIsUsable && reading.timestampMicros > previousIdentity.timestampMicros -> {
                     newMeasurements += bssid
+                    timestampChanged += bssid
+                }
                 timestampIsUsable && reading.timestampMicros == previousIdentity.timestampMicros ->
                     ignoredSameTimestamp++
                 !timestampIsUsable && identity.fallbackFields != previousIdentity.fallbackFields ->
                     newMeasurements += bssid
             }
+            if (previous != null && reading.rssi != previous.rssi) rssiChanged += bssid
             if (!isOlder) lastMeasurement[bssid] = identity
         }
 
@@ -76,7 +86,15 @@ class WifiScanObservationPolicy(
         )
         val changed = published != lastPublished
         if (changed) lastPublished = published
-        return ScanObservationDecision(published, newMeasurements, ignoredSameTimestamp, changed)
+        return ScanObservationDecision(
+            accessPoints = published,
+            newMeasurementBssids = newMeasurements,
+            timestampChangedBssids = timestampChanged,
+            rssiChangedBssids = rssiChanged,
+            ignoredSameTimestampCount = ignoredSameTimestamp,
+            ignoredRollbackCount = ignoredRollback,
+            uiChanged = changed,
+        )
     }
 
     private data class MeasurementIdentity(

@@ -58,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.BuildConfig
 import com.lazyapps.wifianalyzer.data.DistanceUnitPreference
+import com.lazyapps.wifianalyzer.data.WifiUiPreferencesRepository
 import com.lazyapps.wifianalyzer.model.WifiBand
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
 import com.lazyapps.wifianalyzer.ui.components.SectionLabel
@@ -241,7 +242,8 @@ fun SettingsScreen(
         title = { Text("スキャン要求間隔") },
         text = {
             Column {
-                listOf(10_000L, 15_000L, 20_000L, 30_000L, 60_000L, 120_000L, 300_000L).forEach { interval ->
+                WifiUiPreferencesRepository.REFRESH_INTERVAL_SECONDS.forEach { seconds ->
+                    val interval = seconds * 1_000L
                     Row(
                         Modifier.fillMaxWidth().selectable(
                             selected = refreshIntervalMillis == interval,
@@ -254,6 +256,11 @@ fun SettingsScreen(
                         Text(refreshIntervalLabel(interval))
                     }
                 }
+                Text(
+                    "3秒・5秒ではバッテリー消費が増える場合があります。端末やAndroidの制限により、設定どおりにスキャンされないことがあります。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         },
         confirmButton = { TextButton(onClick = { showRefreshIntervals = false }) { Text("閉じる") } },
@@ -359,6 +366,8 @@ private fun PermissionStatus.label() = when (this) {
 }
 
 internal fun refreshIntervalLabel(milliseconds: Long): String = when (milliseconds) {
+    3_000L -> "3秒"
+    5_000L -> "5秒"
     10_000L -> "10秒"
     15_000L -> "15秒"
     20_000L -> "20秒"

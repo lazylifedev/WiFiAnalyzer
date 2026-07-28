@@ -33,11 +33,7 @@ class WifiUiPreferencesRepository(private val context: Context) {
         WifiUiPreferences(
             homeBand = values[HOME_BAND]?.toWifiBand()?.takeIf { it in visibleBands } ?: firstVisible,
             channelBand = values[CHANNEL_BAND]?.toWifiBand()?.takeIf { it in visibleBands } ?: firstVisible,
-            refreshIntervalMillis = values[REFRESH_SECONDS]
-                ?.let(::normalizeRefreshSeconds)
-                ?.takeIf { it in REFRESH_INTERVAL_SECONDS }
-                ?.times(1_000L)
-                ?: DEFAULT_REFRESH_INTERVAL_MILLIS,
+            refreshIntervalMillis = decodeRefreshIntervalMillis(values[REFRESH_SECONDS]),
             distanceUnit = values[DISTANCE_UNIT]
                 ?.let { runCatching { DistanceUnitPreference.valueOf(it) }.getOrNull() }
                 ?: DistanceUnitPreference.METERS,
@@ -48,9 +44,7 @@ class WifiUiPreferencesRepository(private val context: Context) {
     suspend fun setHomeBand(band: WifiBand) = context.wifiUiDataStore.edit { it[HOME_BAND] = band.name }
     suspend fun setChannelBand(band: WifiBand) = context.wifiUiDataStore.edit { it[CHANNEL_BAND] = band.name }
     suspend fun setRefreshInterval(milliseconds: Long) {
-        val seconds = (milliseconds / 1_000L).toInt()
-        require(seconds in REFRESH_INTERVAL_SECONDS)
-        context.wifiUiDataStore.edit { it[REFRESH_SECONDS] = seconds }
+        context.wifiUiDataStore.edit { it[REFRESH_SECONDS] = encodeRefreshIntervalSeconds(milliseconds) }
     }
     suspend fun setDistanceUnit(unit: DistanceUnitPreference) = context.wifiUiDataStore.edit { it[DISTANCE_UNIT] = unit.name }
     suspend fun setVisibleBands(bands: Set<WifiBand>) {
@@ -66,9 +60,22 @@ class WifiUiPreferencesRepository(private val context: Context) {
     private fun String.toWifiBand(): WifiBand? = WifiBand.entries.firstOrNull { it.name == this }
 
     companion object {
-        val REFRESH_INTERVAL_SECONDS = listOf(10, 15, 20, 30, 60, 120, 300)
+        val REFRESH_INTERVAL_SECONDS = listOf(3, 5, 10, 15, 20, 30, 60, 120, 300)
         const val DEFAULT_REFRESH_INTERVAL_MILLIS = 20_000L
         fun normalizeRefreshSeconds(seconds: Int): Int = if (seconds == 18) 20 else seconds
+        fun decodeRefreshIntervalMillis(storedSeconds: Int?): Long =
+            storedSeconds
+                ?.let(::normalizeRefreshSeconds)
+                ?.takeIf { it in REFRESH_INTERVAL_SECONDS }
+                ?.times(1_000L)
+                ?: DEFAULT_REFRESH_INTERVAL_MILLIS
+
+        fun encodeRefreshIntervalSeconds(milliseconds: Long): Int {
+            require(milliseconds % 1_000L == 0L)
+            return (milliseconds / 1_000L).toInt().also {
+                require(it in REFRESH_INTERVAL_SECONDS)
+            }
+        }
         private val HOME_BAND = stringPreferencesKey("home_band")
         private val CHANNEL_BAND = stringPreferencesKey("channel_band")
         private val REFRESH_SECONDS = intPreferencesKey("refresh_interval_seconds")

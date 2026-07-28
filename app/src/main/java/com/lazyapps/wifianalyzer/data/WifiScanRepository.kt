@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class ScanSnapshot(
     val state: ScanState = ScanState.PERMISSION_REQUIRED,
@@ -68,13 +69,18 @@ class WifiScanRepository(context: Context) : AutoCloseable {
 
     private var pollingJob: Job? = null
     private var receiverRegistered = false
+    private val scanRequestInFlight = AtomicBoolean(false)
+    private var lastScanRequestElapsedMillis: Long? = null
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 WifiManager.SCAN_RESULTS_AVAILABLE_ACTION -> {
                     val fresh = intent.getBooleanExtra(WifiManager.EXTRA_RESULTS_UPDATED, false)
-                    debugLog("OS scan-results broadcast received updated=$fresh")
+                    debugLog(
+                        "scan_broadcast wallMs=${System.currentTimeMillis()} " +
+                            "elapsedMs=${elapsedRealtime.now()} resultsUpdated=$fresh",
+                    )
                     readResults(if (fresh) ScanState.READY else ScanState.THROTTLED, "broadcast")
                 }
                 WifiManager.WIFI_STATE_CHANGED_ACTION, LocationManager.MODE_CHANGED_ACTION ->
@@ -115,28 +121,54 @@ class WifiScanRepository(context: Context) : AutoCloseable {
 
     @SuppressLint("MissingPermission")
     @Suppress("DEPRECATION")
-    fun requestScan() {
-        if (!wifiManager.isWifiEnabled) {
-            publishState(ScanState.WIFI_DISABLED)
+    fun requestScan(scheduledAtElapsedMillis: Long? = null) {
+        val actualElapsedMillis = elapsedRealtime.now()
+        val sincePreviousMillis = lastScanRequestElapsedMillis?.let { actualElapsedMillis - it }
+        if (!scanRequestInFlight.compareAndSet(false, true)) {
+            debugLog(
+                "scan_request scheduledElapsedMs=$scheduledAtElapsedMillis " +
+                    "actualElapsedMs=$actualElapsedMillis sincePreviousMs=$sincePreviousMillis " +
+                    "accepted=none exception=none skippedInFlight=true",
+            )
             return
         }
-        if (!locationManager.isLocationEnabled) {
-            publishState(ScanState.LOCATION_DISABLED)
-            return
-        }
-
+        lastScanRequestElapsedMillis = actualElapsedMillis
         try {
-            val requestedAt = System.currentTimeMillis()
+            if (!wifiManager.isWifiEnabled) {
+                publishState(ScanState.WIFI_DISABLED)
+                return
+            }
+            if (!locationManager.isLocationEnabled) {
+                publishState(ScanState.LOCATION_DISABLED)
+                return
+            }
             val accepted = wifiManager.startScan()
-            debugLog("startScan at=$requestedAt accepted=$accepted")
+            debugLog(
+                "scan_request scheduledElapsedMs=$scheduledAtElapsedMillis " +
+                    "actualElapsedMs=$actualElapsedMillis wallMs=${System.currentTimeMillis()} " +
+                    "sincePreviousMs=$sincePreviousMillis accepted=$accepted " +
+                    "exception=none skippedInFlight=false",
+            )
             if (accepted) publishState(ScanState.SCANNING)
             else publishState(ScanState.THROTTLED)
         } catch (_: SecurityException) {
-            debugLog("startScan failed: permission")
+            debugLog(
+                "scan_request scheduledElapsedMs=$scheduledAtElapsedMillis " +
+                    "actualElapsedMs=$actualElapsedMillis wallMs=${System.currentTimeMillis()} " +
+                    "sincePreviousMs=$sincePreviousMillis accepted=none " +
+                    "exception=SecurityException skippedInFlight=false",
+            )
             publishState(ScanState.PERMISSION_REQUIRED)
         } catch (error: RuntimeException) {
-            debugLog("startScan failed: ${error.javaClass.simpleName}")
+            debugLog(
+                "scan_request scheduledElapsedMs=$scheduledAtElapsedMillis " +
+                    "actualElapsedMs=$actualElapsedMillis wallMs=${System.currentTimeMillis()} " +
+                    "sincePreviousMs=$sincePreviousMillis accepted=none " +
+                    "exception=${error.javaClass.simpleName} skippedInFlight=false",
+            )
             publishState(ScanState.ERROR, "SCN-002")
+        } finally {
+            scanRequestInFlight.set(false)
         }
     }
 
@@ -144,18 +176,14 @@ class WifiScanRepository(context: Context) : AutoCloseable {
         try {
             val readings = resultsSource.read(System.currentTimeMillis())
             val decision = observationPolicy.accept(readings, elapsedRealtime.now())
-            debugLog(
-                "getScanResults trigger=$trigger count=${readings.size} " +
-                    "adopted=${decision.newMeasurementBssids.size} " +
-                    "sameTimestamp=${decision.ignoredSameTimestampCount} ui=${decision.uiChanged}",
-            )
-            if (BuildConfig.DEBUG) {
-                readings.forEach {
-                    Log.d(TAG, "result bssid=${it.bssid} rssi=${it.rssi} timestampUs=${it.timestampMicros}")
-                }
-            }
             val current = _snapshot.value
-            val nextState = if (decision.accessPoints.isEmpty()) ScanState.EMPTY else preferredState
+            val dataChanged = decision.uiChanged || decision.newMeasurementBssids.isNotEmpty()
+            val nextState = resolveScanResultState(
+                currentState = current.state,
+                preferredState = preferredState,
+                isEmpty = decision.accessPoints.isEmpty(),
+                dataChanged = dataChanged,
+            )
             val next = ScanSnapshot(
                 state = nextState,
                 accessPoints = decision.accessPoints,
@@ -163,11 +191,29 @@ class WifiScanRepository(context: Context) : AutoCloseable {
                     ?: current.updatedAtMillis,
                 newMeasurementBssids = decision.newMeasurementBssids,
             )
-            if (decision.uiChanged || current.state != next.state ||
+            val willNotify = decision.uiChanged || current.state != next.state ||
                 decision.newMeasurementBssids.isNotEmpty()
-            ) {
-                _snapshot.value = next
+            debugLog(
+                "scan_results trigger=$trigger wallMs=${System.currentTimeMillis()} " +
+                    "elapsedMs=${elapsedRealtime.now()} count=${readings.size} " +
+                    "timestampChanges=${decision.timestampChangedBssids.size} " +
+                    "rssiChanges=${decision.rssiChangedBssids.size} " +
+                    "historyCandidates=${decision.newMeasurementBssids.size} " +
+                    "sameCacheSuppressed=${decision.ignoredSameTimestampCount} " +
+                    "rollbacksSuppressed=${decision.ignoredRollbackCount} uiNotified=$willNotify",
+            )
+            if (BuildConfig.DEBUG) {
+                readings.forEach {
+                    Log.d(
+                        TAG,
+                        "scan_result bssid=${it.bssid} rssi=${it.rssi} " +
+                            "timestampUs=${it.timestampMicros} " +
+                            "timestampChanged=${it.bssid in decision.timestampChangedBssids} " +
+                            "rssiChanged=${it.bssid in decision.rssiChangedBssids}",
+                    )
+                }
             }
+            if (willNotify) _snapshot.value = next
         } catch (_: SecurityException) {
             publishState(ScanState.PERMISSION_REQUIRED)
         } catch (error: RuntimeException) {
@@ -256,4 +302,19 @@ class WifiScanRepository(context: Context) : AutoCloseable {
         const val CACHE_POLL_INTERVAL_MS = 2_000L
         private const val TAG = "WifiCacheMonitor"
     }
+}
+
+internal fun resolveScanResultState(
+    currentState: ScanState,
+    preferredState: ScanState,
+    isEmpty: Boolean,
+    dataChanged: Boolean,
+): ScanState = when {
+    isEmpty -> ScanState.EMPTY
+    preferredState == ScanState.THROTTLED -> ScanState.THROTTLED
+    dataChanged -> preferredState
+    currentState == ScanState.READY ||
+        currentState == ScanState.THROTTLED ||
+        currentState == ScanState.SCANNING -> currentState
+    else -> preferredState
 }
