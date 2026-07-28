@@ -4,6 +4,7 @@ import com.lazyapps.wifianalyzer.data.MonitoringSessionPolicy
 import com.lazyapps.wifianalyzer.data.ScanSnapshot
 import com.lazyapps.wifianalyzer.data.WifiScanObservationPolicy
 import com.lazyapps.wifianalyzer.data.resolveScanResultState
+import com.lazyapps.wifianalyzer.data.observedWallClockMillis
 import com.lazyapps.wifianalyzer.domain.WifiAnalysis
 import com.lazyapps.wifianalyzer.model.DistanceRange
 import com.lazyapps.wifianalyzer.model.ScanState
@@ -141,9 +142,9 @@ class WifiScanObservationPolicyTest {
     }
 
     @Test
-    fun unchangedPollDoesNotClearThrottledStateOrNotifyUiByStateChurn() {
+    fun validCacheNormalizesTransientThrottledState() {
         assertEquals(
-            ScanState.THROTTLED,
+            ScanState.READY,
             resolveScanResultState(
                 currentState = ScanState.THROTTLED,
                 preferredState = ScanState.READY,
@@ -160,6 +161,33 @@ class WifiScanObservationPolicyTest {
                 dataChanged = true,
             ),
         )
+    }
+
+    @Test
+    fun displayTimestampUsesCurrentWallClockOffset() {
+        assertEquals(
+            1_699_999_995_000L,
+            observedWallClockMillis(
+                readAtWallClockMillis = 1_700_000_000_000L,
+                readAtElapsedMillis = 25_000L,
+                scanTimestampMicros = 20_000_000L,
+            ),
+        )
+        assertEquals(
+            1_799_999_995_000L,
+            observedWallClockMillis(
+                readAtWallClockMillis = 1_800_000_000_000L,
+                readAtElapsedMillis = 25_000L,
+                scanTimestampMicros = 20_000_000L,
+            ),
+        )
+    }
+
+    @Test
+    fun invalidOrFutureScanTimestampFallsBackSafely() {
+        assertEquals(1_000L, observedWallClockMillis(1_000L, 500L, 0L))
+        assertEquals(1_000L, observedWallClockMillis(1_000L, 500L, 600_000L))
+        assertEquals(Long.MIN_VALUE, observedWallClockMillis(Long.MIN_VALUE, 500L, 100_000L))
     }
 
     @Test

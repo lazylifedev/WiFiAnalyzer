@@ -2,6 +2,7 @@ package com.lazyapps.wifianalyzer
 
 import android.graphics.Bitmap
 import android.net.Uri
+import androidx.exifinterface.media.ExifInterface
 import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -19,6 +20,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.io.RandomAccessFile
 
 @RunWith(AndroidJUnit4::class)
 class PhotoRepositoryTest {
@@ -44,5 +46,40 @@ class PhotoRepositoryTest {
         assertTrue(remaining.none { it.isPrimary })
         assertEquals((0 until remaining.size).toList(), remaining.map { it.sortOrder })
         sources.forEach(File::delete); db.close(); Unit
+    }
+
+    @Test fun imageDecoderHonorsExifRejectsInvalidAndEnforcesSourceLimit() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val db = Room.inMemoryDatabaseBuilder(context, WifiAnalyzerDatabase::class.java).build()
+        val workspaces = WorkspaceRepository(context, db); val workspaceId = workspaces.ensureUsable()
+        val devices = DeviceRegistryRepository(context, db, workspaces)
+        val deviceId = devices.save(DeviceInput(displayName = "Decode AP", bssids = listOf(DeviceBssidInput("AA:BB:CC:00:00:02", "5 GHz"))))
+        val repository = PhotoRepository(context, db)
+        val rotated = File(context.cacheDir, "photo-exif-test.jpg")
+        Bitmap.createBitmap(1200, 600, Bitmap.Config.ARGB_8888).also { bitmap ->
+            rotated.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 95, it) }
+            bitmap.recycle()
+        }
+        ExifInterface(rotated).apply {
+            setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_ROTATE_90.toString())
+            saveAttributes()
+        }
+
+        repository.save(deviceId, workspaceId, Uri.fromFile(rotated))
+        val saved = repository.observe(deviceId).first { it.size == 1 }.single()
+        assertEquals(600, saved.width)
+        assertEquals(1200, saved.height)
+
+        val invalid = File(context.cacheDir, "photo-invalid-test.jpg").apply { writeText("not an image") }
+        assertTrue(runCatching { repository.save(deviceId, workspaceId, Uri.fromFile(invalid)) }.isFailure)
+
+        val oversized = File(context.cacheDir, "photo-oversized-test.jpg")
+        RandomAccessFile(oversized, "rw").use { it.setLength(30L * 1024L * 1024L + 1L) }
+        assertTrue(runCatching { repository.save(deviceId, workspaceId, Uri.fromFile(oversized)) }.isFailure)
+
+        rotated.delete()
+        invalid.delete()
+        oversized.delete()
+        db.close()
     }
 }

@@ -1,23 +1,15 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
--->
+<?xml version="1.0" encoding="utf-8"?><!-- Android 12 and later backup and transfer rules. -->
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="database" path="wifi_analyzer.db"/>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="database" path="wifi_analyzer.db-shm"/>
+        <exclude domain="database" path="wifi_analyzer.db-wal"/>
+        <exclude domain="file" path="devices/"/>
     </cloud-backup>
     <device-transfer>
         <exclude domain="database" path="wifi_analyzer.db"/>
+        <exclude domain="database" path="wifi_analyzer.db-shm"/>
+        <exclude domain="database" path="wifi_analyzer.db-wal"/>
+        <exclude domain="file" path="devices/"/>
     </device-transfer>
-    <!--
-    <device-transfer>
-        <include .../>
-        <exclude .../>
-    </device-transfer>
-    -->
 </data-extraction-rules>

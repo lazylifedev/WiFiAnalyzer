@@ -23,4 +23,9 @@ class BillingViewModel(application: Application) : AndroidViewModel(application)
     fun refresh(force: Boolean = false) = viewModelScope.launch { repository.refresh(force) }
     fun restore() = viewModelScope.launch { repository.restore() }
     fun purchase(activity: Activity): Boolean = repository.purchase(activity)
+
+    override fun onCleared() {
+        repository.close()
+        super.onCleared()
+    }
 }
