@@ -3,6 +3,7 @@ package com.lazyapps.wifianalyzer
 import com.lazyapps.wifianalyzer.data.MonitoringSessionPolicy
 import com.lazyapps.wifianalyzer.data.ScanSnapshot
 import com.lazyapps.wifianalyzer.data.WifiScanObservationPolicy
+import com.lazyapps.wifianalyzer.data.resolveScanResultState
 import com.lazyapps.wifianalyzer.domain.WifiAnalysis
 import com.lazyapps.wifianalyzer.model.DistanceRange
 import com.lazyapps.wifianalyzer.model.ScanState
@@ -35,6 +36,8 @@ class WifiScanObservationPolicyTest {
         val newer = policy.accept(listOf(ap(BSSID_A, -51, 200)), 2_000)
 
         assertEquals(setOf(BSSID_A), newer.newMeasurementBssids)
+        assertEquals(setOf(BSSID_A), newer.timestampChangedBssids)
+        assertEquals(setOf(BSSID_A), newer.rssiChangedBssids)
         assertTrue(newer.uiChanged)
     }
 
@@ -47,6 +50,8 @@ class WifiScanObservationPolicyTest {
 
         assertTrue(changed.uiChanged)
         assertTrue(changed.newMeasurementBssids.isEmpty())
+        assertTrue(changed.timestampChangedBssids.isEmpty())
+        assertEquals(setOf(BSSID_A), changed.rssiChangedBssids)
         assertEquals(-60, changed.accessPoints.single().rssi)
     }
 
@@ -133,6 +138,28 @@ class WifiScanObservationPolicyTest {
         val failure = previous.copy(state = ScanState.THROTTLED)
 
         assertEquals(previous.accessPoints, failure.accessPoints)
+    }
+
+    @Test
+    fun unchangedPollDoesNotClearThrottledStateOrNotifyUiByStateChurn() {
+        assertEquals(
+            ScanState.THROTTLED,
+            resolveScanResultState(
+                currentState = ScanState.THROTTLED,
+                preferredState = ScanState.READY,
+                isEmpty = false,
+                dataChanged = false,
+            ),
+        )
+        assertEquals(
+            ScanState.READY,
+            resolveScanResultState(
+                currentState = ScanState.THROTTLED,
+                preferredState = ScanState.READY,
+                isEmpty = false,
+                dataChanged = true,
+            ),
+        )
     }
 
     @Test
