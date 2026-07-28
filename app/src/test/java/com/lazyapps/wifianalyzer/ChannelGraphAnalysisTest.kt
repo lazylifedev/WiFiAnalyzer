@@ -11,6 +11,8 @@ import com.lazyapps.wifianalyzer.model.WifiStandard
 import com.lazyapps.wifianalyzer.ui.screens.channel.ChannelGraphGeometry
 import com.lazyapps.wifianalyzer.ui.screens.channel.GraphLabelRect
 import com.lazyapps.wifianalyzer.ui.screens.channel.GraphPoint
+import com.lazyapps.wifianalyzer.ui.screens.channel.GraphRange
+import com.lazyapps.wifianalyzer.ui.screens.channel.graphHeightDp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -66,6 +68,37 @@ class ChannelGraphAnalysisTest {
     }
 
     @Test
+    fun minimumMountainWidthPreservesBandwidthOrderAndBounds() {
+        val range = GraphRange(5000f, 6000f)
+        val widths = listOf(20, 40, 80, 160).mapIndexed { index, width ->
+            ChannelGraphGeometry.mountain(
+                ap("0$index", -50, 5500, 100 + index, width),
+                range,
+                10f,
+                410f,
+                0f,
+                300f,
+                minimumDisplayWidth = 60f,
+            )
+        }.map { it.rightX - it.leftX }
+        assertTrue(widths.zipWithNext().all { (first, second) -> second > first })
+        assertTrue(widths.first() >= 60f)
+        assertTrue(widths.all { it <= 400f })
+
+        val edge = ChannelGraphGeometry.mountain(
+            ap("09", -50, 5000, 1, 20),
+            range,
+            10f,
+            410f,
+            0f,
+            300f,
+            minimumDisplayWidth = 60f,
+        )
+        assertTrue(edge.leftX >= 10f && edge.rightX <= 410f)
+        assertEquals(edge.accessPoint.bssid, ChannelGraphGeometry.hitTest(listOf(edge), GraphPoint(35f, 200f))?.bssid)
+    }
+
+    @Test
     fun hitTestingSelectsPeakAndBlankClears() {
         val range = ChannelGraphGeometry.rangeFor(WifiBand.BAND_24, emptyList())
         val first = ChannelGraphGeometry.mountain(ap("01", -45, 2412, 1, 20), range, 0f, 500f, 0f, 300f)
@@ -87,6 +120,41 @@ class ChannelGraphAnalysisTest {
         )
         assertEquals(listOf("selected", "other"), placed.map { it.first })
         assertTrue(placed.all { it.second.left >= 0 && it.second.right <= 100 })
+    }
+
+    @Test
+    fun labelCandidatesPrioritizeSelectionAndCapRegisteredAndStrongest() {
+        val selected = ap("01", -80, 2412, 1, 20)
+        val registered = listOf(
+            ap("02", -60, 2417, 2, 20).copy(isRegistered = true),
+            ap("03", -65, 2422, 3, 20).copy(isRegistered = true),
+            ap("04", -70, 2427, 4, 20).copy(isRegistered = true),
+        )
+        val ordinary = listOf(
+            ap("05", -40, 2432, 5, 20),
+            ap("06", -45, 2437, 6, 20),
+            ap("07", -50, 2442, 7, 20),
+        )
+        val labels = ChannelGraphGeometry.labelCandidates(listOf(selected) + registered + ordinary, selected.bssid)
+        assertEquals(selected.bssid, labels.first().bssid)
+        assertEquals(2, labels.count { it.isRegistered })
+        assertEquals(4, labels.size)
+        assertEquals(ordinary.first().bssid, labels.last().bssid)
+        assertTrue(ChannelGraphGeometry.labelText(selected, true).endsWith("-80 dBm"))
+        assertTrue(!ChannelGraphGeometry.labelText(ordinary.first(), false).contains("dBm"))
+    }
+
+    @Test
+    fun paletteAssignmentIsStableAndResponsiveHeightUsesExpectedClasses() {
+        val bssids = (0 until 30).map { "02:00:00:00:00:${it.toString().padStart(2, '0')}" }
+        val first = bssids.map { ChannelGraphGeometry.stablePaletteIndex(it, 6) }
+        val second = bssids.map { ChannelGraphGeometry.stablePaletteIndex(it, 6) }
+        assertEquals(first, second)
+        assertTrue(first.toSet().size >= 4)
+        assertEquals(340, graphHeightDp(720, 400))
+        assertEquals(380, graphHeightDp(390, 800))
+        assertEquals(440, graphHeightDp(700, 900))
+        assertEquals(480, graphHeightDp(900, 1200))
     }
 
     @Test

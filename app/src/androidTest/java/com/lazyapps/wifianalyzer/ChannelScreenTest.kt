@@ -102,6 +102,27 @@ class ChannelScreenTest {
         }
     }
 
+    @Test
+    fun routineThrottlingDoesNotShowAStatusCardOnChannelGraph() {
+        composeRule.setContent {
+            WifiAnalyzerTheme {
+                ChannelScreen(
+                    state = ScanUiState(scanState = ScanState.THROTTLED, accessPoints = listOf(accessPoint())),
+                    onRefresh = {},
+                    onRequestPermission = {},
+                    onOpenSettings = {},
+                    onSelectAccessPoint = {},
+                    onClearAccessPointSelection = {},
+                    onOpenAccessPoint = {},
+                    onRegisterAccessPoint = {},
+                    onDisplayModeChange = {},
+                )
+            }
+        }
+        composeRule.onNodeWithText("OSのスキャン実行制限中です。直近の結果を表示しています。").assertDoesNotExist()
+        composeRule.onNodeWithTag("channel_graph").assertIsDisplayed()
+    }
+
     private fun accessPoint() = WifiAccessPoint(
         ssid = "Test AP",
         bssid = "00:11:22:33:44:55",
