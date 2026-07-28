@@ -2,6 +2,7 @@ package com.lazyapps.wifianalyzer.billing
 
 import android.app.Activity
 import android.content.Context
+import android.util.Log
 import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
@@ -16,14 +17,31 @@ import com.android.billingclient.api.QueryPurchasesParams
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
+import java.util.concurrent.atomic.AtomicBoolean
+
+internal class BillingCloseGuard(
+    private val cancelScope: () -> Unit,
+    private val endConnection: () -> Unit,
+) {
+    private val didClose = AtomicBoolean(false)
+    val closed: Boolean get() = didClose.get()
+
+    fun close() {
+        if (!didClose.compareAndSet(false, true)) return
+        cancelScope()
+        endConnection()
+    }
+}
 
 class PlayBillingRepository(context: Context) : BillingRepository, PurchasesUpdatedListener {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val scopeJob = SupervisorJob()
+    private val scope = CoroutineScope(scopeJob + Dispatchers.Main.immediate)
     private val mutableSnapshot = MutableStateFlow(BillingSnapshot())
     override val snapshot = mutableSnapshot.asStateFlow()
     private var productDetails: ProductDetails? = null
@@ -35,14 +53,20 @@ class PlayBillingRepository(context: Context) : BillingRepository, PurchasesUpda
         .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build())
         .enableAutoServiceReconnection()
         .build()
+    private val closeGuard = BillingCloseGuard(
+        cancelScope = scope::cancel,
+        endConnection = client::endConnection,
+    )
 
     override suspend fun connectAndRefresh(force: Boolean) {
+        if (closeGuard.closed) return
         if (!client.isReady) {
             if (connecting) return
             connecting = true
             mutableSnapshot.value = mutableSnapshot.value.copy(connection = BillingConnectionState.CONNECTING)
             val connected = connect()
             connecting = false
+            if (closeGuard.closed) return
             if (!connected) {
                 mutableSnapshot.value = mutableSnapshot.value.copy(
                     connection = BillingConnectionState.DISCONNECTED,
@@ -55,12 +79,14 @@ class PlayBillingRepository(context: Context) : BillingRepository, PurchasesUpda
     }
 
     override suspend fun restore() {
+        if (closeGuard.closed) return
         mutableSnapshot.value = mutableSnapshot.value.copy(restoring = true)
         connectAndRefresh(force = true)
         mutableSnapshot.value = mutableSnapshot.value.copy(restoring = false)
     }
 
     override fun launchPurchase(activity: Activity): Boolean {
+        if (closeGuard.closed) return false
         val details = productDetails ?: return false
         if (!client.isReady || mutableSnapshot.value.purchasing) return false
         mutableSnapshot.value = mutableSnapshot.value.copy(purchasing = true)
@@ -79,6 +105,7 @@ class PlayBillingRepository(context: Context) : BillingRepository, PurchasesUpda
     }
 
     override fun onPurchasesUpdated(result: BillingResult, purchases: MutableList<Purchase>?) {
+        if (closeGuard.closed) return
         mutableSnapshot.value = mutableSnapshot.value.copy(purchasing = false)
         when (result.responseCode) {
             BillingClient.BillingResponseCode.OK -> scope.launch { refreshInternal() }
@@ -88,17 +115,27 @@ class PlayBillingRepository(context: Context) : BillingRepository, PurchasesUpda
     }
 
     private suspend fun connect(): Boolean = suspendCancellableCoroutine { continuation ->
+        if (closeGuard.closed) {
+            continuation.resume(false)
+            return@suspendCancellableCoroutine
+        }
         client.startConnection(object : BillingClientStateListener {
             override fun onBillingSetupFinished(result: BillingResult) {
-                if (continuation.isActive) continuation.resume(result.responseCode == BillingClient.BillingResponseCode.OK)
+                if (continuation.isActive) {
+                    continuation.resume(
+                        !closeGuard.closed && result.responseCode == BillingClient.BillingResponseCode.OK,
+                    )
+                }
             }
             override fun onBillingServiceDisconnected() {
+                if (closeGuard.closed) return
                 mutableSnapshot.value = mutableSnapshot.value.copy(connection = BillingConnectionState.DISCONNECTED)
             }
         })
     }
 
     private suspend fun refreshInternal() {
+        if (closeGuard.closed) return
         mutableSnapshot.value = mutableSnapshot.value.copy(connection = BillingConnectionState.CONNECTED)
         val product = queryProduct()
         val purchases = queryPurchases()
@@ -108,7 +145,16 @@ class PlayBillingRepository(context: Context) : BillingRepository, PurchasesUpda
         }
         val matching = purchases.filter { BillingProducts.PRO in it.products }
         val purchased = matching.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
-        purchased.filterNot { it.isAcknowledged }.forEach { acknowledge(it) }
+        purchased.forEach {
+            when (val result = acknowledge(it)) {
+                PurchaseAcknowledgementResult.Success,
+                PurchaseAcknowledgementResult.AlreadyAcknowledged -> Unit
+                is PurchaseAcknowledgementResult.RetryableFailure ->
+                    debugLog("purchase acknowledgement retryable responseCode=${result.responseCode}")
+                is PurchaseAcknowledgementResult.PermanentFailure ->
+                    debugLog("purchase acknowledgement permanent responseCode=${result.responseCode}")
+            }
+        }
         val entitlement = when {
             purchased.isNotEmpty() -> ProEntitlementState.Pro
             matching.any { it.purchaseState == Purchase.PurchaseState.PENDING } -> ProEntitlementState.Pending
@@ -144,12 +190,30 @@ class PlayBillingRepository(context: Context) : BillingRepository, PurchasesUpda
         }
     }
 
-    private suspend fun acknowledge(purchase: Purchase) = suspendCancellableCoroutine { continuation ->
-        val params = AcknowledgePurchaseParams.newBuilder().setPurchaseToken(purchase.purchaseToken).build()
-        client.acknowledgePurchase(params) { continuation.resume(Unit) }
+    private suspend fun acknowledge(purchase: Purchase): PurchaseAcknowledgementResult {
+        if (purchase.isAcknowledged) return PurchaseAcknowledgementResult.AlreadyAcknowledged
+        return suspendCancellableCoroutine { continuation ->
+            val params = AcknowledgePurchaseParams.newBuilder().setPurchaseToken(purchase.purchaseToken).build()
+            client.acknowledgePurchase(params) { result ->
+                if (continuation.isActive) {
+                    continuation.resume(PurchaseAcknowledgementPolicy.classify(result.responseCode))
+                }
+            }
+        }
     }
 
     private fun safeFailure(): ProEntitlementState = ProEntitlementState.Error(retainedPro = lastConfirmedPro)
 
-    override fun close() = client.endConnection()
+    private fun debugLog(message: String) {
+        if (com.lazyapps.wifianalyzer.BuildConfig.DEBUG) Log.d(TAG, message)
+    }
+
+    override fun close() {
+        connecting = false
+        closeGuard.close()
+    }
+
+    private companion object {
+        const val TAG = "PlayBillingRepository"
+    }
 }

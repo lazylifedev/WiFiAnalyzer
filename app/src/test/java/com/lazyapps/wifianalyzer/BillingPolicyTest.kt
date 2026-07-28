@@ -1,6 +1,7 @@
 package com.lazyapps.wifianalyzer
 
 import com.lazyapps.wifianalyzer.billing.*
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -30,6 +31,51 @@ class BillingPolicyTest {
         assertTrue(access.canUseCsvImport)
         assertNull(access.maxWorkspaceCount)
         assertTrue(AdVisibilityPolicy(access).canShow(AdPlacement.HOME))
+    }
+    @Test fun acknowledgementResponseSeparatesSuccessRetryableAndPermanentFailures() {
+        assertEquals(
+            PurchaseAcknowledgementResult.Success,
+            PurchaseAcknowledgementPolicy.classify(com.android.billingclient.api.BillingClient.BillingResponseCode.OK),
+        )
+        assertTrue(
+            PurchaseAcknowledgementPolicy.classify(
+                com.android.billingclient.api.BillingClient.BillingResponseCode.NETWORK_ERROR,
+            ) is PurchaseAcknowledgementResult.RetryableFailure,
+        )
+        assertTrue(
+            PurchaseAcknowledgementPolicy.classify(
+                com.android.billingclient.api.BillingClient.BillingResponseCode.DEVELOPER_ERROR,
+            ) is PurchaseAcknowledgementResult.PermanentFailure,
+        )
+    }
+    @Test fun billingCloseCancelsScopeAndEndsConnectionOnce() {
+        var scopeCancelCount = 0
+        var endConnectionCount = 0
+        val guard = BillingCloseGuard(
+            cancelScope = { scopeCancelCount++ },
+            endConnection = { endConnectionCount++ },
+        )
+
+        guard.close()
+        guard.close()
+
+        assertTrue(guard.closed)
+        assertEquals(1, scopeCancelCount)
+        assertEquals(1, endConnectionCount)
+    }
+    @Test fun entitlementRepositoryForwardsCloseToItsOwnedBillingRepository() {
+        var closeCount = 0
+        val billing = object : BillingRepository {
+            override val snapshot = MutableStateFlow(BillingSnapshot())
+            override suspend fun connectAndRefresh(force: Boolean) = Unit
+            override suspend fun restore() = Unit
+            override fun launchPurchase(activity: android.app.Activity) = false
+            override fun close() { closeCount++ }
+        }
+
+        DefaultEntitlementRepository(billing).close()
+
+        assertEquals(1, closeCount)
     }
     @Test fun debugForceProOverridesFreeEntitlement() {
         val access = FeatureAccessPolicy.from(ProEntitlementState.Free, debugForcePro = true)

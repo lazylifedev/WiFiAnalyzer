@@ -51,15 +51,20 @@ class WifiScanRepository(context: Context) : AutoCloseable {
     private val appContext = context.applicationContext
     private val wifiManager = appContext.getSystemService(WifiManager::class.java)
     private val locationManager = appContext.getSystemService(LocationManager::class.java)
-    private val bootWallClockMillis = System.currentTimeMillis() - SystemClock.elapsedRealtime()
     private val elapsedRealtime = object : ElapsedRealtimeSource {
         override fun now(): Long = SystemClock.elapsedRealtime()
     }
     private val resultsSource = object : WifiScanResultsSource {
         @SuppressLint("MissingPermission")
         @Suppress("DEPRECATION")
-        override fun read(readAtMillis: Long): List<WifiAccessPoint> =
-            WifiAnalysis.deduplicateByBssid(wifiManager.scanResults.mapNotNull { it.toAccessPoint(readAtMillis) })
+        override fun read(readAtMillis: Long): List<WifiAccessPoint> {
+            val readAtElapsedMillis = elapsedRealtime.now()
+            return WifiAnalysis.deduplicateByBssid(
+                wifiManager.scanResults.mapNotNull {
+                    it.toAccessPoint(readAtMillis, readAtElapsedMillis)
+                },
+            )
+        }
     }
     private val observationPolicy = WifiScanObservationPolicy()
     private val monitoringSession = MonitoringSessionPolicy()
@@ -149,8 +154,11 @@ class WifiScanRepository(context: Context) : AutoCloseable {
                     "sincePreviousMs=$sincePreviousMillis accepted=$accepted " +
                     "exception=none skippedInFlight=false",
             )
-            if (accepted) publishState(ScanState.SCANNING)
-            else publishState(ScanState.THROTTLED)
+            if (accepted) {
+                publishState(ScanState.SCANNING)
+            } else if (_snapshot.value.accessPoints.isEmpty()) {
+                publishState(ScanState.THROTTLED)
+            }
         } catch (_: SecurityException) {
             debugLog(
                 "scan_request scheduledElapsedMs=$scheduledAtElapsedMillis " +
@@ -251,7 +259,10 @@ class WifiScanRepository(context: Context) : AutoCloseable {
         scope.cancel()
     }
 
-    private fun ScanResult.toAccessPoint(readAt: Long): WifiAccessPoint? {
+    private fun ScanResult.toAccessPoint(
+        readAtWallClockMillis: Long,
+        readAtElapsedMillis: Long,
+    ): WifiAccessPoint? {
         val band = WifiAnalysis.bandFromFrequency(frequency) ?: return null
         val width = WifiAnalysis.channelWidthMhzFromScanResult(channelWidth)
         val standard = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -279,11 +290,11 @@ class WifiScanRepository(context: Context) : AutoCloseable {
             securityType = WifiAnalysis.securityType(capabilities.orEmpty()),
             wifiStandard = standard,
             distanceRange = DistanceRange.TWENTY_PLUS,
-            observedAtMillis = if (timestamp > 0L) {
-                bootWallClockMillis + timestamp / 1_000L
-            } else {
-                readAt
-            },
+            observedAtMillis = observedWallClockMillis(
+                readAtWallClockMillis = readAtWallClockMillis,
+                readAtElapsedMillis = readAtElapsedMillis,
+                scanTimestampMicros = timestamp,
+            ),
         )
     }
 
@@ -304,10 +315,26 @@ internal fun resolveScanResultState(
     dataChanged: Boolean,
 ): ScanState = when {
     isEmpty -> ScanState.EMPTY
-    preferredState == ScanState.THROTTLED -> ScanState.THROTTLED
+    preferredState == ScanState.THROTTLED -> ScanState.READY
     dataChanged -> preferredState
     currentState == ScanState.READY ||
-        currentState == ScanState.THROTTLED ||
         currentState == ScanState.SCANNING -> currentState
+    currentState == ScanState.THROTTLED -> ScanState.READY
     else -> preferredState
+}
+
+internal fun observedWallClockMillis(
+    readAtWallClockMillis: Long,
+    readAtElapsedMillis: Long,
+    scanTimestampMicros: Long,
+): Long {
+    if (scanTimestampMicros <= 0L || readAtElapsedMillis < 0L) return readAtWallClockMillis
+    val scanElapsedMillis = scanTimestampMicros / 1_000L
+    if (scanElapsedMillis !in 0L..readAtElapsedMillis) return readAtWallClockMillis
+    val ageMillis = readAtElapsedMillis - scanElapsedMillis
+    return try {
+        Math.subtractExact(readAtWallClockMillis, ageMillis)
+    } catch (_: ArithmeticException) {
+        readAtWallClockMillis
+    }
 }

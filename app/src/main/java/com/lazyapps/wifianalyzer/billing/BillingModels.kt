@@ -59,6 +59,27 @@ sealed interface BillingQueryResult {
     data object Failure : BillingQueryResult
 }
 
+sealed interface PurchaseAcknowledgementResult {
+    data object Success : PurchaseAcknowledgementResult
+    data object AlreadyAcknowledged : PurchaseAcknowledgementResult
+    data class RetryableFailure(val responseCode: Int) : PurchaseAcknowledgementResult
+    data class PermanentFailure(val responseCode: Int) : PurchaseAcknowledgementResult
+}
+
+object PurchaseAcknowledgementPolicy {
+    fun classify(responseCode: Int): PurchaseAcknowledgementResult = when (responseCode) {
+        com.android.billingclient.api.BillingClient.BillingResponseCode.OK ->
+            PurchaseAcknowledgementResult.Success
+        com.android.billingclient.api.BillingClient.BillingResponseCode.SERVICE_DISCONNECTED,
+        com.android.billingclient.api.BillingClient.BillingResponseCode.SERVICE_UNAVAILABLE,
+        com.android.billingclient.api.BillingClient.BillingResponseCode.BILLING_UNAVAILABLE,
+        com.android.billingclient.api.BillingClient.BillingResponseCode.NETWORK_ERROR,
+        com.android.billingclient.api.BillingClient.BillingResponseCode.ERROR ->
+            PurchaseAcknowledgementResult.RetryableFailure(responseCode)
+        else -> PurchaseAcknowledgementResult.PermanentFailure(responseCode)
+    }
+}
+
 data class BillingUiState(
     val connection: BillingConnectionState = BillingConnectionState.DISCONNECTED,
     val product: ProProduct? = null,

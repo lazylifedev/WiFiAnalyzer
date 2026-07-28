@@ -2,10 +2,8 @@ package com.lazyapps.wifianalyzer.data.photos
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Matrix
+import android.graphics.ImageDecoder
 import android.net.Uri
-import androidx.exifinterface.media.ExifInterface
 import androidx.room.withTransaction
 import com.lazyapps.wifianalyzer.data.registry.DevicePhotoEntity
 import com.lazyapps.wifianalyzer.data.registry.PendingFileDeletionEntity
@@ -14,6 +12,7 @@ import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
 import com.lazyapps.wifianalyzer.domain.DevicePhoto
 import com.lazyapps.wifianalyzer.domain.DevicePhotoPolicy
 import java.io.File
+import java.io.IOException
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -36,12 +35,25 @@ class PhotoRepository(private val context: Context, private val database: WifiAn
         val temp = File(directory, ".${UUID.randomUUID()}.tmp")
         val final = File(directory, "${UUID.randomUUID()}.jpg")
         try {
-            val bitmap = decodeOriented(source)
-            val scaled = scale(bitmap)
+            val bitmap = try {
+                decodeOriented(source)
+            } catch (_: OutOfMemoryError) {
+                throw RegistryValidationException("画像を処理するためのメモリが不足しています")
+            }
+            val scaled = try {
+                scale(bitmap)
+            } catch (_: OutOfMemoryError) {
+                bitmap.recycle()
+                throw RegistryValidationException("画像を処理するためのメモリが不足しています")
+            }
             if (scaled !== bitmap) bitmap.recycle()
-            temp.outputStream().use { scaled.compress(Bitmap.CompressFormat.JPEG, 88, it) }
             val width = scaled.width; val height = scaled.height
-            scaled.recycle()
+            val compressed = try {
+                temp.outputStream().use { scaled.compress(Bitmap.CompressFormat.JPEG, 88, it) }
+            } finally {
+                scaled.recycle()
+            }
+            if (!compressed) throw RegistryValidationException("画像を保存できません")
             if (!temp.renameTo(final)) throw IllegalStateException("画像ファイルを確定できません")
             val now = System.currentTimeMillis()
             try {
@@ -79,16 +91,69 @@ class PhotoRepository(private val context: Context, private val database: WifiAn
     private fun relative(photo: DevicePhotoEntity) = "devices/${photo.workspaceId}/${photo.deviceId}/photos/${photo.fileName}"
 
     private fun decodeOriented(uri: Uri): Bitmap {
-        context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { if (it.length > MAX_SOURCE_BYTES) throw RegistryValidationException("画像ファイルが大きすぎます") }
-        val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: throw RegistryValidationException("画像を読み込めません")
-        if (bytes.size > MAX_SOURCE_BYTES) throw RegistryValidationException("画像ファイルが大きすぎます")
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }; BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw RegistryValidationException("対応していない画像形式です")
-        var sample = 1; while (maxOf(bounds.outWidth, bounds.outHeight) / sample > DevicePhotoPolicy.MAX_LONG_EDGE * 2) sample *= 2
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample }) ?: throw RegistryValidationException("画像を読み込めません")
-        val rotation = context.contentResolver.openInputStream(uri)?.use { input -> ExifInterface(input).rotationDegrees } ?: 0
-        if (rotation == 0) return bitmap
-        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, Matrix().apply { postRotate(rotation.toFloat()) }, true).also { bitmap.recycle() }
+        val resolver = context.contentResolver
+        val declaredSize = resolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
+        if (declaredSize > MAX_SOURCE_BYTES) throw RegistryValidationException("画像ファイルが大きすぎます")
+        var boundedCopy: File? = null
+        return try {
+            val source = if (declaredSize >= 0L) {
+                ImageDecoder.createSource(resolver, uri)
+            } else {
+                boundedCopy = copyUnknownLengthSource(uri)
+                ImageDecoder.createSource(boundedCopy!!)
+            }
+            ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                val width = info.size.width
+                val height = info.size.height
+                if (width <= 0 || height <= 0) throw RegistryValidationException("対応していない画像形式です")
+                val edge = maxOf(width, height)
+                if (edge > DevicePhotoPolicy.MAX_LONG_EDGE) {
+                    val ratio = DevicePhotoPolicy.MAX_LONG_EDGE.toFloat() / edge
+                    decoder.setTargetSize(
+                        maxOf(1, (width * ratio).toInt()),
+                        maxOf(1, (height * ratio).toInt()),
+                    )
+                }
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+        } catch (error: RegistryValidationException) {
+            throw error
+        } catch (_: ImageDecoder.DecodeException) {
+            throw RegistryValidationException("画像を読み込めません")
+        } catch (_: IOException) {
+            throw RegistryValidationException("画像を読み込めません")
+        } catch (_: SecurityException) {
+            throw RegistryValidationException("画像を読み込めません")
+        } catch (_: IllegalArgumentException) {
+            throw RegistryValidationException("画像を読み込めません")
+        } finally {
+            boundedCopy?.delete()
+        }
+    }
+
+    private fun copyUnknownLengthSource(uri: Uri): File {
+        val copy = File.createTempFile("photo-source-", ".image", context.cacheDir)
+        try {
+            val input = context.contentResolver.openInputStream(uri)
+                ?: throw RegistryValidationException("画像を読み込めません")
+            input.use { source ->
+                copy.outputStream().use { target ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    var total = 0L
+                    while (true) {
+                        val count = source.read(buffer)
+                        if (count < 0) break
+                        total += count
+                        if (total > MAX_SOURCE_BYTES) throw RegistryValidationException("画像ファイルが大きすぎます")
+                        target.write(buffer, 0, count)
+                    }
+                }
+            }
+            return copy
+        } catch (error: Exception) {
+            copy.delete()
+            throw error
+        }
     }
     private fun scale(bitmap: Bitmap): Bitmap { val edge = maxOf(bitmap.width, bitmap.height); if (edge <= DevicePhotoPolicy.MAX_LONG_EDGE) return bitmap; val ratio = DevicePhotoPolicy.MAX_LONG_EDGE.toFloat() / edge; return Bitmap.createScaledBitmap(bitmap, (bitmap.width * ratio).toInt(), (bitmap.height * ratio).toInt(), true) }
     private companion object { const val MAX_SOURCE_BYTES = 30 * 1024 * 1024 }
