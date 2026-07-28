@@ -172,13 +172,13 @@ fun SettingsScreen(
             Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
                 SettingRow(stringResource(R.string.distance_unit), if (distanceUnit == DistanceUnitPreference.METERS) "メートル (m)" else "フィート (ft)", onClick = { showDistanceUnits = true })
                 SettingRow(stringResource(R.string.frequency_bands), visibleBandLabel(visibleBands), onClick = { showBands = true })
-                SettingRow("Wi-Fi自動更新", refreshIntervalLabel(refreshIntervalMillis), trailing = {
+                SettingRow("スキャン要求間隔", refreshIntervalLabel(refreshIntervalMillis), trailing = {
                     IconButton(onClick = { showRefreshIntervals = true }, modifier = Modifier.testTag("refresh_interval")) {
-                        Icon(Icons.Rounded.ChevronRight, "更新間隔を変更")
+                        Icon(Icons.Rounded.ChevronRight, "スキャン要求間隔を変更")
                     }
                 })
                 Text(
-                    "端末やAndroidの制限により、設定した間隔で更新できない場合があります。",
+                    "画面はOSの最新情報を随時反映します。新しいWi-Fiスキャンの要求間隔を設定します。",
                     modifier = Modifier.padding(horizontal = AppSpacing.large),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -238,7 +238,7 @@ fun SettingsScreen(
     )
     if (showRefreshIntervals) AlertDialog(
         onDismissRequest = { showRefreshIntervals = false },
-        title = { Text("Wi-Fi自動更新") },
+        title = { Text("スキャン要求間隔") },
         text = {
             Column {
                 listOf(10_000L, 15_000L, 20_000L, 30_000L, 60_000L, 120_000L, 300_000L).forEach { interval ->
@@ -317,7 +317,7 @@ fun SettingsScreen(
         onDismissRequest = { showHelp = false },
         title = { Text("使い方") },
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(AppSpacing.medium)) {
-            HelpItem("Wi-Fiを調べる", "ホームの「更新」から周辺Wi-Fiを取得し、チャネルやモニターで状態を確認します。")
+            HelpItem("Wi-Fiを調べる", "画面はOSの最新情報を随時反映します。ホームの「更新」では新しいWi-Fiスキャンを要求します。")
             HelpItem("機器を登録する", "スキャン結果の「機器として登録」、または登録済み機器画面の追加操作を使います。")
             HelpItem("OCRで登録する", "ラベルを撮影または選択し、読み取り結果を確認してから登録します。")
             HelpItem("写真を管理する", "機器詳細から写真を追加・確認します。写真には機密情報が含まれる場合があります。")
