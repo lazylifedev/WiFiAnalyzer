@@ -4,6 +4,8 @@ import com.lazyapps.wifianalyzer.domain.WifiAnalysis
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import com.lazyapps.wifianalyzer.model.WifiBand
 import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.sqrt
 
 data class GraphRange(val minFrequencyMhz: Float, val maxFrequencyMhz: Float)
 data class GraphPoint(val x: Float, val y: Float)
@@ -48,13 +50,27 @@ object ChannelGraphGeometry {
         return top + fraction * (bottom - top)
     }
 
-    fun mountain(ap: WifiAccessPoint, range: GraphRange, left: Float, right: Float, top: Float, bottom: Float): GraphMountain {
+    fun mountain(
+        ap: WifiAccessPoint,
+        range: GraphRange,
+        left: Float,
+        right: Float,
+        top: Float,
+        bottom: Float,
+        minimumDisplayWidth: Float = 0f,
+    ): GraphMountain {
         val width = WifiAnalysis.safeChannelWidthMhz(ap.channelWidthMhz)
+        val peakX = frequencyToX(ap.frequencyMhz.toFloat(), range, left, right)
+        val actualLeft = frequencyToX(ap.frequencyMhz - width / 2f, range, left, right)
+        val actualRight = frequencyToX(ap.frequencyMhz + width / 2f, range, left, right)
+        val minimumForBandwidth = minimumDisplayWidth * sqrt(width / 20f)
+        val displayWidth = max(actualRight - actualLeft, minimumForBandwidth).coerceAtMost(right - left)
+        val displayLeft = (peakX - displayWidth / 2f).coerceIn(left, right - displayWidth)
         return GraphMountain(
             ap,
-            frequencyToX(ap.frequencyMhz - width / 2f, range, left, right),
-            GraphPoint(frequencyToX(ap.frequencyMhz.toFloat(), range, left, right), rssiToY(ap.rssi.toFloat(), top, bottom)),
-            frequencyToX(ap.frequencyMhz + width / 2f, range, left, right),
+            displayLeft,
+            GraphPoint(peakX, rssiToY(ap.rssi.toFloat(), top, bottom)),
+            displayLeft + displayWidth,
         )
     }
 
@@ -71,14 +87,48 @@ object ChannelGraphGeometry {
     fun placeLabels(candidates: List<Pair<String, GraphLabelRect>>, bounds: GraphLabelRect): List<Pair<String, GraphLabelRect>> {
         val accepted = mutableListOf<Pair<String, GraphLabelRect>>()
         candidates.forEach { (id, rect) ->
+            val width = (rect.right - rect.left).coerceAtMost(bounds.right - bounds.left)
+            val height = (rect.bottom - rect.top).coerceAtMost(bounds.bottom - bounds.top)
+            val clampedLeft = rect.left.coerceIn(bounds.left, bounds.right - width)
+            val clampedTop = rect.top.coerceIn(bounds.top, bounds.bottom - height)
             val clamped = GraphLabelRect(
-                rect.left.coerceIn(bounds.left, bounds.right - (rect.right - rect.left)),
-                rect.top.coerceIn(bounds.top, bounds.bottom - (rect.bottom - rect.top)),
-                rect.right.coerceIn(bounds.left + (rect.right - rect.left), bounds.right),
-                rect.bottom.coerceIn(bounds.top + (rect.bottom - rect.top), bounds.bottom),
+                clampedLeft,
+                clampedTop,
+                clampedLeft + width,
+                clampedTop + height,
             )
             if (accepted.none { it.second.overlaps(clamped) }) accepted += id to clamped
         }
         return accepted
+    }
+
+    fun labelCandidates(accessPoints: List<WifiAccessPoint>, selectedBssid: String?): List<WifiAccessPoint> {
+        val selected = accessPoints.firstOrNull { it.bssid == selectedBssid }
+        val registered = accessPoints.asSequence()
+            .filter { it.isRegistered && it.bssid != selectedBssid }
+            .sortedByDescending { it.rssi }
+            .take(2)
+            .toList()
+        val excluded = buildSet {
+            selected?.let { add(it.bssid) }
+            registered.forEach { add(it.bssid) }
+        }
+        val strongestLimit = if (selected == null) 2 else 1
+        val strongest = accessPoints.asSequence()
+            .filter { it.bssid !in excluded }
+            .sortedByDescending { it.rssi }
+            .take(strongestLimit)
+            .toList()
+        return listOfNotNull(selected) + registered + strongest
+    }
+
+    fun stablePaletteIndex(bssid: String, paletteSize: Int): Int {
+        require(paletteSize > 0)
+        return (bssid.hashCode() and Int.MAX_VALUE) % paletteSize
+    }
+
+    fun labelText(accessPoint: WifiAccessPoint, selected: Boolean): String {
+        val name = (accessPoint.registeredDeviceName ?: accessPoint.ssid).take(18)
+        return if (selected) "$name  ${accessPoint.rssi} dBm" else name
     }
 }

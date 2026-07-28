@@ -1,5 +1,6 @@
 package com.lazyapps.wifianalyzer.ui.screens.channel
 
+import android.text.format.DateFormat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -24,9 +25,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.data.ChannelDisplayMode
 import com.lazyapps.wifianalyzer.data.DistanceUnitPreference
@@ -62,12 +65,17 @@ fun ChannelScreen(
     val occupancy = remember(state.accessPoints, selectedBand) { state.occupancyFor(selectedBand) }
     val candidate = remember(accessPoints, selectedBand) { ChannelRecommendation.bestCandidate(accessPoints, selectedBand) }
     val selected = accessPoints.firstOrNull { it.bssid == state.selectedBssid }
+    val context = LocalContext.current
+    val updated = state.lastUpdatedMillis?.let {
+        val pattern = if (DateFormat.is24HourFormat(context)) "HH:mm:ss" else "h:mm:ss a"
+        stringResource(R.string.last_updated_time, DateFormat.format(pattern, it))
+    } ?: stringResource(R.string.last_updated_time, "—")
     LaunchedEffect(selectedBand, state.selectedBssid, accessPoints) {
         if (state.selectedBssid != null && selected == null) onClearAccessPointSelection()
     }
 
     Column(Modifier.fillMaxSize()) {
-        ScreenHeader(stringResource(R.string.screen_channel), listOfNotNull(workspaceName, stringResource(R.string.estimated_congestion)).joinToString(" ・ ")) {
+        ScreenHeader(stringResource(R.string.screen_channel), listOfNotNull(workspaceName, updated).joinToString(" ・ ")) {
             IconButton(onClick = onRefresh) { Icon(Icons.Rounded.Refresh, stringResource(R.string.refresh_scan)) }
         }
         BandSelector(selectedBand, onBandSelected, Modifier.padding(horizontal = AppSpacing.large), state.visibleBands)
@@ -79,13 +87,15 @@ fun ChannelScreen(
                 verticalArrangement = Arrangement.spacedBy(AppSpacing.medium),
             ) {
                 item {
-                    ScanStatusCard(
-                        state.scanState, state.accessPoints.isNotEmpty(), onRequestPermission, onOpenSettings, onRefresh,
-                        Modifier.padding(horizontal = AppSpacing.large),
-                    )
-                }
-                item {
                     DisplayModeSelector(state.channelDisplayMode, onDisplayModeChange, Modifier.padding(horizontal = AppSpacing.large))
+                }
+                if (state.scanState !in setOf(ScanState.READY, ScanState.SCANNING, ScanState.THROTTLED)) {
+                    item {
+                        ScanStatusCard(
+                            state.scanState, state.accessPoints.isNotEmpty(), onRequestPermission, onOpenSettings, onRefresh,
+                            Modifier.padding(horizontal = AppSpacing.large),
+                        )
+                    }
                 }
                 if (state.channelDisplayMode == ChannelDisplayMode.GRAPH) {
                     item {
@@ -94,8 +104,8 @@ fun ChannelScreen(
                     item {
                         Card(
                             Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            border = CardDefaults.outlinedCardBorder(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
                         ) {
                             ChannelGraph(
                                 selectedBand,
@@ -104,7 +114,7 @@ fun ChannelScreen(
                                 candidate,
                                 onSelectAccessPoint,
                                 onClearAccessPointSelection,
-                                Modifier.padding(AppSpacing.small),
+                                Modifier.padding(horizontal = AppSpacing.xSmall),
                             )
                         }
                     }
@@ -127,14 +137,6 @@ fun ChannelScreen(
                                 Modifier.padding(horizontal = AppSpacing.large).testTag("channel_selected_ap"),
                             )
                         }
-                    }
-                    item {
-                        Text(
-                            "山の高さは電波の強さ、幅は使用帯域を表します。山をタップすると詳細を確認できます。",
-                            Modifier.padding(horizontal = AppSpacing.large),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     }
                 } else {
                     if (occupancy.isEmpty()) {
