@@ -13,6 +13,10 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.lazyapps.wifianalyzer.BuildConfig
+import com.lazyapps.wifianalyzer.debug.DebugLogCategory
+import com.lazyapps.wifianalyzer.debug.DebugLogs
+import com.lazyapps.wifianalyzer.debug.DebugUpdateSource
+import com.lazyapps.wifianalyzer.debug.debugUpdateSource
 import com.lazyapps.wifianalyzer.domain.WifiAnalysis
 import com.lazyapps.wifianalyzer.model.DistanceRange
 import com.lazyapps.wifianalyzer.model.ScanState
@@ -76,12 +80,19 @@ class WifiScanRepository(context: Context) : AutoCloseable {
     private var receiverRegistered = false
     private val scanRequestInFlight = AtomicBoolean(false)
     private var lastScanRequestElapsedMillis: Long? = null
+    private var lastNewMeasurementElapsedMillis: Long? = null
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 WifiManager.SCAN_RESULTS_AVAILABLE_ACTION -> {
                     val fresh = intent.getBooleanExtra(WifiManager.EXTRA_RESULTS_UPDATED, false)
+                    val receivedAt = elapsedRealtime.now()
+                    if (BuildConfig.DEBUG) DebugLogs.store.add(
+                        DebugLogCategory.BROADCAST,
+                        "resultsUpdated=$fresh resultsRead=true requestDeltaMs=" +
+                            lastScanRequestElapsedMillis?.let { receivedAt - it },
+                    )
                     debugLog(
                         "scan_broadcast wallMs=${System.currentTimeMillis()} " +
                             "elapsedMs=${elapsedRealtime.now()} resultsUpdated=$fresh",
@@ -98,6 +109,10 @@ class WifiScanRepository(context: Context) : AutoCloseable {
         if (!monitoringSession.start()) return
         registerReceiver()
         refreshEnvironment()
+        if (BuildConfig.DEBUG) DebugLogs.store.add(
+            DebugLogCategory.LIFECYCLE,
+            "foreground=true receiverRegistered=$receiverRegistered cacheJob=true monitoringStopped=false",
+        )
         pollingJob = scope.launch {
             while (isActive) {
                 delay(CACHE_POLL_INTERVAL_MS)
@@ -111,6 +126,10 @@ class WifiScanRepository(context: Context) : AutoCloseable {
         pollingJob?.cancel()
         pollingJob = null
         unregisterReceiver()
+        if (BuildConfig.DEBUG) DebugLogs.store.add(
+            DebugLogCategory.LIFECYCLE,
+            "foreground=false receiverRegistered=$receiverRegistered cacheJob=false monitoringStopped=true",
+        )
         debugLog("cache monitoring stopped")
     }
 
@@ -126,10 +145,19 @@ class WifiScanRepository(context: Context) : AutoCloseable {
 
     @SuppressLint("MissingPermission")
     @Suppress("DEPRECATION")
-    fun requestScan(scheduledAtElapsedMillis: Long? = null) {
+    fun requestScan(
+        scheduledAtElapsedMillis: Long? = null,
+        intervalMillis: Long? = null,
+        trigger: String = "manual",
+    ) {
         val actualElapsedMillis = elapsedRealtime.now()
         val sincePreviousMillis = lastScanRequestElapsedMillis?.let { actualElapsedMillis - it }
         if (!scanRequestInFlight.compareAndSet(false, true)) {
+            if (BuildConfig.DEBUG) DebugLogs.store.add(
+                DebugLogCategory.SCAN_REQUEST,
+                "trigger=$trigger accepted=none interval=${intervalMillis}ms sincePreviousMs=$sincePreviousMillis " +
+                    "skippedInFlight=true exception=none",
+            )
             debugLog(
                 "scan_request scheduledElapsedMs=$scheduledAtElapsedMillis " +
                     "actualElapsedMs=$actualElapsedMillis sincePreviousMs=$sincePreviousMillis " +
@@ -148,6 +176,11 @@ class WifiScanRepository(context: Context) : AutoCloseable {
                 return
             }
             val accepted = wifiManager.startScan()
+            if (BuildConfig.DEBUG) DebugLogs.store.add(
+                DebugLogCategory.SCAN_REQUEST,
+                "trigger=$trigger accepted=$accepted interval=${intervalMillis}ms " +
+                    "sincePreviousMs=$sincePreviousMillis skippedInFlight=false exception=none",
+            )
             debugLog(
                 "scan_request scheduledElapsedMs=$scheduledAtElapsedMillis " +
                     "actualElapsedMs=$actualElapsedMillis wallMs=${System.currentTimeMillis()} " +
@@ -160,6 +193,10 @@ class WifiScanRepository(context: Context) : AutoCloseable {
                 publishState(ScanState.THROTTLED)
             }
         } catch (_: SecurityException) {
+            if (BuildConfig.DEBUG) DebugLogs.store.add(
+                DebugLogCategory.ERROR,
+                "trigger=$trigger scanRequest exception=SecurityException",
+            )
             debugLog(
                 "scan_request scheduledElapsedMs=$scheduledAtElapsedMillis " +
                     "actualElapsedMs=$actualElapsedMillis wallMs=${System.currentTimeMillis()} " +
@@ -168,6 +205,10 @@ class WifiScanRepository(context: Context) : AutoCloseable {
             )
             publishState(ScanState.PERMISSION_REQUIRED)
         } catch (error: RuntimeException) {
+            if (BuildConfig.DEBUG) DebugLogs.store.add(
+                DebugLogCategory.ERROR,
+                "trigger=$trigger scanRequest exception=${error.javaClass.simpleName}",
+            )
             debugLog(
                 "scan_request scheduledElapsedMs=$scheduledAtElapsedMillis " +
                     "actualElapsedMs=$actualElapsedMillis wallMs=${System.currentTimeMillis()} " +
@@ -201,6 +242,48 @@ class WifiScanRepository(context: Context) : AutoCloseable {
             )
             val willNotify = decision.uiChanged || current.state != next.state ||
                 decision.newMeasurementBssids.isNotEmpty()
+            if (BuildConfig.DEBUG) {
+                val source = debugUpdateSource(
+                    hasNewMeasurements = decision.newMeasurementBssids.isNotEmpty(),
+                    hasTimestampChanges = decision.timestampChangedBssids.isNotEmpty(),
+                    uiNotified = willNotify,
+                )
+                val nowElapsed = elapsedRealtime.now()
+                val sinceNewMeasurement = lastNewMeasurementElapsedMillis?.let { nowElapsed - it }
+                if (source == DebugUpdateSource.NEW_SCAN_RESULT) lastNewMeasurementElapsedMillis = nowElapsed
+                val commonDetail = "trigger=$trigger readAp=${readings.size} adoptedAp=${decision.accessPoints.size} " +
+                    "timestampChanges=${decision.timestampChangedBssids.size} rssiChanges=${decision.rssiChangedBssids.size} " +
+                    "newMeasurements=${decision.newMeasurementBssids.size} sameTimestampSuppressed=" +
+                    "${decision.ignoredSameTimestampCount} rollbackSuppressed=${decision.ignoredRollbackCount} " +
+                    "uiNotified=$willNotify state=${next.state} sinceNewMeasurementMs=$sinceNewMeasurement " +
+                    "foreground=${monitoringSession.active} receiverRegistered=$receiverRegistered " +
+                    "cacheJob=${pollingJob?.isActive == true}"
+                if (trigger == "poll" && willNotify) {
+                    DebugLogs.store.add(
+                        DebugLogCategory.CACHE_POLL,
+                        "cache read count=${readings.size} uiUpdated=true stateChanged=${current.state != next.state}",
+                    )
+                }
+                if (current.state != next.state) {
+                    DebugLogs.store.add(DebugLogCategory.STATE, "${current.state} -> ${next.state}")
+                }
+                when (source) {
+                    DebugUpdateSource.NEW_SCAN_RESULT -> DebugLogs.store.add(
+                        DebugLogCategory.UI_UPDATE_NEW_SCAN, commonDetail, source,
+                    )
+                    DebugUpdateSource.OS_CACHE_UI_UPDATED -> DebugLogs.store.add(
+                        DebugLogCategory.UI_UPDATE_CACHE, commonDetail, source,
+                    )
+                    DebugUpdateSource.OS_CACHE_NO_CHANGE -> DebugLogs.store.add(
+                        DebugLogCategory.CACHE_NO_CHANGE,
+                        "trigger=$trigger readAp=${readings.size} adoptedAp=${decision.accessPoints.size} " +
+                            "sameTimestampSuppressed=${decision.ignoredSameTimestampCount} uiNotified=false " +
+                            "state=${next.state}",
+                        source,
+                        aggregate = true,
+                    )
+                }
+            }
             debugLog(
                 "scan_results trigger=$trigger wallMs=${System.currentTimeMillis()} " +
                     "elapsedMs=${elapsedRealtime.now()} count=${readings.size} " +
@@ -233,7 +316,12 @@ class WifiScanRepository(context: Context) : AutoCloseable {
     private fun publishState(state: ScanState, message: String? = null) {
         val current = _snapshot.value
         val next = current.copy(state = state, message = message, newMeasurementBssids = emptySet())
-        if (next != current) _snapshot.value = next
+        if (next != current) {
+            if (BuildConfig.DEBUG) {
+                DebugLogs.store.add(DebugLogCategory.STATE, "${current.state} -> $state")
+            }
+            _snapshot.value = next
+        }
     }
 
     private fun registerReceiver() {

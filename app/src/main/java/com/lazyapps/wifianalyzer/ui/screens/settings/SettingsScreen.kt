@@ -105,6 +105,8 @@ fun SettingsScreen(
     onShowOnboarding: () -> Unit = {},
     debugForcePro: Boolean = false,
     onDebugForceProChange: (Boolean) -> Unit = {},
+    debugDisplayEnabled: Boolean = false,
+    onDebugDisplayEnabledChange: (Boolean) -> Unit = {},
 ) {
     val context = LocalContext.current
     val packageInfo = remember(context) { context.packageManager.getPackageInfo(context.packageName, 0) }
@@ -117,7 +119,7 @@ fun SettingsScreen(
     var showHelp by remember { mutableStateOf(false) }
     var showPrivacy by remember { mutableStateOf(false) }
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().testTag("settings_list"),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = AppSpacing.xLarge),
         verticalArrangement = Arrangement.spacedBy(AppSpacing.medium),
     ) {
@@ -227,6 +229,17 @@ fun SettingsScreen(
                             Switch(checked = debugForcePro, onCheckedChange = onDebugForceProChange)
                         })
                         if (debugForcePro) Text("開発用Pro状態", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        SettingRow(
+                            "デバッグ表示",
+                            "Wi-Fiスキャンと画面更新の内部状態を画面上に表示します",
+                            trailing = {
+                                Switch(
+                                    checked = debugDisplayEnabled,
+                                    onCheckedChange = onDebugDisplayEnabledChange,
+                                    modifier = Modifier.testTag("debug_display_switch"),
+                                )
+                            },
+                        )
                     }
                 }
             }
