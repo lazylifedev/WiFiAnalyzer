@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -34,6 +35,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -79,6 +82,10 @@ import com.lazyapps.wifianalyzer.ui.kintone.KintoneViewModel
 import com.lazyapps.wifianalyzer.billing.BillingViewModel
 import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import com.lazyapps.wifianalyzer.billing.DebugProPreferences
+import com.lazyapps.wifianalyzer.BuildConfig
+import com.lazyapps.wifianalyzer.debug.DebugDisplayPreferences
+import com.lazyapps.wifianalyzer.debug.DebugLogPanel
+import com.lazyapps.wifianalyzer.debug.DebugLogs
 import com.lazyapps.wifianalyzer.review.PlayReviewCoordinator
 import com.lazyapps.wifianalyzer.review.ReviewContext
 import com.lazyapps.wifianalyzer.review.ReviewHistoryRepository
@@ -113,6 +120,8 @@ fun WifiAnalyzerApp(
     val context = LocalContext.current
     val debugProPreferences = remember(context) { DebugProPreferences(context) }
     val debugForcePro by debugProPreferences.forcePro.collectAsStateWithLifecycle(initialValue = false)
+    val debugDisplayPreferences = remember(context) { DebugDisplayPreferences(context) }
+    val debugDisplayEnabled by debugDisplayPreferences.enabled.collectAsStateWithLifecycle(initialValue = false)
     val kintoneState by kintoneViewModel.uiState.collectAsStateWithLifecycle()
     val enrichedScanState = scanState.copy(accessPoints = registryViewModel.enriched(scanState.accessPoints))
     val activity = remember(context) { context.findActivity() }
@@ -217,6 +226,7 @@ fun WifiAnalyzerApp(
         }
         val showBottomBar = currentRoute in AppDestination.bottomItems.map { it.route }
 
+        Box {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets.safeDrawing,
@@ -355,6 +365,10 @@ fun WifiAnalyzerApp(
                         onShowOnboarding = { replayOnboarding = true },
                         debugForcePro = debugForcePro,
                         onDebugForceProChange = { enabled -> coroutineScope.launch { debugProPreferences.setForcePro(enabled) } },
+                        debugDisplayEnabled = debugDisplayEnabled,
+                        onDebugDisplayEnabledChange = { enabled ->
+                            coroutineScope.launch { debugDisplayPreferences.setEnabled(enabled) }
+                        },
                     )
                 }
                 composable(BACKUP_ROUTE) {
@@ -484,6 +498,14 @@ fun WifiAnalyzerApp(
                     )
                 }
             }
+        }
+        if (BuildConfig.DEBUG && debugDisplayEnabled) {
+            DebugLogPanel(
+                store = DebugLogs.store,
+                modifier = Modifier.align(Alignment.BottomCenter)
+                    .padding(bottom = if (showBottomBar) 80.dp else 0.dp),
+            )
+        }
         }
         if (showPermissionExplanation) {
             AlertDialog(
