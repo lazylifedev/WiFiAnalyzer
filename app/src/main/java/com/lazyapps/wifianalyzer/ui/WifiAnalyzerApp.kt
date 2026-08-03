@@ -242,6 +242,9 @@ fun WifiAnalyzerApp(
             AppDestination.Settings.route -> com.lazyapps.wifianalyzer.billing.AdPlacement.SETTINGS
             else -> null
         }
+        LaunchedEffect(currentRoute, billingState.entitlement, debugForcePro) {
+            InterstitialAdManager.observeRoute(activity, adPlacement)
+        }
         val showAd = billingState.entitlement != com.lazyapps.wifianalyzer.billing.ProEntitlementState.Unknown &&
             adPlacement != null && AdVisibilityPolicy(accessPolicy).canShow(adPlacement)
 

@@ -17,11 +17,14 @@ object InterstitialAdManager {
     private var candidates = 0
     private var shown = 0
     private var lastShownAt = 0L
+    private var transitionPolicy = InterstitialTransitionPolicy()
 
     fun updateEntitlement(entitlement: ProEntitlementState, debugForcePro: Boolean = false) {
+        val wasPro = isPro
         isPro = debugForcePro || entitlement == ProEntitlementState.Pro ||
             (entitlement is ProEntitlementState.Error && entitlement.retainedPro)
-        if (isPro) discardLoadedAd()
+        if (isPro) { discardLoadedAd(); transitionPolicy.reset() }
+        else if (wasPro) transitionPolicy.reset()
     }
 
     fun prepare() {
@@ -45,18 +48,31 @@ object InterstitialAdManager {
 
     fun showAfterSuccessfulOperation(activity: Activity) {
         candidates++
+        showIfEligible(activity, force = false)
+    }
+
+    fun recordTopLevelTransition(activity: Activity, placement: com.lazyapps.wifianalyzer.billing.AdPlacement) {
+        if (isPro) return
+        if (transitionPolicy.record(placement)) showIfEligible(activity, force = true)
+    }
+
+    fun observeRoute(activity: Activity, placement: com.lazyapps.wifianalyzer.billing.AdPlacement?) {
+        if (isPro) return
+        if (placement == null) transitionPolicy.clearPrevious()
+        else recordTopLevelTransition(activity, placement)
+    }
+
+    private fun showIfEligible(activity: Activity, force: Boolean) {
         val lifecycleOwner = activity as? androidx.lifecycle.LifecycleOwner
         if (isPro || !AdMobManager.canRequestAds.value || lifecycleOwner == null || !lifecycleOwner.lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return
-        if (candidates <= AdConfiguration.initialCandidateSkipCount || shown >= AdConfiguration.interstitialSessionLimit || showing) return
+        if ((!force && candidates <= AdConfiguration.initialCandidateSkipCount) || shown >= AdConfiguration.interstitialSessionLimit || showing) return
         val now = System.currentTimeMillis()
         if (now - lastShownAt < AdConfiguration.interstitialMinimumIntervalMillis) return
         val ad = loadedAd ?: run { prepare(); return }
         loadedAd = null
         showing = true
-        shown++
-        lastShownAt = now
         ad.fullScreenContentCallback = object : FullScreenContentCallback() {
-            override fun onAdShowedFullScreenContent() = debugLog("interstitial shown")
+            override fun onAdShowedFullScreenContent() { shown++; lastShownAt = System.currentTimeMillis(); transitionPolicy.onAdShown(); debugLog("interstitial shown") }
             override fun onAdDismissedFullScreenContent() { showing = false; debugLog("interstitial dismissed"); prepare() }
             override fun onAdFailedToShowFullScreenContent(error: com.google.android.gms.ads.AdError) { showing = false; debugLog("interstitial show failed"); prepare() }
         }
