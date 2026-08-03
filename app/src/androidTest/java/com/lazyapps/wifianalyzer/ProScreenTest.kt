@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.runtime.mutableStateOf
 import com.lazyapps.wifianalyzer.billing.*
 import com.lazyapps.wifianalyzer.ui.pro.KintoneScreen
@@ -57,6 +58,15 @@ class ProScreenTest {
     @Test fun kintoneProShowsQrEntry() {
         rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}) } }
         rule.onNodeWithTag("kintone_scan_qr").assertIsDisplayed()
+        rule.onNodeWithText("未接続").assertIsDisplayed()
+    }
+
+    @Test fun disconnectedScreenOpensBoothAndKeepsSpecificationsCollapsed() {
+        var boothClicks = 0
+        rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, onOpenBooth = { boothClicks++ }) } }
+        rule.onNodeWithTag("kintone_open_booth").assertIsDisplayed().performClick()
+        assertEquals(1, boothClicks)
+        rule.onNodeWithText("Androidで削除した機器", substring = true).assertDoesNotExist()
     }
 
     private fun connectedState() = KintoneUiState(
@@ -67,14 +77,14 @@ class ProScreenTest {
 
     @Test fun connectedProShowsManualSyncEvenWithoutDevices() {
         rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = connectedState()) } }
-        rule.onNodeWithText("今すぐ同期").assertIsDisplayed()
+        rule.onNodeWithText("今すぐ同期").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun noTargetsUsesJapaneseNonErrorMessageAndStatus() {
         val state = connectedState().copy(message = "同期する登録機器がありません", autoSync = KintoneAutoSyncState(status = KintoneSyncStatus.NO_TARGETS))
         rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = state) } }
         rule.onNodeWithText("同期する登録機器がありません").assertIsDisplayed()
-        rule.onNodeWithText("最終同期結果: 対象なし").assertIsDisplayed()
+        rule.onNodeWithText("対象なし").assertIsDisplayed()
         rule.onNodeWithText("接続できませんでした", substring = true).assertDoesNotExist()
     }
 
@@ -131,15 +141,15 @@ class ProScreenTest {
             lastUserMessage = "送信内容がkintoneのフィールド仕様と一致しません。", requiresAttention = true,
         ))
         rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = state) } }
-        rule.onNodeWithText("最終同期結果: 同期失敗").assertIsDisplayed()
-        rule.onNodeWithText("11件を送信できませんでした。").assertIsDisplayed()
-        rule.onNodeWithTag("kintone_error_details").assertIsDisplayed().performClick()
-        rule.onNodeWithTag("kintone_safe_error_message").assertIsDisplayed()
+        rule.onNodeWithText("同期失敗").assertIsDisplayed()
+        rule.onNodeWithText("11件を送信できませんでした。").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("kintone_error_details").performScrollTo().assertIsDisplayed().performClick()
+        rule.onNodeWithTag("kintone_safe_error_message").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("CB_VA01", substring = true).assertIsDisplayed()
-        rule.onNodeWithTag("kintone_retry_failed").assertIsDisplayed()
-        rule.onNodeWithTag("kintone_check_connection").assertIsDisplayed()
+        rule.onNodeWithTag("kintone_retry_failed").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithTag("kintone_check_connection").performScrollTo().assertIsDisplayed()
         rule.onNodeWithText("APIトークン", substring = true).assertDoesNotExist()
-        rule.onNodeWithTag("kintone_sync").assertIsEnabled()
+        rule.onNodeWithTag("kintone_sync").performScrollTo().assertIsEnabled()
     }
 
     @Test fun manualSyncIsDisabledOnlyForNoTargetsOrCurrentOperation() {
@@ -159,5 +169,12 @@ class ProScreenTest {
             )
         }
         rule.onNodeWithTag("kintone_sync").assertIsNotEnabled()
+    }
+
+    @Test fun syncSpecificationsAreHiddenUntilRequested() {
+        rule.setContent { WifiAnalyzerTheme { KintoneScreen(FeatureAccessPolicy(true), {}, {}, {}, state = connectedState()) } }
+        rule.onNodeWithText("Androidで削除した機器", substring = true).assertDoesNotExist()
+        rule.onNodeWithTag("kintone_sync_notes").performScrollTo().performClick()
+        rule.onNodeWithText("Androidで削除した機器", substring = true).performScrollTo().assertIsDisplayed()
     }
 }

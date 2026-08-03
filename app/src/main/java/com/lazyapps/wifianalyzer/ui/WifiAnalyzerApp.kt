@@ -103,6 +103,8 @@ import com.lazyapps.wifianalyzer.ui.permissions.PermissionStatus
 import com.lazyapps.wifianalyzer.ui.permissions.PermissionSummary
 import kotlinx.coroutines.launch
 
+private const val KINTONE_BOOTH_URL = "https://lazylifedev.booth.pm/items/8670244"
+
 @Composable
 fun WifiAnalyzerApp(
     themeViewModel: ThemeViewModel = viewModel(),
@@ -395,6 +397,7 @@ fun WifiAnalyzerApp(
                         onBack = { navController.popBackStack() },
                         onOpenPro = { navController.navigate(PRO_ROUTE) },
                         onPluginInfo = { navController.navigate(KINTONE_INFO_ROUTE) },
+                        onOpenBooth = { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(KINTONE_BOOTH_URL))) },
                         onScanQr = { navController.navigate(KINTONE_QR_ROUTE) },
                         onConfirm = kintoneViewModel::confirmSave,
                         onCancelPending = kintoneViewModel::cancel,
@@ -419,7 +422,10 @@ fun WifiAnalyzerApp(
                         },
                     )
                 }
-                composable(KINTONE_INFO_ROUTE) { KintonePluginInfoScreen { navController.popBackStack() } }
+                composable(KINTONE_INFO_ROUTE) { KintonePluginInfoScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenBooth = { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(KINTONE_BOOTH_URL))) },
+                ) }
                 composable(REGISTRATION_ROUTE) {
                     DeviceRegistrationScreen(
                         initial = registryState.draft,
