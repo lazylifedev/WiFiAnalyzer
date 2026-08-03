@@ -233,6 +233,8 @@ fun WifiAnalyzerApp(
         val accessPolicy = FeatureAccessPolicy.from(billingState.entitlement, debugForcePro)
         val adPlacement = when (currentRoute) {
             AppDestination.Home.route -> com.lazyapps.wifianalyzer.billing.AdPlacement.HOME
+            AppDestination.Channel.route -> com.lazyapps.wifianalyzer.billing.AdPlacement.CHANNEL
+            AppDestination.Monitor.route -> com.lazyapps.wifianalyzer.billing.AdPlacement.MONITOR
             AppDestination.Devices.route -> com.lazyapps.wifianalyzer.billing.AdPlacement.DEVICE_LIST
             AppDestination.Settings.route -> com.lazyapps.wifianalyzer.billing.AdPlacement.SETTINGS
             else -> null

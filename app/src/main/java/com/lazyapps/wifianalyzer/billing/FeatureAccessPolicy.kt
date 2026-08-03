@@ -29,7 +29,7 @@ data class FeatureAccessPolicy(
     }
 }
 
-enum class AdPlacement { HOME, DEVICE_LIST, SETTINGS }
+enum class AdPlacement { HOME, CHANNEL, MONITOR, DEVICE_LIST, SETTINGS }
 
 class AdVisibilityPolicy(private val access: FeatureAccessPolicy) {
     fun canShow(@Suppress("UNUSED_PARAMETER") placement: AdPlacement): Boolean = !access.canRemoveAds
