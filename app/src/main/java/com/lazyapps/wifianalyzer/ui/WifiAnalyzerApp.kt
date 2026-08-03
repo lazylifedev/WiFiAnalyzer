@@ -102,6 +102,9 @@ import com.lazyapps.wifianalyzer.ui.permissions.AppPermissionPolicy
 import com.lazyapps.wifianalyzer.ui.permissions.PermissionStatus
 import com.lazyapps.wifianalyzer.ui.permissions.PermissionSummary
 import kotlinx.coroutines.launch
+import com.lazyapps.wifianalyzer.ads.AdBanner
+import com.lazyapps.wifianalyzer.ads.AdMobManager
+import com.lazyapps.wifianalyzer.billing.AdVisibilityPolicy
 
 private const val KINTONE_BOOTH_URL = "https://lazylifedev.booth.pm/items/8670244"
 
@@ -227,6 +230,15 @@ fun WifiAnalyzerApp(
             }
         }
         val showBottomBar = currentRoute in AppDestination.bottomItems.map { it.route }
+        val accessPolicy = FeatureAccessPolicy.from(billingState.entitlement, debugForcePro)
+        val adPlacement = when (currentRoute) {
+            AppDestination.Home.route -> com.lazyapps.wifianalyzer.billing.AdPlacement.HOME
+            AppDestination.Devices.route -> com.lazyapps.wifianalyzer.billing.AdPlacement.DEVICE_LIST
+            AppDestination.Settings.route -> com.lazyapps.wifianalyzer.billing.AdPlacement.SETTINGS
+            else -> null
+        }
+        val showAd = billingState.entitlement != com.lazyapps.wifianalyzer.billing.ProEntitlementState.Unknown &&
+            adPlacement != null && AdVisibilityPolicy(accessPolicy).canShow(adPlacement)
 
         Box {
         Scaffold(
@@ -234,7 +246,9 @@ fun WifiAnalyzerApp(
             contentWindowInsets = WindowInsets.safeDrawing,
             bottomBar = {
                 if (showBottomBar) {
-                    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                    androidx.compose.foundation.layout.Column {
+                        if (showAd) AdBanner()
+                        NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                         AppDestination.bottomItems.forEach { destination ->
                             NavigationBarItem(
                                 modifier = Modifier.testTag("nav_${destination.route}"),
@@ -244,6 +258,7 @@ fun WifiAnalyzerApp(
                                 label = { Text(stringResource(destination.labelRes), maxLines = 1) },
                                 alwaysShowLabel = true,
                             )
+                        }
                         }
                     }
                 }
@@ -352,6 +367,8 @@ fun WifiAnalyzerApp(
                         onOpenExport = { navController.navigate(EXPORT_ROUTE) },
                         onOpenImport = { navController.navigate(IMPORT_ROUTE) },
                         onOpenPro = { navController.navigate(PRO_ROUTE) },
+                        onOpenPrivacyOptions = { AdMobManager.showPrivacyOptions(activity) },
+                        showPrivacyOptions = AdMobManager.privacyOptionsRequired.value,
                         onOpenKintone = { navController.navigate(KINTONE_ROUTE) },
                         onRateApp = { context.openPlayStoreRating() },
                         permissionSummary = PermissionSummary(
