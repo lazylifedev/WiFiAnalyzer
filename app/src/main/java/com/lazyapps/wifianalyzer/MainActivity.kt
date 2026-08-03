@@ -1,7 +1,7 @@
 package com.lazyapps.wifianalyzer
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import com.lazyapps.wifianalyzer.ui.WifiAnalyzerApp
@@ -10,7 +10,7 @@ import com.lazyapps.wifianalyzer.review.ReviewHistoryRepository
 import kotlinx.coroutines.launch
 import com.lazyapps.wifianalyzer.ads.AdMobManager
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

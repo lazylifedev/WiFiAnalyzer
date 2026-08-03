@@ -11,6 +11,7 @@ import com.lazyapps.wifianalyzer.domain.WorkspaceCounts
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorCategory
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorMapper
 import com.lazyapps.wifianalyzer.kintone.KintoneAutoSyncScheduler
+import com.lazyapps.wifianalyzer.ui.registry.registryErrorText
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -49,7 +50,7 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.value = _uiState.value.copy(busy = true, errorMessage = null)
         viewModelScope.launch {
             try { block(); _uiState.value = _uiState.value.copy(busy = false) }
-            catch (e: RegistryValidationException) { _uiState.value = _uiState.value.copy(busy = false, errorMessage = e.message) }
+            catch (e: RegistryValidationException) { _uiState.value = _uiState.value.copy(busy = false, errorMessage = getApplication<Application>().registryErrorText(e)) }
             catch (e: Exception) { _uiState.value = _uiState.value.copy(busy = false, errorMessage = message(OperationErrorMapper.classify(e))) }
         }
     }

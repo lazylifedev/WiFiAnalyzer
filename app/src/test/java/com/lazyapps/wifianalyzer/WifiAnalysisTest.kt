@@ -75,8 +75,8 @@ class WifiAnalysisTest {
 
     @Test
     fun blankSsidHasNaturalDisplayName() {
-        assertEquals("非公開ネットワーク", WifiAnalysis.displaySsid(""))
-        assertEquals("非公開ネットワーク", WifiAnalysis.displaySsid("   "))
+        assertEquals(WifiAnalysis.HIDDEN_SSID, WifiAnalysis.displaySsid(""))
+        assertEquals(WifiAnalysis.HIDDEN_SSID, WifiAnalysis.displaySsid("   "))
         assertEquals("Office", WifiAnalysis.displaySsid(" Office "))
     }
 

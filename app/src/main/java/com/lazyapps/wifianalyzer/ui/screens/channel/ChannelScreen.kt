@@ -82,7 +82,7 @@ fun ChannelScreen(
         RefreshProgress(state)
         PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().testTag("channel_list"),
                 contentPadding = PaddingValues(bottom = AppSpacing.xLarge),
                 verticalArrangement = Arrangement.spacedBy(AppSpacing.medium),
             ) {

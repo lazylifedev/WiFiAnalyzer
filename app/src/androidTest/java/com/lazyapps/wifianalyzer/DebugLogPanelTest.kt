@@ -112,9 +112,8 @@ class DebugLogPanelTest {
             }
         }
 
-        composeRule.onNodeWithTag("settings_list").performScrollToIndex(17)
+        composeRule.onNodeWithTag("settings_screen").performScrollToIndex(17)
         composeRule.onNodeWithTag("debug_display_switch").assertExists()
-        composeRule.onNodeWithText("デバッグ表示").assertExists()
     }
 
     private fun store() = DebugLogStore(

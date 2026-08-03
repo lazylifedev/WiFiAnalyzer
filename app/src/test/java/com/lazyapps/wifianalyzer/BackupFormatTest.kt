@@ -27,7 +27,7 @@ class BackupFormatTest {
         zip.outputStream().use { out->BackupArchiveWriter().write(out,data,{checksums->manifest(checksums).copy(formatVersion=99)},{error("no photos")}) }
         assertFails(BackupException.Code.UNSUPPORTED_FORMAT){BackupArchiveReader().read(zip,File(root,"out"))};root.deleteRecursively()
     }
-    @Test fun `workspace names are made unique`() { val used=mutableSetOf("東京");val first=uniqueRestoredName("東京",used);used+=first;assertEquals("東京 (復元)",first);assertEquals("東京 (復元 2)",uniqueRestoredName("東京",used)) }
+    @Test fun `workspace names are made unique with language independent suffixes`() { val used=mutableSetOf("東京");val first=uniqueRestoredName("東京",used);used+=first;assertEquals("東京 (2)",first);assertEquals("東京 (3)",uniqueRestoredName("東京",used)) }
     @Test fun `same workspace duplicate bssid rejected but cross workspace allowed`() {
         val base=sampleData();val one=base.bssids.first();val duplicate=base.copy(bssids=listOf(one,one.copy(backupId="b2")))
         assertFails(BackupException.Code.DUPLICATE_BSSID){BackupValidator.validate(manifest(emptyList()).copy(bssidCount=2),duplicate,createTempDir())}

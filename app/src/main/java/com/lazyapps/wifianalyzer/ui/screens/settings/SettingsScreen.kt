@@ -54,6 +54,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 import androidx.compose.ui.text.style.TextOverflow
 import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.BuildConfig
@@ -115,6 +117,7 @@ fun SettingsScreen(
     var showWorkspaces by remember { mutableStateOf(false) }
     var showRefreshIntervals by remember { mutableStateOf(false) }
     var showDistanceUnits by remember { mutableStateOf(false) }
+    var showLanguages by remember { mutableStateOf(false) }
     var showBands by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
     var showPermissions by remember { mutableStateOf(false) }
@@ -175,6 +178,13 @@ fun SettingsScreen(
         item { SectionLabel(stringResource(R.string.display_section), Modifier.padding(horizontal = AppSpacing.large)) }
         item {
             Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
+                val languageTag = AppCompatDelegate.getApplicationLocales().toLanguageTags()
+                val languageLabel = when (languageTag) {
+                    "en" -> stringResource(R.string.app_language_english)
+                    "ja" -> stringResource(R.string.app_language_japanese)
+                    else -> stringResource(R.string.app_language_system_default)
+                }
+                SettingRow(stringResource(R.string.app_language), languageLabel, onClick = { showLanguages = true }, modifier = Modifier.testTag("app_language"))
                 SettingRow(stringResource(R.string.distance_unit), stringResource(if (distanceUnit == DistanceUnitPreference.METERS) R.string.distance_meters_value else R.string.distance_feet_value), onClick = { showDistanceUnits = true })
                 SettingRow(stringResource(R.string.frequency_bands), visibleBandLabel(visibleBands), onClick = { showBands = true })
                 SettingRow(stringResource(R.string.scan_request_interval), localizedRefreshIntervalLabel(refreshIntervalMillis), trailing = {
@@ -253,6 +263,9 @@ fun SettingsScreen(
         onCreate = onCreateWorkspace, onRename = onRenameWorkspace, onMove = onMoveWorkspace,
         onDelete = onDeleteWorkspace, onLoadCounts = onLoadWorkspaceCounts,
     )
+    if (showLanguages) {
+        LanguageDialog(onDismiss = { showLanguages = false })
+    }
     if (showRefreshIntervals) AlertDialog(
         onDismissRequest = { showRefreshIntervals = false },
         title = { Text(stringResource(R.string.scan_request_interval)) },
@@ -398,6 +411,50 @@ internal fun visibleBandLabel(bands: Set<WifiBand>): String = WifiBand.entries.f
     when (it) { WifiBand.BAND_24 -> "2.4"; WifiBand.BAND_5 -> "5"; WifiBand.BAND_6 -> "6" }
 } + " GHz"
 
+private data class AppLanguageChoice(val tag: String, val labelRes: Int)
+
+@Composable
+private fun LanguageDialog(onDismiss: () -> Unit) {
+    val selectedTag = AppCompatDelegate.getApplicationLocales().toLanguageTags()
+    val choices = listOf(
+        AppLanguageChoice("", R.string.app_language_system_default),
+        AppLanguageChoice("ja", R.string.app_language_japanese),
+        AppLanguageChoice("en", R.string.app_language_english),
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.app_language)) },
+        text = {
+            Column {
+                choices.forEach { choice ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .testTag("app_language_${choice.tag.ifEmpty { "system" }}")
+                            .selectable(
+                                selected = selectedTag == choice.tag,
+                                onClick = {
+                                    onDismiss()
+                                    AppCompatDelegate.setApplicationLocales(
+                                        if (choice.tag.isEmpty()) LocaleListCompat.getEmptyLocaleList()
+                                        else LocaleListCompat.forLanguageTags(choice.tag),
+                                    )
+                                },
+                                role = Role.RadioButton,
+                            )
+                            .padding(vertical = AppSpacing.small),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = selectedTag == choice.tag, onClick = null)
+                        Text(stringResource(choice.labelRes))
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
 @Composable
 private fun <T> ChoiceDialog(title: String, choices: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit, onDismiss: () -> Unit) {
     AlertDialog(onDismissRequest = onDismiss, title = { Text(title) }, text = { Column {
@@ -483,8 +540,8 @@ private fun ThemeModeCard(mode: ThemeMode, selected: Boolean, onClick: () -> Uni
 }
 
 @Composable
-private fun SettingRow(title: String, value: String? = null, trailing: (@Composable () -> Unit)? = null, onClick: (() -> Unit)? = null) {
-    Row(Modifier.fillMaxWidth().then(if (onClick != null) Modifier.selectable(false, onClick = onClick) else Modifier).padding(horizontal = AppSpacing.large, vertical = AppSpacing.medium), verticalAlignment = Alignment.CenterVertically) {
+private fun SettingRow(title: String, value: String? = null, trailing: (@Composable () -> Unit)? = null, onClick: (() -> Unit)? = null, modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth().then(if (onClick != null) Modifier.selectable(false, onClick = onClick) else Modifier).padding(horizontal = AppSpacing.large, vertical = AppSpacing.medium), verticalAlignment = Alignment.CenterVertically) {
         Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
         value?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         trailing?.invoke() ?: Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)

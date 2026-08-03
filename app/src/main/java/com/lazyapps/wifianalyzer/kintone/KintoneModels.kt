@@ -45,6 +45,19 @@ data class KintoneValidationError(
 }
 
 object KintoneErrorMessages {
+    const val AUTH_INVALID = "AUTH_INVALID"
+    const val AUTH_PERMISSION = "AUTH_PERMISSION"
+    const val APP_NOT_FOUND = "APP_NOT_FOUND"
+    const val RATE_LIMITED = "RATE_LIMITED"
+    const val FIELD_MISMATCH = "FIELD_MISMATCH"
+    const val UPSERT_MISMATCH = "UPSERT_MISMATCH"
+    const val SCHEMA_CHANGED = "SCHEMA_CHANGED"
+    const val TIMEOUT = "TIMEOUT"
+    const val PHOTO_UPLOAD_TIMEOUT = "PHOTO_UPLOAD_TIMEOUT"
+    const val PHOTO_UNREADABLE = "PHOTO_UNREADABLE"
+    const val PHOTO_SYNC_FAILED = "PHOTO_SYNC_FAILED"
+    const val NETWORK_UNAVAILABLE = "NETWORK_UNAVAILABLE"
+    const val SYNC_FAILED = "SYNC_FAILED"
     fun category(status: Int?, remoteCode: String?, code: KintoneErrorCode): KintoneErrorCategory = when {
         status == 401 || code == KintoneErrorCode.KINTONE_AUTH_FAILED -> KintoneErrorCategory.AUTHENTICATION
         status == 403 || code == KintoneErrorCode.KINTONE_PERMISSION_DENIED -> KintoneErrorCategory.PERMISSION
@@ -59,19 +72,19 @@ object KintoneErrorMessages {
     }
 
     fun forFailure(status: Int?, remoteCode: String?, code: KintoneErrorCode): String = when {
-        status == 401 || code == KintoneErrorCode.KINTONE_AUTH_FAILED -> "APIトークンが無効です。QRコードを再生成してください。"
-        status == 403 || code == KintoneErrorCode.KINTONE_PERMISSION_DENIED -> "APIトークンにレコード追加・編集権限がありません。"
-        status == 404 || code == KintoneErrorCode.KINTONE_APP_NOT_FOUND -> "接続先のkintoneアプリが見つかりません。"
-        status == 429 || code == KintoneErrorCode.KINTONE_RATE_LIMITED -> "kintoneへのアクセスが集中しています。時間をおいて再試行します。"
-        remoteCode == "CB_VA01" -> "送信内容がkintoneのフィールド仕様と一致しません。"
-        remoteCode == "GAIA_RE20" -> "更新キーに一致するレコードが見つかりません。UPSERT設定を確認してください。"
-        category(status, remoteCode, code) == KintoneErrorCategory.SCHEMA -> "kintoneアプリのフィールド構成が変更されています。接続を確認してください。"
-        code == KintoneErrorCode.KINTONE_TIMEOUT -> "kintoneから時間内に応答がありませんでした。"
-        code == KintoneErrorCode.KINTONE_FILE_UPLOAD_TIMEOUT -> "写真のアップロードが時間内に完了しませんでした。"
-        code in setOf(KintoneErrorCode.KINTONE_FILE_NOT_FOUND, KintoneErrorCode.KINTONE_FILE_UNREADABLE, KintoneErrorCode.KINTONE_FILE_INVALID) -> "端末内の写真を読み込めません。写真を確認してください。"
-        code in setOf(KintoneErrorCode.KINTONE_FILE_UPLOAD_FAILED, KintoneErrorCode.KINTONE_FILE_TOO_LARGE, KintoneErrorCode.KINTONE_FILE_RESPONSE_INVALID, KintoneErrorCode.KINTONE_PHOTO_SYNC_FAILED, KintoneErrorCode.KINTONE_PHOTO_PARTIAL_UPLOAD, KintoneErrorCode.KINTONE_PHOTO_FINGERPRINT_FAILED) -> "写真をkintoneへ同期できませんでした。"
-        code in setOf(KintoneErrorCode.KINTONE_NETWORK_UNAVAILABLE, KintoneErrorCode.KINTONE_TLS_ERROR) -> "ネットワークへ接続できません。"
-        else -> "kintoneへの同期に失敗しました。"
+        status == 401 || code == KintoneErrorCode.KINTONE_AUTH_FAILED -> AUTH_INVALID
+        status == 403 || code == KintoneErrorCode.KINTONE_PERMISSION_DENIED -> AUTH_PERMISSION
+        status == 404 || code == KintoneErrorCode.KINTONE_APP_NOT_FOUND -> APP_NOT_FOUND
+        status == 429 || code == KintoneErrorCode.KINTONE_RATE_LIMITED -> RATE_LIMITED
+        remoteCode == "CB_VA01" -> FIELD_MISMATCH
+        remoteCode == "GAIA_RE20" -> UPSERT_MISMATCH
+        category(status, remoteCode, code) == KintoneErrorCategory.SCHEMA -> SCHEMA_CHANGED
+        code == KintoneErrorCode.KINTONE_TIMEOUT -> TIMEOUT
+        code == KintoneErrorCode.KINTONE_FILE_UPLOAD_TIMEOUT -> PHOTO_UPLOAD_TIMEOUT
+        code in setOf(KintoneErrorCode.KINTONE_FILE_NOT_FOUND, KintoneErrorCode.KINTONE_FILE_UNREADABLE, KintoneErrorCode.KINTONE_FILE_INVALID) -> PHOTO_UNREADABLE
+        code in setOf(KintoneErrorCode.KINTONE_FILE_UPLOAD_FAILED, KintoneErrorCode.KINTONE_FILE_TOO_LARGE, KintoneErrorCode.KINTONE_FILE_RESPONSE_INVALID, KintoneErrorCode.KINTONE_PHOTO_SYNC_FAILED, KintoneErrorCode.KINTONE_PHOTO_PARTIAL_UPLOAD, KintoneErrorCode.KINTONE_PHOTO_FINGERPRINT_FAILED) -> PHOTO_SYNC_FAILED
+        code in setOf(KintoneErrorCode.KINTONE_NETWORK_UNAVAILABLE, KintoneErrorCode.KINTONE_TLS_ERROR) -> NETWORK_UNAVAILABLE
+        else -> SYNC_FAILED
     }
 }
 

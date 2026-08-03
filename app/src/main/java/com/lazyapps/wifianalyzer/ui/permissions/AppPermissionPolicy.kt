@@ -2,6 +2,8 @@ package com.lazyapps.wifianalyzer.ui.permissions
 
 import android.Manifest
 import android.os.Build
+import androidx.annotation.StringRes
+import com.lazyapps.wifianalyzer.R
 
 enum class PermissionStatus { GRANTED, NOT_GRANTED, PARTIALLY_GRANTED, SETTINGS_REQUIRED }
 
@@ -18,10 +20,11 @@ object AppPermissionPolicy {
         if (apiLevel >= Build.VERSION_CODES.S) add(Manifest.permission.ACCESS_COARSE_LOCATION)
     }
 
-    fun wifiExplanation(apiLevel: Int = Build.VERSION.SDK_INT): String =
+    @StringRes
+    fun wifiExplanationRes(apiLevel: Int = Build.VERSION.SDK_INT): Int =
         if (apiLevel >= Build.VERSION_CODES.TIRAMISU) {
-            "周辺Wi-Fiを取得するため、付近のデバイスと位置情報の権限が必要です。AndroidのWi-Fiスキャン仕様で必要ですが、位置情報そのものは保存・送信しません。"
+            R.string.wifi_scan_permission_body_android_13
         } else {
-            "周辺Wi-Fiを取得するため、Androidの仕様により位置情報の権限が必要です。位置情報そのものは保存・送信しません。"
+            R.string.wifi_scan_permission_body
         }
 }

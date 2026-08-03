@@ -6,6 +6,8 @@ import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.model.DistanceRange
 import com.lazyapps.wifianalyzer.model.SecurityType
 import com.lazyapps.wifianalyzer.model.SignalQuality
+import com.lazyapps.wifianalyzer.model.WifiStandard
+import com.lazyapps.wifianalyzer.domain.WifiAnalysis
 
 @Composable
 fun SignalQuality.localizedLabel(): String = stringResource(when (this) {
@@ -34,3 +36,7 @@ fun DistanceRange.localizedLabel(feet: Boolean): String = stringResource(when (t
     DistanceRange.EIGHT_TO_TWENTY -> if (feet) R.string.distance_26_66_ft else R.string.distance_8_20_m
     DistanceRange.TWENTY_PLUS -> if (feet) R.string.distance_66_plus_ft else R.string.distance_20_plus_m
 })
+
+@Composable fun String.localizedSsid(): String = if (this == WifiAnalysis.HIDDEN_SSID) stringResource(R.string.hidden_network) else this
+
+@Composable fun WifiStandard.localizedLabel(): String = if (this == WifiStandard.UNKNOWN) stringResource(R.string.unknown) else label

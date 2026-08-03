@@ -38,10 +38,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
 import com.lazyapps.wifianalyzer.domain.DeviceBssidInput
+import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.domain.DeviceGroup
 import com.lazyapps.wifianalyzer.domain.DeviceInput
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
@@ -67,16 +69,19 @@ fun DeviceRegistrationScreen(
 ) {
     var form by remember(initial) { mutableStateOf(initial) }
     var showGroupPicker by remember { mutableStateOf(false) }
+    val manufacturerLabel = stringResource(R.string.manufacturer)
+    val modelLabel = stringResource(R.string.model)
+    val serialNumberLabel = stringResource(R.string.serial_number)
     LazyColumn(
         modifier = Modifier.fillMaxSize().imePadding().testTag("registration_list"),
         contentPadding = PaddingValues(bottom = AppSpacing.xLarge),
         verticalArrangement = Arrangement.spacedBy(AppSpacing.medium),
     ) {
         item {
-            ScreenHeader(if (form.id == 0L) "機器を登録" else "機器を編集", "機器名とBSSIDは必須", action = {
+            ScreenHeader(stringResource(if (form.id == 0L) R.string.registration_add_device else R.string.registration_edit_device), stringResource(R.string.registration_required_hint), action = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "戻る") }
-                    Button(enabled = !busy, onClick = { onSave(form) }, modifier = Modifier.testTag("save_device")) { Text(if (busy) "保存中…" else "保存") }
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back)) }
+                    Button(enabled = !busy, onClick = { onSave(form) }, modifier = Modifier.testTag("save_device")) { Text(stringResource(if (busy) R.string.saving else R.string.save)) }
                 }
             })
         }
@@ -90,54 +95,55 @@ fun DeviceRegistrationScreen(
         }
         baseline?.let { before ->
             val changes = listOf(
-                "メーカー" to (before.manufacturer to form.manufacturer),
-                "型番" to (before.model to form.model),
-                "シリアル番号" to (before.serialNumber to form.serialNumber),
+                manufacturerLabel to (before.manufacturer to form.manufacturer),
+                modelLabel to (before.model to form.model),
+                serialNumberLabel to (before.serialNumber to form.serialNumber),
                 "SSID" to (before.ssid to form.ssid),
                 "BSSID" to (before.bssids.joinToString { it.bssid } to form.bssids.joinToString { it.bssid }),
             ).filter { (_, values) -> values.first != values.second }
             if (changes.isNotEmpty()) item {
                 Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), border = CardDefaults.outlinedCardBorder()) {
                     Column(Modifier.padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-                        Text("変更内容", style = MaterialTheme.typography.titleMedium)
-                        changes.forEach { (label, values) -> Text("$label\n${values.first.ifBlank { "未入力" }} → ${values.second.ifBlank { "未入力" }}") }
-                        Text("内容を確認してから保存してください。保存に失敗した場合は変更前の情報が維持されます。", style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(R.string.changes), style = MaterialTheme.typography.titleMedium)
+                        val notEntered = stringResource(R.string.not_entered)
+                        changes.forEach { (label, values) -> Text(stringResource(R.string.change_value_format, label, values.first.ifBlank { notEntered }, values.second.ifBlank { notEntered })) }
+                        Text(stringResource(R.string.review_before_saving), style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
         }
         item {
-            FormSection("基本情報") {
-                FormField("機器名 *", form.displayName, { form = form.copy(displayName = it) }, "device_name")
+            FormSection(stringResource(R.string.basic_information)) {
+                FormField(stringResource(R.string.device_name_required), form.displayName, { form = form.copy(displayName = it) }, "device_name")
                 FormField("SSID", form.ssid, { form = form.copy(ssid = it) })
-                FormField("メーカー", form.manufacturer, { form = form.copy(manufacturer = it) })
-                FormField("型番", form.model, { form = form.copy(model = it) })
-                FormField("シリアル番号", form.serialNumber, { form = form.copy(serialNumber = it) })
+                FormField(stringResource(R.string.manufacturer), form.manufacturer, { form = form.copy(manufacturer = it) })
+                FormField(stringResource(R.string.model), form.model, { form = form.copy(model = it) })
+                FormField(stringResource(R.string.serial_number), form.serialNumber, { form = form.copy(serialNumber = it) })
             }
         }
         item {
-            FormSection("グループ") {
-                val selectedName = groups.firstOrNull { it.id == form.groupId }?.name ?: "未分類"
+            FormSection(stringResource(R.string.group)) {
+                val selectedName = groups.firstOrNull { it.id == form.groupId }?.name ?: stringResource(R.string.uncategorized)
                 OutlinedButton(onClick = { showGroupPicker = true }, modifier = Modifier.fillMaxWidth().testTag("group_picker")) {
                     Text(selectedName, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
         item {
-            FormSection("設置情報") {
-                FormField("設置場所", form.location, { form = form.copy(location = it) })
-                FormField("メモ", form.notes, { form = form.copy(notes = it) }, singleLine = false)
+            FormSection(stringResource(R.string.installation_details)) {
+                FormField(stringResource(R.string.installation_location), form.location, { form = form.copy(location = it) })
+                FormField(stringResource(R.string.notes), form.notes, { form = form.copy(notes = it) }, singleLine = false)
             }
         }
         item {
             Row(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("BSSID", style = MaterialTheme.typography.titleMedium)
-                    Text("先頭のBSSIDを主BSSIDとして表示します", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.primary_bssid_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Button(onClick = { form = form.copy(bssids = form.bssids + DeviceBssidInput("", "2.4 GHz")) }, modifier = Modifier.testTag("add_bssid")) {
                     Icon(Icons.Rounded.Add, null)
-                    Text("追加")
+                    Text(stringResource(R.string.add))
                 }
             }
         }
@@ -156,17 +162,17 @@ fun DeviceRegistrationScreen(
                 enabled = !busy,
                 onClick = { onSave(form) },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large).testTag("save_device_bottom"),
-            ) { Text(if (busy) "保存中…" else "登録内容を保存") }
+            ) { Text(stringResource(if (busy) R.string.saving else R.string.save_registration)) }
         }
     }
 
     if (showGroupPicker) AlertDialog(
         onDismissRequest = { showGroupPicker = false },
-        title = { Text("グループを選択") },
+        title = { Text(stringResource(R.string.select_group)) },
         text = {
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp).testTag("group_picker_list")) {
                 item {
-                    GroupChoice("未分類", form.groupId == null) { form = form.copy(groupId = null); showGroupPicker = false }
+                    GroupChoice(stringResource(R.string.uncategorized), form.groupId == null) { form = form.copy(groupId = null); showGroupPicker = false }
                 }
                 itemsIndexed(groups, key = { _, group -> group.id }) { _, group ->
                     GroupChoice(group.name, form.groupId == group.id) { form = form.copy(groupId = group.id); showGroupPicker = false }
@@ -174,33 +180,33 @@ fun DeviceRegistrationScreen(
                 item {
                     TextButton(onClick = onShowGroupCreate, modifier = Modifier.fillMaxWidth().testTag("create_group_from_form")) {
                         Icon(Icons.Rounded.Add, null)
-                        Text("新しいグループを作成")
+                        Text(stringResource(R.string.create_new_group))
                     }
                 }
             }
         },
-        confirmButton = { TextButton(onClick = { showGroupPicker = false }) { Text("閉じる") } },
+        confirmButton = { TextButton(onClick = { showGroupPicker = false }) { Text(stringResource(R.string.close)) } },
     )
 
     if (groupCreateDialogVisible) AlertDialog(
         onDismissRequest = onDismissGroupCreate,
         modifier = Modifier.imePadding(),
-        title = { Text("新しいグループ") },
+        title = { Text(stringResource(R.string.new_group)) },
         text = {
             OutlinedTextField(
                 value = newGroupName,
                 onValueChange = onNewGroupNameChange,
-                label = { Text("グループ名") },
+                label = { Text(stringResource(R.string.group_name)) },
                 supportingText = groupNameValidationError?.let { message -> { Text(message) } },
                 isError = groupNameValidationError != null,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().testTag("new_group_name"),
             )
         },
-        dismissButton = { TextButton(enabled = !isCreatingGroup, onClick = onDismissGroupCreate) { Text("キャンセル") } },
+        dismissButton = { TextButton(enabled = !isCreatingGroup, onClick = onDismissGroupCreate) { Text(stringResource(R.string.cancel)) } },
         confirmButton = {
             Button(enabled = !isCreatingGroup, onClick = { onCreateGroup { id -> form = form.copy(groupId = id); showGroupPicker = false } }, modifier = Modifier.testTag("confirm_create_group")) {
-                Text(if (isCreatingGroup) "作成中…" else "作成")
+                Text(stringResource(if (isCreatingGroup) R.string.creating else R.string.create))
             }
         },
     )
@@ -220,8 +226,8 @@ private fun BssidEditor(index: Int, item: DeviceBssidInput, canDelete: Boolean, 
     Card(modifier.fillMaxWidth(), border = CardDefaults.outlinedCardBorder()) {
         Column(Modifier.padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("BSSID ${index + 1}${if (index == 0) "（主）" else ""}", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                IconButton(enabled = canDelete, onClick = onDelete) { Icon(Icons.Rounded.Delete, "BSSIDを削除") }
+                Text(stringResource(if (index == 0) R.string.primary_bssid_number else R.string.bssid_number, index + 1), Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                IconButton(enabled = canDelete, onClick = onDelete) { Icon(Icons.Rounded.Delete, stringResource(R.string.delete_bssid)) }
             }
             OutlinedTextField(
                 value = item.bssid,
@@ -234,7 +240,7 @@ private fun BssidEditor(index: Int, item: DeviceBssidInput, canDelete: Boolean, 
             FlowRow(horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
                 bands.forEach { band -> FilterChip(selected = item.band == band, onClick = { onChange(item.copy(band = band)) }, label = { Text(band) }) }
             }
-            OutlinedTextField(item.label, { onChange(item.copy(label = it)) }, Modifier.fillMaxWidth(), label = { Text("ラベル（任意）") }, singleLine = true)
+            OutlinedTextField(item.label, { onChange(item.copy(label = it)) }, Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.optional_label)) }, singleLine = true)
         }
     }
 }

@@ -10,13 +10,11 @@ class PhotoViewerFullscreenStateTest {
     @Test fun fullscreenToggleChangesInsetsChromeAndAction() {
         val normal = PhotoViewerFullscreenState()
         assertTrue(normal.applySystemBarInsets)
-        assertEquals("全画面", normal.fullscreenActionDescription)
 
         val immersive = normal.toggleFullscreen()
         assertTrue(immersive.immersive)
         assertFalse(immersive.applySystemBarInsets)
         assertFalse(immersive.chromeVisible)
-        assertEquals("全画面を終了", immersive.fullscreenActionDescription)
 
         assertEquals(normal, immersive.toggleFullscreen())
     }

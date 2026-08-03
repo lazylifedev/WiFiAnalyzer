@@ -35,10 +35,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.domain.DetectionPolicy
 import com.lazyapps.wifianalyzer.domain.RegisteredDevice
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
-import com.lazyapps.wifianalyzer.model.displayLabel
+import com.lazyapps.wifianalyzer.ui.components.localizedLabel
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 import com.lazyapps.wifianalyzer.ui.photos.DevicePhotoGallery
@@ -59,8 +62,8 @@ fun DeviceDetailScreen(
     var chooseMonitor by remember { mutableStateOf(false) }
     if (device == null) {
         Column(Modifier.fillMaxSize()) {
-            ScreenHeader("機器詳細", action = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "戻る") } })
-            Text("機器が見つかりません", Modifier.padding(AppSpacing.large))
+            ScreenHeader(stringResource(R.string.device_detail_title), action = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back)) } })
+            Text(stringResource(R.string.device_not_found), Modifier.padding(AppSpacing.large))
         }
         return
     }
@@ -71,11 +74,11 @@ fun DeviceDetailScreen(
         verticalArrangement = Arrangement.spacedBy(AppSpacing.medium),
     ) {
         item {
-            ScreenHeader(device.displayName, if (detected) "現在検出中" else "未検出", action = {
+            ScreenHeader(device.displayName, stringResource(if (detected) R.string.detected else R.string.not_detected), action = {
                 Row {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "戻る") }
-                    IconButton(onClick = onEdit, modifier = Modifier.testTag("edit_device")) { Icon(Icons.Rounded.Edit, "編集") }
-                    IconButton(onClick = { confirmDelete = true }, modifier = Modifier.testTag("delete_device")) { Icon(Icons.Rounded.Delete, "削除") }
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back)) }
+                    IconButton(onClick = onEdit, modifier = Modifier.testTag("edit_device")) { Icon(Icons.Rounded.Edit, stringResource(R.string.edit)) }
+                    IconButton(onClick = { confirmDelete = true }, modifier = Modifier.testTag("delete_device")) { Icon(Icons.Rounded.Delete, stringResource(R.string.delete)) }
                 }
             })
         }
@@ -90,63 +93,63 @@ fun DeviceDetailScreen(
                         if (detectedAccessPoints.size == 1) onMonitor(detectedAccessPoints.first().bssid) else chooseMonitor = true
                     }, modifier = Modifier.weight(1f)) {
                         Icon(Icons.Rounded.ShowChart, null)
-                        Text("モニター", maxLines = 1)
+                        Text(stringResource(R.string.nav_monitor), maxLines = 1)
                     }
                 }
                 OutlinedButton(onClick = onOcrUpdate, modifier = Modifier.weight(1f).testTag("ocr_update_device")) {
                     Icon(Icons.Rounded.CameraAlt, null)
-                    Text("ラベル読取", maxLines = 1)
+                    Text(stringResource(R.string.scan_device_label), maxLines = 1)
                 }
             }
         }
         item {
-            DetailCard("検出情報") {
-                DetailLine("状態", if (detected) "現在検出中" else "未検出")
-                DetailLine("最新RSSI", device.lastSeenRssi?.let { "$it dBm" } ?: "—")
-                DetailLine("最終検出", relativeDate(device.lastSeenAt))
-                val distance = detectedAccessPoints.maxByOrNull { it.rssi }?.distanceRange?.displayLabel(useFeet) ?: "—"
-                DetailLine("推定距離", distance)
+            DetailCard(stringResource(R.string.detection_information)) {
+                DetailLine(stringResource(R.string.status), stringResource(if (detected) R.string.detected else R.string.not_detected))
+                DetailLine(stringResource(R.string.latest_rssi), device.lastSeenRssi?.let { "$it dBm" } ?: "—")
+                DetailLine(stringResource(R.string.last_seen), relativeDate(device.lastSeenAt))
+                val distance = detectedAccessPoints.maxByOrNull { it.rssi }?.distanceRange?.localizedLabel(useFeet) ?: "—"
+                DetailLine(stringResource(R.string.estimated_distance_label), distance)
             }
         }
         item {
-            DetailCard("機器情報") {
-                DetailLine("メーカー", device.manufacturer.ifBlank { "—" })
-                DetailLine("型番", device.model.ifBlank { "—" })
-                DetailLine("シリアル番号", device.serialNumber.ifBlank { "—" })
+            DetailCard(stringResource(R.string.device_information)) {
+                DetailLine(stringResource(R.string.manufacturer), device.manufacturer.ifBlank { "—" })
+                DetailLine(stringResource(R.string.model), device.model.ifBlank { "—" })
+                DetailLine(stringResource(R.string.serial_number), device.serialNumber.ifBlank { "—" })
                 DetailLine("SSID", device.ssid.ifBlank { "—" })
-                DetailLine("グループ", device.groupName ?: "未分類")
-                DetailLine("設置場所", device.location.ifBlank { "—" })
-                DetailLine("メモ", device.notes.ifBlank { "—" })
+                DetailLine(stringResource(R.string.group), device.groupName ?: stringResource(R.string.uncategorized))
+                DetailLine(stringResource(R.string.installation_location), device.location.ifBlank { "—" })
+                DetailLine(stringResource(R.string.notes), device.notes.ifBlank { "—" })
             }
         }
         item {
-            DetailCard("BSSID一覧") {
+            DetailCard(stringResource(R.string.bssid_list)) {
                 device.bssids.forEachIndexed { index, bssid ->
-                    Text("${if (index == 0) "主 · " else ""}${bssid.bssid}", style = MaterialTheme.typography.bodyMedium)
+                    Text("${if (index == 0) stringResource(R.string.primary_prefix) else ""}${bssid.bssid}", style = MaterialTheme.typography.bodyMedium)
                     Text("${bssid.band}${bssid.label.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
         item {
-            DetailCard("記録") {
-                DetailLine("作成日時", absoluteDate(device.createdAt))
-                DetailLine("更新日時", absoluteDate(device.updatedAt))
+            DetailCard(stringResource(R.string.record)) {
+                DetailLine(stringResource(R.string.created_at), absoluteDate(device.createdAt))
+                DetailLine(stringResource(R.string.updated_at), absoluteDate(device.updatedAt))
             }
         }
     }
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("機器を削除しますか？") },
-            text = { Text("関連するBSSIDと写真 ${device.photoCount}枚も削除されます。この操作は元に戻せません。") },
-            confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete() }) { Text("削除") } },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("キャンセル") } },
+            title = { Text(stringResource(R.string.delete_device_title)) },
+            text = { Text(pluralStringResource(R.plurals.device_delete_with_photos, device.photoCount, device.photoCount)) },
+            confirmButton = { TextButton(onClick = { confirmDelete = false; onDelete() }) { Text(stringResource(R.string.delete)) } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.cancel)) } },
         )
     }
     if (chooseMonitor) {
         AlertDialog(
             onDismissRequest = { chooseMonitor = false },
-            title = { Text("モニターするBSSID") },
+            title = { Text(stringResource(R.string.select_monitor_bssid)) },
             text = {
                 Column {
                     detectedAccessPoints.forEach { ap ->
@@ -156,7 +159,7 @@ fun DeviceDetailScreen(
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { chooseMonitor = false }) { Text("閉じる") } },
+            confirmButton = { TextButton(onClick = { chooseMonitor = false }) { Text(stringResource(R.string.close)) } },
         )
     }
 }

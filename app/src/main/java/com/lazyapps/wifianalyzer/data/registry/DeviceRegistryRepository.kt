@@ -24,7 +24,15 @@ data class RegistrySnapshot(
     val groups: List<DeviceGroup> = emptyList(),
 )
 
-class RegistryValidationException(message: String) : IllegalArgumentException(message)
+enum class RegistryError {
+    WORKSPACE_NOT_FOUND, DEVICE_NAME_REQUIRED, BSSID_REQUIRED, INVALID_BSSID,
+    DUPLICATE_BSSID_INPUT, BSSID_ALREADY_REGISTERED, GROUP_NOT_FOUND,
+    GROUP_NAME_REQUIRED, GROUP_NAME_TOO_LONG, DUPLICATE_GROUP,
+    WORKSPACE_NAME_REQUIRED, DUPLICATE_WORKSPACE, DUPLICATE_VALUE,
+    PHOTO_LIMIT, DEVICE_NOT_FOUND, INVALID_PHOTO, PHOTO_TOO_LARGE, PHOTO_OUT_OF_MEMORY, PHOTO_WRITE_FAILED,
+}
+
+class RegistryValidationException(val error: RegistryError, vararg val arguments: Any) : IllegalArgumentException(error.name)
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class DeviceRegistryRepository(private val context: Context, private val database: WifiAnalyzerDatabase, private val workspaceRepository: WorkspaceRepository) {
@@ -66,22 +74,22 @@ class DeviceRegistryRepository(private val context: Context, private val databas
     suspend fun save(input: DeviceInput): Long = database.withTransaction {
         val selectedWorkspaceId = workspaceRepository.snapshot.first().selectedId
         val workspaceId = input.workspaceId.takeIf { it != 0L } ?: selectedWorkspaceId
-        if (dao.getWorkspace(workspaceId) == null) throw RegistryValidationException("対象ワークスペースが削除されました")
+        if (dao.getWorkspace(workspaceId) == null) throw RegistryValidationException(RegistryError.WORKSPACE_NOT_FOUND)
         val displayName = input.displayName.trim()
-        if (displayName.isBlank()) throw RegistryValidationException("機器名を入力してください")
-        if (input.bssids.isEmpty()) throw RegistryValidationException("BSSIDを1件以上入力してください")
+        if (displayName.isBlank()) throw RegistryValidationException(RegistryError.DEVICE_NAME_REQUIRED)
+        if (input.bssids.isEmpty()) throw RegistryValidationException(RegistryError.BSSID_REQUIRED)
         val normalized = input.bssids.map { item ->
             val address = BssidFormat.normalize(item.bssid)
-                ?: throw RegistryValidationException("BSSID「${item.bssid}」の形式が正しくありません")
+                ?: throw RegistryValidationException(RegistryError.INVALID_BSSID, item.bssid)
             item.copy(bssid = address, label = item.label.trim())
         }
         if (normalized.map { it.bssid }.distinct().size != normalized.size) {
-            throw RegistryValidationException("同じBSSIDが複数入力されています")
+            throw RegistryValidationException(RegistryError.DUPLICATE_BSSID_INPUT)
         }
         val conflicts = dao.findBssids(workspaceId, normalized.map { it.bssid }).filter { it.deviceId != input.id }
-        if (conflicts.isNotEmpty()) throw RegistryValidationException("BSSID ${conflicts.first().bssid} は別の機器に登録済みです")
+        if (conflicts.isNotEmpty()) throw RegistryValidationException(RegistryError.BSSID_ALREADY_REGISTERED, conflicts.first().bssid)
         if (input.groupId != null && snapshotOnceGroups(workspaceId).none { it.id == input.groupId }) {
-            throw RegistryValidationException("選択したグループは対象ワークスペースに存在しません")
+            throw RegistryValidationException(RegistryError.GROUP_NOT_FOUND)
         }
 
         val now = System.currentTimeMillis()
@@ -128,13 +136,13 @@ class DeviceRegistryRepository(private val context: Context, private val databas
     suspend fun createGroup(name: String): Long = createGroup(workspaceRepository.snapshot.first().selectedId, name)
 
     suspend fun createGroup(workspaceId: Long, name: String): Long = database.withTransaction {
-        if (dao.getWorkspace(workspaceId) == null) throw RegistryValidationException("対象ワークスペースが削除されました")
+        if (dao.getWorkspace(workspaceId) == null) throw RegistryValidationException(RegistryError.WORKSPACE_NOT_FOUND)
         val trimmed = java.text.Normalizer.normalize(name.trim(), java.text.Normalizer.Form.NFKC)
         val normalized = GroupNameFormat.normalize(name)
-        if (normalized.isBlank()) throw RegistryValidationException("グループ名を入力してください")
-        if (trimmed.length > 50) throw RegistryValidationException("グループ名は50文字以内で入力してください")
+        if (normalized.isBlank()) throw RegistryValidationException(RegistryError.GROUP_NAME_REQUIRED)
+        if (trimmed.length > 50) throw RegistryValidationException(RegistryError.GROUP_NAME_TOO_LONG)
         val current = snapshotOnceGroups(workspaceId)
-        if (current.any { it.normalizedName == normalized }) throw RegistryValidationException("同名のグループが既にあります")
+        if (current.any { it.normalizedName == normalized }) throw RegistryValidationException(RegistryError.DUPLICATE_GROUP)
         val now = System.currentTimeMillis()
         dao.insertGroup(WifiDeviceGroupEntity(name = trimmed, normalizedName = normalized, sortOrder = (current.maxOfOrNull { it.sortOrder } ?: -1) + 1, createdAt = now, updatedAt = now, workspaceId = workspaceId))
     }
@@ -142,9 +150,9 @@ class DeviceRegistryRepository(private val context: Context, private val databas
     suspend fun renameGroup(group: DeviceGroup, name: String) {
         val trimmed = name.trim()
         val normalized = GroupNameFormat.normalize(name)
-        if (normalized.isBlank()) throw RegistryValidationException("グループ名を入力してください")
+        if (normalized.isBlank()) throw RegistryValidationException(RegistryError.GROUP_NAME_REQUIRED)
         val current = snapshotOnceGroups(group.workspaceId)
-        if (current.any { it.id != group.id && it.normalizedName == normalized }) throw RegistryValidationException("同名のグループが既にあります")
+        if (current.any { it.id != group.id && it.normalizedName == normalized }) throw RegistryValidationException(RegistryError.DUPLICATE_GROUP)
         val old = current.first { it.id == group.id }
         dao.updateGroup(old.copy(name = trimmed, normalizedName = normalized, updatedAt = System.currentTimeMillis()))
     }

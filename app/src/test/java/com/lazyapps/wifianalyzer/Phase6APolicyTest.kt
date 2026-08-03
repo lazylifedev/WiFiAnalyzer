@@ -30,8 +30,8 @@ class Phase6APolicyTest {
 
     @Test fun onboardingIsShortAndEndsWithPrivacyExplanation() {
         assertEquals(4, onboardingPages.size)
-        assertTrue(onboardingPages.all { it.title.isNotBlank() && it.body.length < 100 })
-        assertTrue(onboardingPages.last().body.contains("端末内"))
+        assertTrue(onboardingPages.all { it.titleRes != 0 && it.bodyRes != 0 })
+        assertEquals(R.string.onboarding_privacy_title, onboardingPages.last().titleRes)
     }
 
     @Test fun permissionStatusesCoverSettingsAndPartialStates() {

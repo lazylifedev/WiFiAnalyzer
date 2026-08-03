@@ -20,6 +20,7 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -82,6 +83,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -98,6 +101,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.lazyapps.wifianalyzer.domain.DevicePhoto
 import com.lazyapps.wifianalyzer.domain.DevicePhotoPolicy
+import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 import java.io.File
 
@@ -119,64 +123,65 @@ fun DevicePhotoGallery(deviceId: Long, workspaceId: Long, photoViewModel: Device
     Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), border = CardDefaults.outlinedCardBorder()) {
         Column(Modifier.padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (state.selectionMode) "${state.selectedPhotoIds.size}枚を選択中" else if (state.reorderMode) "写真を並び替え" else "写真 ${state.photos.size} / ${DevicePhotoPolicy.MAX_PHOTOS_PER_DEVICE}", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                Text(if (state.selectionMode) pluralStringResource(R.plurals.photo_selected_count, state.selectedPhotoIds.size, state.selectedPhotoIds.size) else if (state.reorderMode) stringResource(R.string.photo_reorder) else stringResource(R.string.photo_count_limit, state.photos.size, DevicePhotoPolicy.MAX_PHOTOS_PER_DEVICE), Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                 if (state.selectionMode) {
-                    IconButton(onClick = photoViewModel::selectAll) { Icon(Icons.Rounded.Check, "全選択") }
-                    IconButton(enabled = state.selectedPhotoIds.isNotEmpty() && !state.busy, onClick = { confirmSelectedDelete = true }) { Icon(Icons.Rounded.Delete, "選択した写真を削除") }
-                    IconButton(onClick = photoViewModel::clearSelection) { Icon(Icons.Rounded.Close, "選択を解除") }
+                    IconButton(onClick = photoViewModel::selectAll) { Icon(Icons.Rounded.Check, stringResource(R.string.photo_select_all)) }
+                    IconButton(enabled = state.selectedPhotoIds.isNotEmpty() && !state.busy, onClick = { confirmSelectedDelete = true }, modifier = Modifier.testTag("photo_delete_selected")) { Icon(Icons.Rounded.Delete, stringResource(R.string.photo_delete_selected)) }
+                    IconButton(onClick = photoViewModel::clearSelection) { Icon(Icons.Rounded.Close, stringResource(R.string.photo_clear_selection)) }
                 } else if (state.reorderMode) {
-                    TextButton(onClick = { photoViewModel.setReorderMode(false) }) { Text("完了") }
+                    TextButton(onClick = { photoViewModel.setReorderMode(false) }, modifier = Modifier.testTag("photo_reorder_done")) { Text(stringResource(R.string.photo_done)) }
                 } else {
-                    IconButton(onClick = { photoMenu = true }) { Icon(Icons.Rounded.MoreVert, "写真メニュー") }
+                    IconButton(onClick = { photoMenu = true }, modifier = Modifier.testTag("photo_menu")) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.photo_menu)) }
                     DropdownMenu(photoMenu, { photoMenu = false }) {
-                        DropdownMenuItem({ Text("写真を追加") }, { photoMenu = false; showAdd = true }, enabled = state.photos.size < DevicePhotoPolicy.MAX_PHOTOS_PER_DEVICE && !state.busy, leadingIcon = { Icon(Icons.Rounded.Add, null) })
-                        DropdownMenuItem({ Text("写真を選択") }, { photoMenu = false; state.photos.firstOrNull()?.let { photoViewModel.enterSelection(it.id) } }, enabled = state.photos.isNotEmpty(), leadingIcon = { Icon(Icons.Rounded.Check, null) })
-                        DropdownMenuItem({ Text("並び替え") }, { photoMenu = false; photoViewModel.setReorderMode(true) }, enabled = state.photos.size > 1, leadingIcon = { Icon(Icons.Rounded.ArrowForward, null) })
+                        DropdownMenuItem({ Text(stringResource(R.string.photo_add)) }, { photoMenu = false; showAdd = true }, modifier = Modifier.testTag("photo_add"), enabled = state.photos.size < DevicePhotoPolicy.MAX_PHOTOS_PER_DEVICE && !state.busy, leadingIcon = { Icon(Icons.Rounded.Add, null) })
+                        DropdownMenuItem({ Text(stringResource(R.string.photo_select)) }, { photoMenu = false; state.photos.firstOrNull()?.let { photoViewModel.enterSelection(it.id) } }, enabled = state.photos.isNotEmpty(), leadingIcon = { Icon(Icons.Rounded.Check, null) })
+                        DropdownMenuItem({ Text(stringResource(R.string.photo_reorder_action)) }, { photoMenu = false; photoViewModel.setReorderMode(true) }, enabled = state.photos.size > 1, leadingIcon = { Icon(Icons.Rounded.ArrowForward, null) })
                     }
                 }
             }
             state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            if (state.photos.isEmpty()) Text("写真を追加すると、設置状況やラベルを機器と一緒に管理できます。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (state.photos.isEmpty()) Text(stringResource(R.string.photo_empty), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             else Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
                 state.photos.forEachIndexed { index, photo ->
                     val selected = photo.id in state.selectedPhotoIds
+                    val photoDescription = stringResource(R.string.photo_item_description, index + 1, state.photos.size, if (selected) stringResource(R.string.photo_selected_suffix) else "", if (photo.isPrimary) stringResource(R.string.photo_primary_suffix) else "", photo.caption)
                     Box(Modifier.size(96.dp).clip(RoundedCornerShape(12.dp))
                         .then(if (selected) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)) else Modifier)
                         .combinedClickable(
                             onClick = { if (state.selectionMode) photoViewModel.toggleSelection(photo.id) else if (!state.reorderMode) viewerIndex = index },
                             onLongClick = { if (!state.reorderMode) photoViewModel.enterSelection(photo.id) },
-                        ).semantics { contentDescription = "写真 ${index + 1}/${state.photos.size}${if (selected) " 選択済み" else ""}${if (photo.isPrimary) " メイン写真" else ""}${photo.caption.takeIf { it.isNotBlank() }?.let { " $it" }.orEmpty()}" }) {
+                        ).semantics { contentDescription = photoDescription }) {
                         PhotoImage(photo, photoViewModel, Modifier.fillMaxSize(), thumbnail = true)
-                        if (photo.isPrimary) Icon(Icons.Rounded.Star, "メイン写真", tint = Color.Yellow, modifier = Modifier.align(Alignment.TopEnd).background(Color.Black.copy(alpha = .55f), RoundedCornerShape(8.dp)).padding(3.dp))
-                        if (selected) Icon(Icons.Rounded.Check, "選択済み", tint = Color.White, modifier = Modifier.align(Alignment.TopStart).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)).padding(3.dp))
+                        if (photo.isPrimary) Icon(Icons.Rounded.Star, stringResource(R.string.photo_primary), tint = Color.Yellow, modifier = Modifier.align(Alignment.TopEnd).background(Color.Black.copy(alpha = .55f), RoundedCornerShape(8.dp)).padding(3.dp))
+                        if (selected) Icon(Icons.Rounded.Check, stringResource(R.string.photo_selected), tint = Color.White, modifier = Modifier.align(Alignment.TopStart).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)).padding(3.dp))
                         if (state.reorderMode) Row(Modifier.align(Alignment.BottomCenter).background(Color.Black.copy(alpha = .65f))) {
-                            IconButton(enabled = index > 0 && !state.busy, onClick = { photoViewModel.move(photo.id, -1) }) { Icon(Icons.Rounded.ArrowBack, "左へ移動", tint = Color.White) }
-                            IconButton(enabled = index < state.photos.lastIndex && !state.busy, onClick = { photoViewModel.move(photo.id, 1) }) { Icon(Icons.Rounded.ArrowForward, "右へ移動", tint = Color.White) }
+                            IconButton(enabled = index > 0 && !state.busy, onClick = { photoViewModel.move(photo.id, -1) }) { Icon(Icons.Rounded.ArrowBack, stringResource(R.string.photo_move_left), tint = Color.White) }
+                            IconButton(enabled = index < state.photos.lastIndex && !state.busy, onClick = { photoViewModel.move(photo.id, 1) }) { Icon(Icons.Rounded.ArrowForward, stringResource(R.string.photo_move_right), tint = Color.White) }
                         }
                     }
                 }
             }
-            if (state.photos.size >= DevicePhotoPolicy.MAX_PHOTOS_PER_DEVICE) Text("写真は9枚まで登録できます", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
+            if (state.photos.size >= DevicePhotoPolicy.MAX_PHOTOS_PER_DEVICE) Text(stringResource(R.string.photo_limit, DevicePhotoPolicy.MAX_PHOTOS_PER_DEVICE), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
         }
     }
-    if (showAdd) AlertDialog(onDismissRequest = { showAdd = false }, title = { Text("写真を追加") }, text = { Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-        Button(onClick = { showAdd = false; val file = File.createTempFile("device-photo-", ".jpg", context.cacheDir); cameraFile = file; camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.files", file)) }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Rounded.CameraAlt, null); Text("カメラで撮影") }
-        Button(onClick = { showAdd = false; picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Rounded.PhotoLibrary, null); Text("端末から選択") }
-    } }, confirmButton = {}, dismissButton = { TextButton(onClick = { showAdd = false }) { Text("キャンセル") } })
+    if (showAdd) AlertDialog(onDismissRequest = { showAdd = false }, title = { Text(stringResource(R.string.photo_add)) }, text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+        Button(onClick = { showAdd = false; val file = File.createTempFile("device-photo-", ".jpg", context.cacheDir); cameraFile = file; camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.files", file)) }, modifier = Modifier.fillMaxWidth().testTag("photo_take_camera")) { Icon(Icons.Rounded.CameraAlt, null); Text(stringResource(R.string.photo_take_camera)) }
+        Button(onClick = { showAdd = false; picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, modifier = Modifier.fillMaxWidth().testTag("photo_choose_gallery")) { Icon(Icons.Rounded.PhotoLibrary, null); Text(stringResource(R.string.photo_choose_gallery)) }
+    } }, confirmButton = {}, dismissButton = { TextButton(onClick = { showAdd = false }, modifier = Modifier.testTag("photo_add_cancel")) { Text(stringResource(R.string.photo_cancel)) } })
     viewerIndex?.let { index -> if (state.photos.isNotEmpty()) PhotoViewer(state.photos, index.coerceAtMost(state.photos.lastIndex), photoViewModel, { viewerIndex = null }, { viewerIndex = it }, { deleteTarget = it }) }
-    deleteTarget?.let { photo -> AlertDialog(onDismissRequest = { deleteTarget = null }, title = { Text("写真を削除しますか？") }, text = { Text("削除した写真は元に戻せません。欠落・破損したファイルも一覧から削除できます。") }, confirmButton = { Button(onClick = { photoViewModel.delete(photo.id); deleteTarget = null; if (state.photos.size <= 1) viewerIndex = null }) { Text("削除") } }, dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("キャンセル") } }) }
+    deleteTarget?.let { photo -> AlertDialog(onDismissRequest = { deleteTarget = null }, title = { Text(stringResource(R.string.photo_delete_title)) }, text = { Text(stringResource(R.string.photo_delete_message)) }, confirmButton = { Button(onClick = { photoViewModel.delete(photo.id); deleteTarget = null; if (state.photos.size <= 1) viewerIndex = null }, modifier = Modifier.testTag("photo_delete_confirm")) { Text(stringResource(R.string.photo_delete)) } }, dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text(stringResource(R.string.photo_cancel)) } }) }
     if (confirmSelectedDelete) AlertDialog(
         onDismissRequest = { confirmSelectedDelete = false },
-        title = { Text("${state.selectedPhotoIds.size}枚の写真を削除しますか？") },
-        text = { Text("削除した写真は元に戻せません。") },
-        confirmButton = { Button(enabled = !state.busy, onClick = { photoViewModel.deleteSelected(); confirmSelectedDelete = false }) { Text("削除") } },
-        dismissButton = { TextButton(onClick = { confirmSelectedDelete = false }) { Text("キャンセル") } },
+        title = { Text(pluralStringResource(R.plurals.photo_delete_selected_title, state.selectedPhotoIds.size, state.selectedPhotoIds.size)) },
+        text = { Text(stringResource(R.string.photo_delete_irreversible)) },
+        confirmButton = { Button(enabled = !state.busy, onClick = { photoViewModel.deleteSelected(); confirmSelectedDelete = false }, modifier = Modifier.testTag("photo_delete_selected_confirm")) { Text(stringResource(R.string.photo_delete)) } },
+        dismissButton = { TextButton(onClick = { confirmSelectedDelete = false }) { Text(stringResource(R.string.photo_cancel)) } },
     )
 }
 
 @Composable private fun PhotoImage(photo: DevicePhoto, vm: DevicePhotoViewModel, modifier: Modifier, thumbnail: Boolean = false) {
     val bitmap by produceState<android.graphics.Bitmap?>(null, photo.id, photo.updatedAt, thumbnail) { value = runCatching { BitmapFactory.decodeFile(vm.repository.file(photo).absolutePath, BitmapFactory.Options().apply { inSampleSize = if (thumbnail) 8 else 1 }) }.getOrNull() }
-    if (bitmap != null) Image(bitmap!!.asImageBitmap(), photo.caption.ifBlank { "機器写真" }, modifier, contentScale = if (thumbnail) ContentScale.Crop else ContentScale.Fit) else Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Text("画像なし", style = MaterialTheme.typography.labelSmall) }
+    if (bitmap != null) Image(bitmap!!.asImageBitmap(), photo.caption.ifBlank { stringResource(R.string.photo_device_image) }, modifier, contentScale = if (thumbnail) ContentScale.Crop else ContentScale.Fit) else Box(modifier.background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Text(stringResource(R.string.photo_image_unavailable), style = MaterialTheme.typography.labelSmall) }
 }
 
 @Composable private fun PhotoViewer(photos: List<DevicePhoto>, start: Int, vm: DevicePhotoViewModel, onClose: () -> Unit, onPageChanged: (Int) -> Unit, onDelete: (DevicePhoto) -> Unit) {
@@ -215,23 +220,23 @@ fun DevicePhotoGallery(deviceId: Long, workspaceId: Long, photoViewModel: Device
                 }
             }
             if (!immersive || chromeVisible) Row(Modifier.fillMaxWidth().align(Alignment.TopCenter).background(Color.Black.copy(alpha = .6f)).then(if (immersive) Modifier.displayCutoutPadding() else Modifier.statusBarsPadding()).padding(horizontal = 8.dp, vertical = 4.dp).testTag("photo_viewer_chrome"), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = ::closeViewer) { Icon(Icons.Rounded.Close, "写真ビューアを閉じる", tint = Color.White) }
+                IconButton(onClick = ::closeViewer, modifier = Modifier.testTag("photo_viewer_close")) { Icon(Icons.Rounded.Close, stringResource(R.string.photo_viewer_close), tint = Color.White) }
                 Text("${safeCurrentPage + 1} / ${photos.size}", Modifier.weight(1f).testTag("photo_viewer_position"), color = Color.White)
                 IconButton(onClick = {
                     PhotoViewerFullscreenState(immersive, chromeVisible).toggleFullscreen().also {
                         immersive = it.immersive
                         chromeVisible = it.chromeVisible
                     }
-                }) { Icon(if (immersive) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen, PhotoViewerFullscreenState(immersive, chromeVisible).fullscreenActionDescription, tint = Color.White) }
+                }) { Icon(if (immersive) Icons.Rounded.FullscreenExit else Icons.Rounded.Fullscreen, stringResource(if (immersive) R.string.photo_exit_fullscreen else R.string.photo_fullscreen), tint = Color.White) }
                 IconButton(onClick = {
                     activity.requestedOrientation = if (activity.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) ActivityInfo.SCREEN_ORIENTATION_PORTRAIT else ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-                }) { Icon(Icons.Rounded.ScreenRotation, "画面の縦横を切り替え", tint = Color.White) }
+                }) { Icon(Icons.Rounded.ScreenRotation, stringResource(R.string.photo_rotate_screen), tint = Color.White) }
                 Box {
-                    IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Rounded.MoreVert, "写真メニュー", tint = Color.White) }
+                    IconButton(onClick = { menuExpanded = true }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.photo_menu), tint = Color.White) }
                     DropdownMenu(menuExpanded, { menuExpanded = false }) {
-                        DropdownMenuItem({ Text("メイン写真に設定") }, onClick = { menuExpanded = false; vm.primary(photos[safeCurrentPage].id) }, leadingIcon = { Icon(Icons.Rounded.Star, null) })
-                        DropdownMenuItem({ Text("キャプション編集") }, onClick = { menuExpanded = false; captionPhoto = photos[safeCurrentPage] }, leadingIcon = { Icon(Icons.Rounded.Edit, null) })
-                        DropdownMenuItem({ Text("削除") }, onClick = { menuExpanded = false; onDelete(photos[safeCurrentPage]) }, leadingIcon = { Icon(Icons.Rounded.Delete, null) })
+                        DropdownMenuItem({ Text(stringResource(R.string.photo_set_primary)) }, onClick = { menuExpanded = false; vm.primary(photos[safeCurrentPage].id) }, modifier = Modifier.testTag("photo_set_primary"), leadingIcon = { Icon(Icons.Rounded.Star, null) })
+                        DropdownMenuItem({ Text(stringResource(R.string.photo_edit_caption)) }, onClick = { menuExpanded = false; captionPhoto = photos[safeCurrentPage] }, modifier = Modifier.testTag("photo_edit_caption"), leadingIcon = { Icon(Icons.Rounded.Edit, null) })
+                        DropdownMenuItem({ Text(stringResource(R.string.photo_delete)) }, onClick = { menuExpanded = false; onDelete(photos[safeCurrentPage]) }, modifier = Modifier.testTag("photo_delete"), leadingIcon = { Icon(Icons.Rounded.Delete, null) })
                     }
                 }
             }
@@ -240,7 +245,7 @@ fun DevicePhotoGallery(deviceId: Long, workspaceId: Long, photoViewModel: Device
             }
         }
     }
-    captionPhoto?.let { photo -> var text by remember(photo.id) { mutableStateOf(photo.caption) }; AlertDialog(onDismissRequest = { captionPhoto = null }, title = { Text("キャプション") }, text = { OutlinedTextField(text, { text = it }, label = { Text("例: 背面ラベル") }) }, confirmButton = { Button(onClick = { vm.caption(photo.id, text); captionPhoto = null }) { Text("保存") } }, dismissButton = { TextButton(onClick = { captionPhoto = null }) { Text("キャンセル") } }) }
+    captionPhoto?.let { photo -> var text by remember(photo.id) { mutableStateOf(photo.caption) }; AlertDialog(onDismissRequest = { captionPhoto = null }, title = { Text(stringResource(R.string.photo_caption)) }, text = { OutlinedTextField(text, { text = it }, label = { Text(stringResource(R.string.photo_caption_hint)) }, modifier = Modifier.testTag("photo_caption_field")) }, confirmButton = { Button(onClick = { vm.caption(photo.id, text); captionPhoto = null }, modifier = Modifier.testTag("photo_caption_save")) { Text(stringResource(R.string.photo_save)) } }, dismissButton = { TextButton(onClick = { captionPhoto = null }) { Text(stringResource(R.string.photo_cancel)) } }) }
 }
 
 @Composable

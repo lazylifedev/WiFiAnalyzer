@@ -9,7 +9,7 @@ import com.lazyapps.wifianalyzer.model.WifiBand
 import kotlin.math.exp
 
 object WifiAnalysis {
-    const val HIDDEN_SSID = "非公開ネットワーク"
+    const val HIDDEN_SSID = "__HIDDEN_SSID__"
 
     fun displaySsid(ssid: String?): String = ssid?.trim().takeUnless { it.isNullOrEmpty() } ?: HIDDEN_SSID
 

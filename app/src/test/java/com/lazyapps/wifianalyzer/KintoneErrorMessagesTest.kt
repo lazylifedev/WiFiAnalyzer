@@ -7,16 +7,17 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
 import com.lazyapps.wifianalyzer.kintone.HttpsKintoneApi
+import com.lazyapps.wifianalyzer.kintone.KintoneErrorMessages
 
 class KintoneErrorMessagesTest {
-    @Test fun mapsHttpAndKintoneFailuresToSafeJapaneseMessages() {
+    @Test fun mapsHttpAndKintoneFailuresToStableMessageKeys() {
         val cases = listOf(
-            Triple(401, null, "APIトークンが無効です。QRコードを再生成してください。"),
-            Triple(403, null, "APIトークンにレコード追加・編集権限がありません。"),
-            Triple(404, null, "接続先のkintoneアプリが見つかりません。"),
-            Triple(429, null, "kintoneへのアクセスが集中しています。時間をおいて再試行します。"),
-            Triple(400, "CB_VA01", "送信内容がkintoneのフィールド仕様と一致しません。"),
-            Triple(400, "GAIA_RE20", "更新キーに一致するレコードが見つかりません。UPSERT設定を確認してください。"),
+            Triple(401, null, KintoneErrorMessages.AUTH_INVALID),
+            Triple(403, null, KintoneErrorMessages.AUTH_PERMISSION),
+            Triple(404, null, KintoneErrorMessages.APP_NOT_FOUND),
+            Triple(429, null, KintoneErrorMessages.RATE_LIMITED),
+            Triple(400, "CB_VA01", KintoneErrorMessages.FIELD_MISMATCH),
+            Triple(400, "GAIA_RE20", KintoneErrorMessages.UPSERT_MISMATCH),
         )
         cases.forEach { (status, remote, expected) -> assertEquals(expected, KintoneException(KintoneErrorCode.KINTONE_BATCH_FAILED, httpStatus = status, kintoneErrorCode = remote).userMessage) }
     }

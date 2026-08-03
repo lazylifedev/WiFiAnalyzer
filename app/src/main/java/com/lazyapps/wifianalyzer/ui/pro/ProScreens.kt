@@ -41,14 +41,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lazyapps.wifianalyzer.billing.BillingUiState
+import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import com.lazyapps.wifianalyzer.billing.ProEntitlementState
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 import com.lazyapps.wifianalyzer.ui.kintone.KintoneUiState
 import com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceOption
+import com.lazyapps.wifianalyzer.kintone.KintoneErrorMessages
 import com.lazyapps.wifianalyzer.ui.operation.OperationState
 import java.text.DateFormat
 import java.util.Date
@@ -59,33 +63,33 @@ fun ProScreen(state: BillingUiState, onBack: () -> Unit, onPurchase: () -> Unit,
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(AppSpacing.large),
         verticalArrangement = Arrangement.spacedBy(AppSpacing.large),
     ) {
-        Header("Pro版", onBack)
+        Header(stringResource(R.string.pro_title), onBack)
         when (state.entitlement) {
             ProEntitlementState.Pro -> {
-                Text("Pro版をご利用中です", style = MaterialTheme.typography.headlineSmall)
-                BenefitList(listOf("購入済み", "広告なし", "すべてのPro機能を利用可能"))
+                Text(stringResource(R.string.pro_active), style = MaterialTheme.typography.headlineSmall)
+                BenefitList(listOf(stringResource(R.string.pro_purchased), stringResource(R.string.pro_no_ads), stringResource(R.string.pro_all_features)))
             }
             ProEntitlementState.Pending -> {
-                Text("購入手続きが保留されています。", style = MaterialTheme.typography.headlineSmall)
-                Text("Google Playで支払いが完了すると利用可能になります。")
+                Text(stringResource(R.string.pro_purchase_pending), style = MaterialTheme.typography.headlineSmall)
+                Text(stringResource(R.string.pro_purchase_pending_detail))
                 RestoreButton(state, onRestore)
             }
             else -> {
-                Text("無料版の制限を解除", style = MaterialTheme.typography.headlineSmall)
-                BenefitList(listOf("広告なし", "機能制限を解除", "kintone連携", "今後追加されるPro機能"))
-                state.product?.let { Text("価格: ${it.formattedPrice}", style = MaterialTheme.typography.titleLarge, modifier = Modifier.testTag("pro_price")) }
+                Text(stringResource(R.string.pro_unlock), style = MaterialTheme.typography.headlineSmall)
+                BenefitList(listOf(stringResource(R.string.pro_no_ads), stringResource(R.string.pro_unlock_features), stringResource(R.string.kintone_integration), stringResource(R.string.pro_future_features), stringResource(R.string.pro_one_time_purchase), stringResource(R.string.pro_no_recurring_fees)))
+                state.product?.let { Text(stringResource(R.string.pro_price, it.formattedPrice), style = MaterialTheme.typography.titleLarge, modifier = Modifier.testTag("pro_price")) }
                 if (state.connection == com.lazyapps.wifianalyzer.billing.BillingConnectionState.CONNECTING) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-                        CircularProgressIndicator(); Text("商品情報を取得中")
+                        CircularProgressIndicator(); Text(stringResource(R.string.pro_loading_product))
                     }
                 } else if (state.product == null) {
-                    Text("Playストアから商品情報を取得できません。", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.pro_product_unavailable), color = MaterialTheme.colorScheme.error)
                 }
                 Button(
                     onClick = onPurchase,
                     enabled = state.canPurchase,
                     modifier = Modifier.fillMaxWidth().testTag("purchase_pro"),
-                ) { if (state.purchasing) CircularProgressIndicator() else Text("Pro版を購入") }
+                ) { if (state.purchasing) { CircularProgressIndicator(); Text(stringResource(R.string.pro_purchasing)) } else Text(stringResource(R.string.pro_purchase_button)) }
                 RestoreButton(state, onRestore)
             }
         }
@@ -115,114 +119,114 @@ fun KintoneScreen(
     val confirmAutoSync = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val showWorkspaceSelector = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(AppSpacing.large), verticalArrangement = Arrangement.spacedBy(AppSpacing.large)) {
-        Header("kintone連携", onBack)
+        Header(stringResource(R.string.kintone_integration), onBack)
         if (!access.canUseKintone) {
-            Text("Pro版で利用できます。", style = MaterialTheme.typography.titleLarge)
-            Button(onClick = onOpenPro, modifier = Modifier.fillMaxWidth().testTag("kintone_open_pro")) { Text("Pro版について") }
+            Text(stringResource(R.string.kintone_pro_required), style = MaterialTheme.typography.titleLarge)
+            Button(onClick = onOpenPro, modifier = Modifier.fillMaxWidth().testTag("kintone_open_pro")) { Text(stringResource(R.string.learn_about_pro)) }
         } else {
-            Text("同期先ワークスペース", style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.kintone_sync_workspace), style = MaterialTheme.typography.titleMedium)
             OutlinedButton(onClick = { showWorkspaceSelector.value = true }, modifier = Modifier.fillMaxWidth().testTag("kintone_workspace_selector")) {
                 Text(state.workspaceName, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("▼")
+                Text(stringResource(R.string.kintone_workspace_dropdown))
             }
-            if (state.appWorkspaceId > 0 && state.appWorkspaceId != state.workspaceId) Text("アプリで現在使用中のワークスペースとは異なる同期対象を選択しています。", color = MaterialTheme.colorScheme.tertiary)
+            if (state.appWorkspaceId > 0 && state.appWorkspaceId != state.workspaceId) Text(stringResource(R.string.kintone_different_workspace), color = MaterialTheme.colorScheme.tertiary)
             ConnectionStatusCard(state)
             state.errorCode?.let {
                 val text = when (state.failureContext) {
-                    com.lazyapps.wifianalyzer.ui.kintone.KintoneFailureContext.QR -> "QRコードの内容を確認できませんでした"
-                    com.lazyapps.wifianalyzer.ui.kintone.KintoneFailureContext.SYNC -> "kintoneへ同期できませんでした"
-                    else -> "接続できませんでした"
+                    com.lazyapps.wifianalyzer.ui.kintone.KintoneFailureContext.QR -> stringResource(R.string.kintone_qr_error)
+                    com.lazyapps.wifianalyzer.ui.kintone.KintoneFailureContext.SYNC -> stringResource(R.string.kintone_sync_error)
+                    else -> stringResource(R.string.kintone_connection_failed)
                 }
                 Text(text, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("kintone_error_message"))
             }
             state.message?.let { Text(it, modifier = Modifier.testTag("kintone_message")) }
             state.connection?.let {
                 KintoneAutoSyncSection(state, onSync, onVerify, onAutoSyncChange, onPhotoAutoSyncChange) { confirmAutoSync.value = true }
-                OutlinedButton(onClick = onVerify, modifier = Modifier.fillMaxWidth().testTag("kintone_verify")) { Text("接続を確認") }
-                OutlinedButton(onClick = onScanQr, modifier = Modifier.fillMaxWidth().testTag("kintone_rescan_qr")) { Icon(Icons.Rounded.QrCodeScanner, null); Text("接続設定を変更", Modifier.padding(start = AppSpacing.small)) }
-                TextButton(onClick = { confirmDisconnect.value = true }, modifier = Modifier.fillMaxWidth().testTag("kintone_disconnect")) { Text("連携を解除") }
+                OutlinedButton(onClick = onVerify, modifier = Modifier.fillMaxWidth().testTag("kintone_verify")) { Text(stringResource(R.string.kintone_check_connection)) }
+                OutlinedButton(onClick = onScanQr, modifier = Modifier.fillMaxWidth().testTag("kintone_rescan_qr")) { Icon(Icons.Rounded.QrCodeScanner, null); Text(stringResource(R.string.kintone_reconnect), Modifier.padding(start = AppSpacing.small)) }
+                TextButton(onClick = { confirmDisconnect.value = true }, modifier = Modifier.fillMaxWidth().testTag("kintone_disconnect")) { Text(stringResource(R.string.kintone_disconnect)) }
             } ?: Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.medium)) {
-                Button(onClick = onScanQr, modifier = Modifier.fillMaxWidth().testTag("kintone_scan_qr")) { Icon(Icons.Rounded.QrCodeScanner, null); Text("QRコードを読み取る", Modifier.padding(start = AppSpacing.small)) }
-                Text("プラグインをお持ちでない場合", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Button(onClick = onScanQr, modifier = Modifier.fillMaxWidth().testTag("kintone_scan_qr")) { Icon(Icons.Rounded.QrCodeScanner, null); Text(stringResource(R.string.kintone_scan_qr), Modifier.padding(start = AppSpacing.small)) }
+                Text(stringResource(R.string.kintone_no_plugin), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 BoothButton(onOpenBooth)
             }
             if (state.operation is OperationState.Running) {
                 val running = state.operation as OperationState.Running
-                Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(); Text("処理中…", Modifier.padding(start = AppSpacing.small)) }
+                Row(verticalAlignment = Alignment.CenterVertically) { CircularProgressIndicator(); Text(stringResource(R.string.kintone_processing), Modifier.padding(start = AppSpacing.small)) }
                 when (val progress = running.progress) {
                     is com.lazyapps.wifianalyzer.ui.operation.OperationProgress.Count -> {
                         LinearProgressIndicator(progress = { progress.fraction }, Modifier.fillMaxWidth())
-                        Text("同期中 ${progress.current}/${progress.total}")
+                        Text(stringResource(R.string.kintone_sync_progress, progress.current, progress.total))
                     }
                     else -> Unit
                 }
-                if (running.cancellable) TextButton(onClick = onCancelSync, modifier = Modifier.testTag("kintone_cancel_sync")) { Text("キャンセル") }
+                if (running.cancellable) TextButton(onClick = onCancelSync, modifier = Modifier.testTag("kintone_cancel_sync")) { Text(stringResource(R.string.kintone_cancel)) }
             }
             state.syncResult?.let { result ->
                 Card(Modifier.fillMaxWidth().testTag("kintone_sync_result")) { Column(Modifier.padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-                    Text("同期結果", style = MaterialTheme.typography.titleLarge)
-                    Text("対象 ${result.total}件 / 成功 ${result.succeeded}件 / 失敗 ${result.failed}件 / 未送信 ${result.skipped}件")
-                    if (result.failed > 0) Text("失敗した機器だけ再送できます。自動再試行は行いません。", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.kintone_sync_result), style = MaterialTheme.typography.titleLarge)
+                    Text(stringResource(R.string.kintone_sync_result_summary, result.total, result.succeeded, result.failed, result.skipped))
+                    if (result.failed > 0) Text(stringResource(R.string.kintone_retry_note), color = MaterialTheme.colorScheme.error)
                     result.batches.firstOrNull { it.validationErrors.isNotEmpty() }?.let { failure ->
                         val detail = failure.validationErrors.first()
-                        Text("エラーフィールド：${detail.path}", modifier = Modifier.testTag("kintone_sync_error_field"))
-                        Text("内容：${detail.messages.joinToString(" / ")}", modifier = Modifier.testTag("kintone_sync_error_detail"))
-                        failure.recordIndex?.let { Text("対象：送信データの${it + 1}件目") }
+                        Text(stringResource(R.string.kintone_error_field_inline, detail.path), modifier = Modifier.testTag("kintone_sync_error_field"))
+                        Text(stringResource(R.string.kintone_error_detail_inline, stringResource(R.string.kintone_validation_detail)), modifier = Modifier.testTag("kintone_sync_error_detail"))
+                        failure.recordIndex?.let { Text(stringResource(R.string.kintone_record_index, it + 1)) }
                     }
                 } }
             }
-            OutlinedButton(onClick = onPluginInfo, modifier = Modifier.fillMaxWidth().testTag("kintone_plugin_info")) { Icon(Icons.Rounded.Info, null); Text("プラグインについて", Modifier.padding(start = AppSpacing.small)) }
+            OutlinedButton(onClick = onPluginInfo, modifier = Modifier.fillMaxWidth().testTag("kintone_plugin_info")) { Icon(Icons.Rounded.Info, null); Text(stringResource(R.string.kintone_plugin_info), Modifier.padding(start = AppSpacing.small)) }
             if (state.connection != null) BoothButton(onOpenBooth)
         }
     }
     if (showWorkspaceSelector.value) AlertDialog(
         onDismissRequest = { showWorkspaceSelector.value = false },
-        title = { Text("同期対象ワークスペース") },
+        title = { Text(stringResource(R.string.kintone_sync_workspace)) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
             state.workspaces.forEach { option ->
                 Row(Modifier.fillMaxWidth().clickable { onWorkspaceSelected(option); showWorkspaceSelector.value = false }.testTag("kintone_workspace_${option.id}"), verticalAlignment = Alignment.CenterVertically) {
                     RadioButton(selected = option.id == state.workspaceId, onClick = { onWorkspaceSelected(option); showWorkspaceSelector.value = false })
                     Column(Modifier.weight(1f)) {
                         Text(option.name)
-                        Text("登録機器 ${option.deviceCount}台・${if (option.connected) "接続済み" else "未接続"}${if (option.autoSyncEnabled) "・自動同期ON" else ""}", style = MaterialTheme.typography.bodySmall)
+                        Text(if (option.autoSyncEnabled) stringResource(R.string.kintone_workspace_summary_auto, option.deviceCount, if (option.connected) stringResource(R.string.kintone_status_connected) else stringResource(R.string.kintone_not_connected)) else stringResource(R.string.kintone_workspace_summary, option.deviceCount, if (option.connected) stringResource(R.string.kintone_status_connected) else stringResource(R.string.kintone_not_connected)), style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
         } },
-        confirmButton = { TextButton(onClick = { showWorkspaceSelector.value = false }) { Text("閉じる") } },
+        confirmButton = { TextButton(onClick = { showWorkspaceSelector.value = false }, modifier = Modifier.testTag("kintone_workspace_close")) { Text(stringResource(R.string.kintone_close)) } },
     )
     state.pending?.let { pending -> AlertDialog(
         onDismissRequest = onCancelPending,
-        title = { Text("接続内容を確認") },
+        title = { Text(stringResource(R.string.kintone_confirm_connection)) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-            Text("ドメイン：${maskDomain(pending.payload.domain)}")
-            Text("アプリID：${pending.payload.appId}")
-            Text("pluginVersion：${pending.payload.pluginVersion}")
-            Text("templateVersion：${pending.payload.templateVersion}")
-            Text("fieldSchemaVersion：${pending.payload.fieldSchemaVersion}")
-            Text("接続先ワークスペース：${pending.workspaceName}")
-            Text("APIトークン：設定済み")
-            if (pending.verification.warnings.isEmpty()) Text("フィールド検査：確認済み") else pending.verification.warnings.forEach { Text("警告：$it", color = MaterialTheme.colorScheme.error) }
-            pending.verification.information.forEach { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            if (pending.duplicateTarget) Text("警告：別のワークスペースも同じkintoneアプリに接続しています", color = MaterialTheme.colorScheme.error)
-            if (pending.replacing) Text("保存後に既存の接続設定を置き換えます")
+            Text(stringResource(R.string.kintone_domain, maskDomain(pending.payload.domain)))
+            Text(stringResource(R.string.kintone_app_id, pending.payload.appId))
+            Text(stringResource(R.string.kintone_plugin_version, pending.payload.pluginVersion))
+            Text(stringResource(R.string.kintone_template_version, pending.payload.templateVersion))
+            Text(stringResource(R.string.kintone_field_schema_version, pending.payload.fieldSchemaVersion))
+            Text(stringResource(R.string.kintone_destination_workspace, pending.workspaceName))
+            Text(stringResource(R.string.kintone_api_token_configured))
+            if (pending.verification.warnings.isEmpty()) Text(stringResource(R.string.kintone_fields_verified)) else pending.verification.warnings.forEach { Text(stringResource(R.string.kintone_warning, kintoneVerificationMessage(it)), color = MaterialTheme.colorScheme.error) }
+            pending.verification.information.forEach { Text(kintoneVerificationMessage(it), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            if (pending.duplicateTarget) Text(stringResource(R.string.kintone_duplicate_target), color = MaterialTheme.colorScheme.error)
+            if (pending.replacing) Text(stringResource(R.string.kintone_replacing_connection))
         } },
-        confirmButton = { Button(onClick = onConfirm) { Text("この内容で接続") } },
-        dismissButton = { TextButton(onClick = onCancelPending) { Text("キャンセル") } },
+        confirmButton = { Button(onClick = onConfirm, modifier = Modifier.testTag("kintone_confirm")) { Text(stringResource(R.string.kintone_connect)) } },
+        dismissButton = { TextButton(onClick = onCancelPending, modifier = Modifier.testTag("kintone_confirm_cancel")) { Text(stringResource(R.string.kintone_cancel)) } },
     ) }
     if (confirmDisconnect.value) AlertDialog(
         onDismissRequest = { confirmDisconnect.value = false },
-        title = { Text("kintone連携を解除しますか") },
-        text = { Text("Android内の登録機器とkintone側レコードは変更しません。端末内の接続情報とAPIトークンを削除します。kintone側のAPIトークンは無効化されません。") },
-        confirmButton = { Button(onClick = { confirmDisconnect.value = false; onDisconnect() }) { Text("連携を解除") } },
-        dismissButton = { TextButton(onClick = { confirmDisconnect.value = false }) { Text("キャンセル") } },
+        title = { Text(stringResource(R.string.kintone_disconnect_title)) },
+        text = { Text(stringResource(R.string.kintone_disconnect_message)) },
+        confirmButton = { Button(onClick = { confirmDisconnect.value = false; onDisconnect() }, modifier = Modifier.testTag("kintone_disconnect_confirm")) { Text(stringResource(R.string.kintone_disconnect)) } },
+        dismissButton = { TextButton(onClick = { confirmDisconnect.value = false }) { Text(stringResource(R.string.kintone_cancel)) } },
     )
     if (confirmAutoSync.value) AlertDialog(
         onDismissRequest = { confirmAutoSync.value = false },
-        title = { Text("自動同期を有効にしますか") },
-        text = { Text("このワークスペースの登録機器をkintoneへ自動同期します。Android側の内容でkintoneのレコードが追加・更新されます。") },
-        confirmButton = { Button(onClick = { confirmAutoSync.value = false; onAutoSyncChange(true) }) { Text("有効にする") } },
-        dismissButton = { TextButton(onClick = { confirmAutoSync.value = false }) { Text("キャンセル") } },
+        title = { Text(stringResource(R.string.kintone_enable_auto_sync_title)) },
+        text = { Text(stringResource(R.string.kintone_enable_auto_sync_message)) },
+        confirmButton = { Button(onClick = { confirmAutoSync.value = false; onAutoSyncChange(true) }, modifier = Modifier.testTag("kintone_auto_sync_confirm")) { Text(stringResource(R.string.kintone_enable)) } },
+        dismissButton = { TextButton(onClick = { confirmAutoSync.value = false }) { Text(stringResource(R.string.kintone_cancel)) } },
     )
 }
 
@@ -236,9 +240,9 @@ private fun ConnectionStatusCard(state: KintoneUiState) {
         Row(Modifier.padding(AppSpacing.medium), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(AppSpacing.medium)) {
             Icon(icon, null, tint = color, modifier = Modifier.size(28.dp))
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(when { error -> "接続エラー"; connected -> "接続済み"; else -> "未接続" }, style = MaterialTheme.typography.titleLarge, color = color)
+                Text(stringResource(when { error -> R.string.kintone_connection_error; connected -> R.string.kintone_status_connected; else -> R.string.kintone_not_connected }), style = MaterialTheme.typography.titleLarge, color = color)
                 if (connected) {
-                    Text("最終同期：" + if (state.autoSync.lastFinishedAt > 0) DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(state.autoSync.lastFinishedAt)) else "未実行", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.kintone_last_sync, if (state.autoSync.lastFinishedAt > 0) DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(state.autoSync.lastFinishedAt)) else stringResource(R.string.kintone_never)), style = MaterialTheme.typography.bodySmall)
                     Text(syncStatusLabel(state.autoSync.status), style = MaterialTheme.typography.bodySmall, color = if (state.autoSync.status in setOf(com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.FAILED, com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.PARTIAL)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -249,8 +253,8 @@ private fun ConnectionStatusCard(state: KintoneUiState) {
 @Composable
 private fun BoothButton(onOpenBooth: () -> Unit) {
     OutlinedButton(onClick = onOpenBooth, modifier = Modifier.fillMaxWidth().testTag("kintone_open_booth")) {
-        Text("BOOTHで入手")
-        Icon(Icons.AutoMirrored.Rounded.OpenInNew, "外部ブラウザで開く", Modifier.padding(start = AppSpacing.small).size(18.dp))
+        Text(stringResource(R.string.kintone_get_plugin_booth))
+        Icon(Icons.AutoMirrored.Rounded.OpenInNew, stringResource(R.string.kintone_open_external), Modifier.padding(start = AppSpacing.small).size(18.dp))
     }
 }
 
@@ -259,89 +263,90 @@ private fun KintoneAutoSyncSection(state: KintoneUiState, onSync: () -> Unit, on
     val showDetails = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val showSyncNotes = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.small), modifier = Modifier.fillMaxWidth().testTag("kintone_sync_section")) {
-        Text("同期設定", style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.kintone_sync_settings), style = MaterialTheme.typography.titleMedium)
         Row(Modifier.fillMaxWidth().testTag("kintone_auto_sync"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Icon(Icons.Rounded.Devices, null, Modifier.padding(end = AppSpacing.medium))
             Column(Modifier.weight(1f)) {
-                Text("登録機器を自動同期", style = MaterialTheme.typography.titleMedium)
-                Text("登録・編集時に自動送信", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.kintone_automatic_sync), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.kintone_auto_sync_detail), style = MaterialTheme.typography.bodySmall)
             }
             Switch(checked = state.autoSync.enabled, enabled = state.canUseKintone, onCheckedChange = { if (it) onConfirmEnable() else onAutoSyncChange(false) }, modifier = Modifier.testTag("kintone_auto_sync_switch"))
         }
         Row(Modifier.fillMaxWidth().testTag("kintone_photo_auto_sync"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Icon(Icons.Rounded.Photo, null, Modifier.padding(end = AppSpacing.medium))
-            Column(Modifier.weight(1f)) { Text("写真も自動同期", style = MaterialTheme.typography.titleMedium); Text("通信量が増える場合があります", style = MaterialTheme.typography.bodySmall) }
+            Column(Modifier.weight(1f)) { Text(stringResource(R.string.kintone_sync_photos), style = MaterialTheme.typography.titleMedium); Text(stringResource(R.string.kintone_photo_data_note), style = MaterialTheme.typography.bodySmall) }
             Switch(checked = state.autoSync.photoEnabled, enabled = state.canUseKintone && state.autoSync.enabled, onCheckedChange = onPhotoAutoSyncChange, modifier = Modifier.testTag("kintone_photo_auto_sync_switch"))
         }
         if (state.autoSync.status in setOf(com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.FAILED, com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.PARTIAL)) {
-            Text("${state.autoSync.failureCount}件を送信できませんでした。", color = MaterialTheme.colorScheme.error)
+            Text(pluralStringResource(R.plurals.kintone_failed_count, state.autoSync.failureCount, state.autoSync.failureCount), color = MaterialTheme.colorScheme.error)
             if (showDetails.value) {
-                state.autoSync.lastUserMessage?.let { Text("原因：\n$it", modifier = Modifier.testTag("kintone_safe_error_message")) }
-                state.autoSync.lastKintoneErrorCode?.let { Text("エラーコード：\n$it", modifier = Modifier.testTag("kintone_error_code")) }
-                state.autoSync.lastHttpStatus?.let { Text("HTTPステータス：$it") }
-                state.autoSync.lastErrorPath?.let { Text("エラーフィールド：\n$it", modifier = Modifier.testTag("kintone_error_field")) }
-                state.autoSync.lastErrorDetail?.let { Text("内容：\n$it", modifier = Modifier.testTag("kintone_error_detail")) }
-                state.autoSync.lastFailedRecordIndex?.let { Text("対象：送信データの${it + 1}件目") }
+                state.autoSync.lastUserMessage?.let { Text(stringResource(R.string.kintone_error_reason, kintoneUserMessage(it)), modifier = Modifier.testTag("kintone_safe_error_message")) }
+                state.autoSync.lastKintoneErrorCode?.let { Text(stringResource(R.string.kintone_error_code, it), modifier = Modifier.testTag("kintone_error_code")) }
+                state.autoSync.lastHttpStatus?.let { Text(stringResource(R.string.kintone_http_status, it)) }
+                state.autoSync.lastErrorPath?.let { Text(stringResource(R.string.kintone_error_field, it), modifier = Modifier.testTag("kintone_error_field")) }
+                state.autoSync.lastErrorDetail?.let { Text(stringResource(R.string.kintone_error_detail, stringResource(R.string.kintone_validation_detail)), modifier = Modifier.testTag("kintone_error_detail")) }
+                state.autoSync.lastFailedRecordIndex?.let { Text(stringResource(R.string.kintone_record_index, it + 1)) }
             }
-            if (state.autoSync.requiresAttention) Text("確認が必要", color = MaterialTheme.colorScheme.error)
+            if (state.autoSync.requiresAttention) Text(stringResource(R.string.kintone_attention_required), color = MaterialTheme.colorScheme.error)
             Row(horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-                TextButton(onClick = { showDetails.value = !showDetails.value }, modifier = Modifier.testTag("kintone_error_details")) { Text("詳細を確認") }
-                TextButton(onClick = onSync, modifier = Modifier.testTag("kintone_retry_failed")) { Text("失敗分を再送") }
-                TextButton(onClick = onVerify, modifier = Modifier.testTag("kintone_check_connection")) { Text("接続を確認") }
+                TextButton(onClick = { showDetails.value = !showDetails.value }, modifier = Modifier.testTag("kintone_error_details")) { Text(stringResource(R.string.kintone_view_details)) }
+                TextButton(onClick = onSync, modifier = Modifier.testTag("kintone_retry_failed")) { Text(stringResource(R.string.kintone_retry_failed)) }
+                TextButton(onClick = onVerify, modifier = Modifier.testTag("kintone_check_connection")) { Text(stringResource(R.string.kintone_check_connection)) }
             }
         }
         TextButton(onClick = { showSyncNotes.value = !showSyncNotes.value }, modifier = Modifier.testTag("kintone_sync_notes")) {
             Icon(if (showSyncNotes.value) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, null)
-            Text("同期仕様・注意事項")
+            Text(stringResource(R.string.kintone_sync_details))
         }
         if (showSyncNotes.value) Card(Modifier.fillMaxWidth().testTag("kintone_sync_notes_content")) {
             Column(Modifier.padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-                Text("写真はAndroid側の順番で同期され、キャプションとメイン写真設定は保存されません。")
-                Text("写真を変更すると、kintone側の写真を置き換えます。")
-                Text("選択機器の写真と主BSSIDのみを同期します。")
-                Text("Androidで削除した機器の反映には対応していません。")
+                Text(stringResource(R.string.kintone_sync_note_order))
+                Text(stringResource(R.string.kintone_sync_note_replace))
+                Text(stringResource(R.string.kintone_sync_note_scope))
+                Text(stringResource(R.string.kintone_sync_note_deletion))
             }
         }
         state.syncPreview?.let { preview ->
-            Text("送信前レビュー", style = MaterialTheme.typography.titleMedium)
-            Text("対象 ${preview.total}件 / 送信可能 ${preview.valid}件")
-            Text("写真同期対象：${preview.photoDeviceCount}台 / 写真アップロード：${preview.photoCount}枚")
-            if (preview.errors.isNotEmpty()) Text("エラー ${preview.errors.size}件", color = MaterialTheme.colorScheme.error)
-            if (preview.warnings.isNotEmpty()) Text("警告 ${preview.warnings.size}件", color = MaterialTheme.colorScheme.tertiary)
+            Text(stringResource(R.string.kintone_preview), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.kintone_preview_summary, preview.total, preview.valid))
+            Text(stringResource(R.string.kintone_photo_preview, preview.photoDeviceCount, preview.photoCount))
+            if (preview.errors.isNotEmpty()) Text(pluralStringResource(R.plurals.kintone_error_count, preview.errors.size, preview.errors.size), color = MaterialTheme.colorScheme.error)
+            if (preview.warnings.isNotEmpty()) Text(pluralStringResource(R.plurals.kintone_warning_count, preview.warnings.size, preview.warnings.size), color = MaterialTheme.colorScheme.tertiary)
         }
         val hasSendableTargets = state.syncPreview?.valid?.let { it > 0 } ?: true
         Button(
             onClick = onSync,
             enabled = state.connection != null && state.canUseKintone && hasSendableTargets && state.operation !is OperationState.Running,
             modifier = Modifier.fillMaxWidth().testTag("kintone_sync"),
-        ) { Icon(Icons.Rounded.Sync, null); Text("今すぐ同期", Modifier.padding(start = AppSpacing.small)) }
+        ) { Icon(Icons.Rounded.Sync, null); Text(stringResource(R.string.kintone_sync_now), Modifier.padding(start = AppSpacing.small)) }
     }
 }
 
-private fun syncStatusLabel(status: com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus) = when (status) {
-    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.NEVER -> "未実行"
-    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.WAITING -> "待機中"
-    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.RUNNING -> "同期中"
-    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.SUCCESS -> "同期成功"
-    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.NO_TARGETS -> "対象なし"
-    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.PARTIAL -> "一部失敗"
-    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.FAILED -> "同期失敗"
-}
+@Composable
+private fun syncStatusLabel(status: com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus) = stringResource(when (status) {
+    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.NEVER -> R.string.kintone_never
+    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.WAITING -> R.string.kintone_waiting
+    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.RUNNING -> R.string.kintone_syncing
+    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.SUCCESS -> R.string.kintone_sync_success
+    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.NO_TARGETS -> R.string.kintone_no_targets
+    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.PARTIAL -> R.string.kintone_partial_failure
+    com.lazyapps.wifianalyzer.kintone.KintoneSyncStatus.FAILED -> R.string.kintone_sync_failed
+})
 
 @Composable
 private fun KintoneSyncSection(state: KintoneUiState, onSync: () -> Unit, onCancel: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.small), modifier = Modifier.testTag("kintone_sync_section")) {
         state.syncPreview?.let { preview ->
-            Text("送信前レビュー", style = MaterialTheme.typography.titleMedium)
-            Text("対象 ${preview.total}件 / 送信可能 ${preview.valid}件")
-            if (preview.errors.isNotEmpty()) Text("エラー ${preview.errors.size}件", color = MaterialTheme.colorScheme.error)
-            if (preview.warnings.isNotEmpty()) Text("警告 ${preview.warnings.size}件", color = MaterialTheme.colorScheme.tertiary)
+            Text(stringResource(R.string.kintone_preview), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.kintone_preview_summary, preview.total, preview.valid))
+            if (preview.errors.isNotEmpty()) Text(pluralStringResource(R.plurals.kintone_error_count, preview.errors.size, preview.errors.size), color = MaterialTheme.colorScheme.error)
+            if (preview.warnings.isNotEmpty()) Text(pluralStringResource(R.plurals.kintone_warning_count, preview.warnings.size, preview.warnings.size), color = MaterialTheme.colorScheme.tertiary)
         }
         val running = state.operation is OperationState.Running
         Button(onClick = onSync, enabled = !running, modifier = Modifier.fillMaxWidth().testTag("kintone_sync")) {
-            Text(if (state.syncPreview == null) "送信前レビューを表示" else "kintoneへ同期")
+            Text(stringResource(if (state.syncPreview == null) R.string.kintone_show_preview else R.string.kintone_sync_to_kintone))
         }
-        if (state.syncPreview?.errors?.isNotEmpty() == true) Text("エラーのある行は選択して送信できません。", color = MaterialTheme.colorScheme.error)
+        if (state.syncPreview?.errors?.isNotEmpty() == true) Text(stringResource(R.string.kintone_invalid_rows), color = MaterialTheme.colorScheme.error)
     }
 }
 
@@ -351,31 +356,60 @@ private fun maskDomain(domain: String): String {
 }
 
 @Composable
+private fun kintoneVerificationMessage(key: String): String = stringResource(when (key) {
+    "PLUGIN_VERSION_INVALID" -> R.string.kintone_warning_plugin_version
+    "ISSUED_AT_INVALID" -> R.string.kintone_warning_issued_at
+    "NONCE_INVALID" -> R.string.kintone_warning_nonce
+    "UNIQUE_SETTING_UNVERIFIED" -> R.string.kintone_warning_unique
+    "UPDATED_AT_DEFAULT_INVALID" -> R.string.kintone_warning_updated_at
+    "PHOTO_SYNC_UNAVAILABLE" -> R.string.kintone_warning_photo_unavailable
+    "EXTRA_FIELDS_IGNORED" -> R.string.kintone_info_extra_fields
+    else -> R.string.kintone_warning_generic
+})
+
+@Composable
+private fun kintoneUserMessage(key: String): String = stringResource(when (key) {
+    KintoneErrorMessages.AUTH_INVALID -> R.string.kintone_error_auth_invalid
+    KintoneErrorMessages.AUTH_PERMISSION -> R.string.kintone_error_auth_permission
+    KintoneErrorMessages.APP_NOT_FOUND -> R.string.kintone_error_app_not_found
+    KintoneErrorMessages.RATE_LIMITED -> R.string.kintone_error_rate_limited
+    KintoneErrorMessages.FIELD_MISMATCH -> R.string.kintone_error_field_mismatch
+    KintoneErrorMessages.UPSERT_MISMATCH -> R.string.kintone_error_upsert_mismatch
+    KintoneErrorMessages.SCHEMA_CHANGED -> R.string.kintone_error_schema_changed
+    KintoneErrorMessages.TIMEOUT -> R.string.kintone_error_timeout
+    KintoneErrorMessages.PHOTO_UPLOAD_TIMEOUT -> R.string.kintone_error_photo_timeout
+    KintoneErrorMessages.PHOTO_UNREADABLE -> R.string.kintone_error_photo_unreadable
+    KintoneErrorMessages.PHOTO_SYNC_FAILED -> R.string.kintone_error_photo_sync
+    KintoneErrorMessages.NETWORK_UNAVAILABLE -> R.string.kintone_error_network
+    else -> R.string.kintone_error_generic
+})
+
+@Composable
 fun KintonePluginInfoScreen(onBack: () -> Unit, onOpenBooth: () -> Unit = {}) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(AppSpacing.large), verticalArrangement = Arrangement.spacedBy(AppSpacing.medium)) {
-        Header("kintone連携プラグインについて", onBack)
+        Header(stringResource(R.string.kintone_plugin_title), onBack)
         BenefitList(listOf(
-            "kintone連携にはPro版が必要です。",
-            "別売りのkintone連携プラグインが必要です。",
-            "プラグイン単体では利用できません。",
-            "専用QRコードで接続します。",
-            "ドメイン、アプリID、APIトークンなどの手入力設定は行いません。",
+            stringResource(R.string.kintone_plugin_requires_pro),
+            stringResource(R.string.kintone_plugin_separate_purchase),
+            stringResource(R.string.kintone_plugin_not_standalone),
+            stringResource(R.string.kintone_plugin_qr),
+            stringResource(R.string.kintone_plugin_no_manual_credentials),
         ))
         BoothButton(onOpenBooth)
     }
 }
 
 @Composable private fun Header(title: String, onBack: () -> Unit) = Row(verticalAlignment = Alignment.CenterVertically) {
-    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "戻る") }
+    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.navigation_back)) }
     Text(title, style = MaterialTheme.typography.headlineMedium)
 }
 
 @Composable private fun BenefitList(items: List<String>) = Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-    items.forEach { Text("• $it") }
+    items.forEach { Text(stringResource(R.string.bullet_item, it)) }
 }
 
 @Composable private fun RestoreButton(state: BillingUiState, onRestore: () -> Unit) {
     TextButton(onClick = onRestore, enabled = !state.restoring && !state.purchasing, modifier = Modifier.fillMaxWidth().testTag("restore_purchase")) {
-        if (state.restoring) { CircularProgressIndicator(); Text("復元中") } else Text("購入状態を復元")
+        if (state.restoring) { CircularProgressIndicator(); Text(stringResource(R.string.pro_restoring)) } else Text(stringResource(R.string.pro_restore_purchase))
     }
 }

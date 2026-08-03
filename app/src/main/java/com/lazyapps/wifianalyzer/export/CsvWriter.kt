@@ -11,7 +11,7 @@ object CsvWriter {
         OutputStreamWriter(output, StandardCharsets.UTF_8).use { write(it, columns, rows, includeBom = true) }
 
     fun write(writer: Writer, columns: List<ExportColumn>, rows: Sequence<ExportRow>, includeBom: Boolean = true) {
-        require(columns.isNotEmpty()) { "少なくとも1列を選択してください" }
+        require(columns.isNotEmpty()) { "At least one column is required" }
         if (includeBom) writer.write(BOM.code)
         writeLine(writer, columns.map { it.header })
         rows.forEach { row -> writeLine(writer, columns.map { sanitize(row.values[it.key]) }) }

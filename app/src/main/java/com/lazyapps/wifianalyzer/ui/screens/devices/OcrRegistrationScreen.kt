@@ -68,6 +68,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -79,6 +80,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.lazyapps.wifianalyzer.domain.DeviceInput
+import com.lazyapps.wifianalyzer.R
+import com.lazyapps.wifianalyzer.ui.components.localizedLabel
 import com.lazyapps.wifianalyzer.domain.ocr.CandidateKind
 import com.lazyapps.wifianalyzer.domain.ocr.ConfidenceLevel
 import com.lazyapps.wifianalyzer.domain.ocr.ParsedDeviceLabel
@@ -127,8 +130,8 @@ fun OcrRegistrationScreen(
 
     Column(Modifier.fillMaxSize().imePadding()) {
         TopAppBar(
-            title = { Text("機器ラベルを読み取る") },
-            navigationIcon = { IconButton(onClick = onBack, modifier = Modifier.testTag("ocr_back")) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "戻る") } },
+            title = { Text(stringResource(R.string.ocr_scan_device_label)) },
+            navigationIcon = { IconButton(onClick = onBack, modifier = Modifier.testTag("ocr_back")) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.back)) } },
         )
         when (uiState.state) {
             OcrProcessingState.CAMERA -> when (permissionState().also { permissionRevision }) {
@@ -172,20 +175,24 @@ fun OcrRegistrationScreen(
 internal fun PermissionExplanation(denied: Boolean, onRequest: () -> Unit, onManual: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(AppSpacing.large), verticalArrangement = Arrangement.spacedBy(AppSpacing.large), horizontalAlignment = Alignment.CenterHorizontally) {
         Icon(Icons.Rounded.CameraAlt, null, tint = MaterialTheme.colorScheme.primary)
-        Text(if (denied) "カメラ権限が拒否されました" else "カメラ権限が必要です", style = MaterialTheme.typography.headlineSmall)
-        Text("機器ラベルを撮影して、メーカー・SSID・BSSIDなどを端末内だけで読み取るために使用します。画像は処理後に削除されます。")
-        Button(onClick = onRequest, modifier = Modifier.fillMaxWidth().testTag("request_camera_permission")) { Text("カメラを許可") }
-        TextButton(onClick = onManual, modifier = Modifier.testTag("ocr_manual")) { Text("手動で入力する") }
+        Text(
+            stringResource(if (denied) R.string.camera_permission_denied else R.string.camera_permission_required),
+            modifier = Modifier.testTag("camera_permission_title"),
+            style = MaterialTheme.typography.headlineSmall,
+        )
+        Text(stringResource(R.string.camera_permission_ocr_body))
+        Button(onClick = onRequest, modifier = Modifier.fillMaxWidth().testTag("request_camera_permission")) { Text(stringResource(R.string.allow_camera)) }
+        TextButton(onClick = onManual, modifier = Modifier.testTag("ocr_manual")) { Text(stringResource(R.string.enter_manually)) }
     }
 }
 
 @Composable
 internal fun PermanentPermissionDenial(onSettings: () -> Unit, onManual: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(AppSpacing.large), verticalArrangement = Arrangement.spacedBy(AppSpacing.large)) {
-        Text("カメラ権限が無効です", style = MaterialTheme.typography.headlineSmall)
-        Text("再要求できないため、端末のアプリ設定でカメラ権限を許可してください。")
-        Button(onClick = onSettings, modifier = Modifier.fillMaxWidth().testTag("open_camera_settings")) { Icon(Icons.Rounded.Settings, null); Text("アプリ設定を開く") }
-        OutlinedButton(onClick = onManual, modifier = Modifier.fillMaxWidth()) { Text("手動で入力する") }
+        Text(stringResource(R.string.camera_permission_disabled), style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.camera_permission_settings_body))
+        Button(onClick = onSettings, modifier = Modifier.fillMaxWidth().testTag("open_camera_settings")) { Icon(Icons.Rounded.Settings, null); Text(stringResource(R.string.open_app_settings)) }
+        OutlinedButton(onClick = onManual, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.enter_manually)) }
     }
 }
 
@@ -200,6 +207,9 @@ private fun CameraCapture(processing: Boolean, onCapture: (File) -> Unit, onCame
     var torch by rememberSaveable { mutableStateOf(false) }
     var cameraReady by remember { mutableStateOf(false) }
     var capturing by remember { mutableStateOf(false) }
+    val cameraInUseMessage = stringResource(R.string.camera_in_use)
+    val cameraInitializationFailedMessage = stringResource(R.string.camera_initialization_failed)
+    val captureFailedMessage = stringResource(R.string.capture_failed)
 
     LaunchedEffect(Unit) {
         File(context.cacheDir, "ocr-captures").apply { mkdirs() }.listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > 60 * 60 * 1000L }?.forEach(File::delete)
@@ -215,7 +225,7 @@ private fun CameraCapture(processing: Boolean, onCapture: (File) -> Unit, onCame
                 cameraReady = true
                 if (torch) camera?.cameraControl?.enableTorch(true)
             } catch (error: Exception) {
-                onCameraError(if (error.message?.contains("IN_USE", true) == true) "カメラは他のアプリで使用中です" else "カメラを初期化できませんでした")
+                onCameraError(if (error.message?.contains("IN_USE", true) == true) cameraInUseMessage else cameraInitializationFailedMessage)
             }
         }
         future.addListener(listener, mainExecutor)
@@ -230,7 +240,7 @@ private fun CameraCapture(processing: Boolean, onCapture: (File) -> Unit, onCame
         AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
         ScanFrameOverlay(Modifier.fillMaxSize())
         Text(
-            "機器ラベルを枠内に合わせてください",
+            stringResource(R.string.align_device_label),
             color = Color.White,
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.align(Alignment.TopCenter).padding(AppSpacing.large),
@@ -244,7 +254,7 @@ private fun CameraCapture(processing: Boolean, onCapture: (File) -> Unit, onCame
                 enabled = camera?.cameraInfo?.hasFlashUnit() == true,
                 onClick = { torch = !torch; camera?.cameraControl?.enableTorch(torch) },
                 modifier = Modifier.testTag("toggle_flash"),
-            ) { Icon(if (torch) Icons.Rounded.FlashOn else Icons.Rounded.FlashOff, if (torch) "フラッシュを切る" else "フラッシュを点ける", tint = Color.White) }
+            ) { Icon(if (torch) Icons.Rounded.FlashOn else Icons.Rounded.FlashOff, stringResource(if (torch) R.string.turn_flash_off else R.string.turn_flash_on), tint = Color.White) }
             Button(
                 enabled = cameraReady && !processing && !capturing,
                 onClick = {
@@ -254,11 +264,11 @@ private fun CameraCapture(processing: Boolean, onCapture: (File) -> Unit, onCame
                     val file = File.createTempFile("label-", ".jpg", dir)
                     imageCapture.takePicture(ImageCapture.OutputFileOptions.Builder(file).build(), mainExecutor, object : ImageCapture.OnImageSavedCallback {
                         override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) { capturing = false; onCapture(file) }
-                        override fun onError(exception: ImageCaptureException) { capturing = false; file.delete(); onCameraError("撮影できませんでした") }
+                        override fun onError(exception: ImageCaptureException) { capturing = false; file.delete(); onCameraError(captureFailedMessage) }
                     })
                 },
                 modifier = Modifier.testTag("capture_label"),
-            ) { Icon(Icons.Rounded.CameraAlt, null); Text("撮影") }
+            ) { Icon(Icons.Rounded.CameraAlt, null); Text(stringResource(R.string.capture)) }
         }
     }
 }
@@ -284,17 +294,17 @@ private fun ScanFrameOverlay(modifier: Modifier = Modifier) {
 private fun ProcessingPanel() = Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(AppSpacing.medium)) {
         CircularProgressIndicator()
-        Text("端末内でラベルを解析しています")
+        Text(stringResource(R.string.processing_label_on_device))
     }
 }
 
 @Composable
 private fun FailurePanel(message: String, onRetake: () -> Unit, onManual: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(AppSpacing.large), verticalArrangement = Arrangement.spacedBy(AppSpacing.medium)) {
-        Text(message.ifBlank { "文字を検出できませんでした" }, style = MaterialTheme.typography.headlineSmall)
-        Text("ラベルへ近づき、端末を平行にして、反射を避けた明るい場所で撮影してください。必要ならフラッシュを切り替えてください。")
-        Button(onClick = onRetake, modifier = Modifier.fillMaxWidth().testTag("retake")) { Text("再撮影") }
-        OutlinedButton(onClick = onManual, modifier = Modifier.fillMaxWidth()) { Text("手動で入力する") }
+        Text(message.ifBlank { stringResource(R.string.no_text_detected) }, style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.ocr_capture_tips))
+        Button(onClick = onRetake, modifier = Modifier.fillMaxWidth().testTag("retake")) { Text(stringResource(R.string.retake)) }
+        OutlinedButton(onClick = onManual, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.enter_manually)) }
     }
 }
 
@@ -309,32 +319,37 @@ internal fun ResultConfirmation(
 ) {
     var updateMode by rememberSaveable { mutableStateOf(OcrUpdateMode.FILL_BLANKS) }
     var savePhoto by rememberSaveable { mutableStateOf(false) }
+    val manufacturerLabel = stringResource(R.string.manufacturer)
+    val modelLabel = stringResource(R.string.model)
+    val serialNumberLabel = stringResource(R.string.serial_number)
+    val ssidCandidatesLabel = stringResource(R.string.ssid_candidates)
+    val macBssidCandidatesLabel = stringResource(R.string.mac_bssid_candidates)
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("ocr_result_list"),
         verticalArrangement = Arrangement.spacedBy(AppSpacing.small),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(AppSpacing.large),
     ) {
         item {
-            Text(if (!result.hasUsefulFields) "読み取れませんでした" else if (result.modelCandidates.isEmpty() || result.macCandidates.isEmpty()) "一部読み取り成功" else "読み取り成功", style = MaterialTheme.typography.headlineSmall)
-            Text("内容を確認・修正し、登録する候補だけを選択してください。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(if (!result.hasUsefulFields) R.string.ocr_read_failed else if (result.modelCandidates.isEmpty() || result.macCandidates.isEmpty()) R.string.ocr_partially_read else R.string.ocr_read_success), style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(R.string.ocr_review_candidates), color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (!result.hasUsefulFields) {
-                Text("文字またはMACらしい文字列を検出できませんでした。ラベルへ近づき、端末を平行にして、反射を避けた明るい場所で再撮影してください。", color = MaterialTheme.colorScheme.error)
+                Text(stringResource(R.string.ocr_no_useful_fields), color = MaterialTheme.colorScheme.error)
             }
         }
-        candidateSection("メーカー", result.manufacturerCandidates, onUpdate)
-        candidateSection("型番", result.modelCandidates, onUpdate)
-        candidateSection("シリアル番号", result.serialCandidates, onUpdate)
-        candidateSection("SSID候補", result.ssidCandidates, onUpdate)
-        candidateSection("MAC / BSSID候補", result.macCandidates, onUpdate)
+        candidateSection(manufacturerLabel, result.manufacturerCandidates, onUpdate)
+        candidateSection(modelLabel, result.modelCandidates, onUpdate)
+        candidateSection(serialNumberLabel, result.serialCandidates, onUpdate)
+        candidateSection(ssidCandidatesLabel, result.ssidCandidates, onUpdate)
+        candidateSection(macBssidCandidatesLabel, result.macCandidates, onUpdate)
         if (existingDevice) item {
             Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-                Text("既存情報への反映方法", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.ocr_update_method), style = MaterialTheme.typography.titleMedium)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-                    FilterChip(updateMode == OcrUpdateMode.FILL_BLANKS, { updateMode = OcrUpdateMode.FILL_BLANKS }, label = { Text("空欄だけ入力") })
-                    FilterChip(updateMode == OcrUpdateMode.SELECT_FIELDS, { updateMode = OcrUpdateMode.SELECT_FIELDS }, label = { Text("項目ごとに選択") })
-                    FilterChip(updateMode == OcrUpdateMode.OVERWRITE, { updateMode = OcrUpdateMode.OVERWRITE }, label = { Text("OCR結果で上書き") })
+                    FilterChip(updateMode == OcrUpdateMode.FILL_BLANKS, { updateMode = OcrUpdateMode.FILL_BLANKS }, label = { Text(stringResource(R.string.ocr_fill_blanks)) })
+                    FilterChip(updateMode == OcrUpdateMode.SELECT_FIELDS, { updateMode = OcrUpdateMode.SELECT_FIELDS }, label = { Text(stringResource(R.string.ocr_select_fields)) })
+                    FilterChip(updateMode == OcrUpdateMode.OVERWRITE, { updateMode = OcrUpdateMode.OVERWRITE }, label = { Text(stringResource(R.string.ocr_overwrite)) })
                 }
-                Text("BSSIDは既存値を削除せず、有効な新規値だけ追加します。WAN/LAN MACは初期状態では選択されません。", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.ocr_bssid_update_note), style = MaterialTheme.typography.bodySmall)
             }
         }
         if (result.managementCandidates.isNotEmpty()) item {
@@ -343,24 +358,24 @@ internal fun ResultConfirmation(
         item {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
                 Column(Modifier.fillMaxWidth().padding(AppSpacing.medium)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(savePhoto, { savePhoto = it }, modifier = Modifier.testTag("save_ocr_photo")); Text("撮影したラベル画像を機器写真に保存") }
-                    Text("初期値はOFFです。ラベル画像には初期パスワードや暗号化キーが含まれる場合があります。保存する前に内容を確認してください。写真は9枚上限に含まれます。", style = MaterialTheme.typography.bodySmall)
+                    Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(savePhoto, { savePhoto = it }, modifier = Modifier.testTag("save_ocr_photo")); Text(stringResource(R.string.ocr_save_label_photo)) }
+                    Text(stringResource(R.string.ocr_save_photo_privacy_note), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
         item {
             Card(border = CardDefaults.outlinedCardBorder()) {
                 Column(Modifier.fillMaxWidth().padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-                    Text("OCR全文", style = MaterialTheme.typography.titleMedium)
-                    Text(result.rawText.ifBlank { "文字を検出できませんでした" }, style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.ocr_full_text), style = MaterialTheme.typography.titleMedium)
+                    Text(result.rawText.ifBlank { stringResource(R.string.no_text_detected) }, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
         item {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-                OutlinedButton(onClick = onRetake, modifier = Modifier.testTag("retake")) { Text("再撮影") }
-                TextButton(onClick = onManual) { Text("手動で入力") }
-                Button(onClick = { onContinue(updateMode, savePhoto) }, modifier = Modifier.testTag("use_ocr_result")) { Text(if (existingDevice) "差分を確認" else "登録フォームへ進む") }
+                OutlinedButton(onClick = onRetake, modifier = Modifier.testTag("retake")) { Text(stringResource(R.string.retake)) }
+                TextButton(onClick = onManual, modifier = Modifier.testTag("ocr_enter_manually")) { Text(stringResource(R.string.enter_manually)) }
+                Button(onClick = { onContinue(updateMode, savePhoto) }, modifier = Modifier.testTag("use_ocr_result")) { Text(stringResource(if (existingDevice) R.string.ocr_review_changes else R.string.ocr_continue_to_form)) }
             }
         }
     }
@@ -384,34 +399,47 @@ private fun CandidateEditor(candidate: ParsedFieldCandidate, index: Int, onUpdat
                 Checkbox(candidate.selected, { onUpdate(candidate, candidate.copy(selected = it)) }, modifier = Modifier.testTag("candidate_${candidate.kind}_$index"))
                 OutlinedTextField(candidate.value, { onUpdate(candidate, candidate.copy(value = it)) }, Modifier.weight(1f), singleLine = true, label = { Text(candidate.sourceLabel.ifBlank { candidate.kind.name }) })
             }
-            Text("信頼度: ${candidate.confidence.label}", style = MaterialTheme.typography.labelMedium)
-            candidate.band?.let { Text("周波数帯: ${it.label}", style = MaterialTheme.typography.bodySmall) }
+            Text(stringResource(R.string.ocr_confidence, confidenceLabel(candidate.confidence)), style = MaterialTheme.typography.labelMedium)
+            candidate.band?.let { Text(stringResource(R.string.ocr_frequency_band, it.label), style = MaterialTheme.typography.bodySmall) }
             candidate.nearbyMatch?.let { match ->
-                Text("周辺で検出中 ・ ${match.reason}", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
-                Text("${match.accessPoint.bssid} / ${match.accessPoint.rssi} dBm / ${match.accessPoint.band.label} / CH ${match.accessPoint.channel} / ${match.accessPoint.distanceRange.label} / ${match.accessPoint.securityType.label}", style = MaterialTheme.typography.bodySmall)
-                match.correctedValue?.let { Text("「${it}」へ補正する候補が見つかりました。自動では置き換えません。", style = MaterialTheme.typography.bodySmall) }
+                Text(stringResource(R.string.ocr_detected_nearby, ocrMatchReason(match.reason)), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                Text("${match.accessPoint.bssid} / ${match.accessPoint.rssi} dBm / ${match.accessPoint.band.label} / CH ${match.accessPoint.channel} / ${match.accessPoint.distanceRange.localizedLabel(false)} / ${match.accessPoint.securityType.localizedLabel()}", style = MaterialTheme.typography.bodySmall)
+                match.correctedValue?.let { Text(stringResource(R.string.ocr_correction_found, it), style = MaterialTheme.typography.bodySmall) }
             }
-            candidate.correctionCandidate?.takeIf { candidate.nearbyMatch == null }?.let { Text("補正候補: $it（未選択）", style = MaterialTheme.typography.bodySmall) }
+            candidate.correctionCandidate?.takeIf { candidate.nearbyMatch == null }?.let { Text(stringResource(R.string.ocr_correction_unselected, it), style = MaterialTheme.typography.bodySmall) }
         }
     }
 }
+
+@Composable private fun ocrMatchReason(reason: String) = stringResource(when (reason) {
+    "BSSID_EXACT" -> R.string.ocr_match_bssid_exact
+    "OCR_CORRECTED" -> R.string.ocr_match_corrected
+    "MANUFACTURER_OUI" -> R.string.ocr_match_oui
+    "SSID_EXACT" -> R.string.ocr_match_ssid_exact
+    else -> R.string.ocr_match_ssid_normalized
+})
 
 @Composable
 private fun SensitiveSection(candidates: List<ParsedFieldCandidate>, onUpdate: (ParsedFieldCandidate, ParsedFieldCandidate) -> Unit) {
     var revealed by rememberSaveable { mutableStateOf(emptyList<Int>()) }
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
         Column(Modifier.fillMaxWidth().padding(AppSpacing.medium), verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-            Text("管理情報候補", style = MaterialTheme.typography.titleMedium)
-            Text("機密候補は登録フォームやRoomへ渡しません。表示・コピーは明示操作が必要です。", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.ocr_management_candidates), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.ocr_sensitive_note), style = MaterialTheme.typography.bodySmall)
             candidates.forEachIndexed { index, candidate ->
                 Text("${candidate.sourceLabel}: ${if (index in revealed) candidate.value else SensitiveValueMasker.mask(candidate.value)}")
-                TextButton(onClick = { revealed = if (index in revealed) revealed - index else revealed + index }) { Text(if (index in revealed) "隠す" else "表示") }
+                TextButton(onClick = { revealed = if (index in revealed) revealed - index else revealed + index }) { Text(stringResource(if (index in revealed) R.string.hide else R.string.show)) }
             }
         }
     }
 }
 
-private val ConfidenceLevel.label: String get() = when (this) { ConfidenceLevel.HIGH -> "高"; ConfidenceLevel.MEDIUM -> "中"; ConfidenceLevel.LOW -> "低" }
+@Composable
+private fun confidenceLabel(level: ConfidenceLevel): String = stringResource(when (level) {
+    ConfidenceLevel.HIGH -> R.string.confidence_high
+    ConfidenceLevel.MEDIUM -> R.string.confidence_medium
+    ConfidenceLevel.LOW -> R.string.confidence_low
+})
 
 private tailrec fun Context.findActivity(): Activity = when (this) {
     is Activity -> this

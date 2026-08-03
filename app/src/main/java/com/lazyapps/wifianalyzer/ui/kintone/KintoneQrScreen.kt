@@ -16,6 +16,8 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,10 +46,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
+import com.lazyapps.wifianalyzer.R
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
@@ -70,14 +74,14 @@ fun KintoneQrScreen(onBack: () -> Unit, onQr: (String) -> Unit) {
     LaunchedEffect(Unit) { if (!granted) launcher.launch(Manifest.permission.CAMERA) }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "戻る") }
-            Text("kintone QRコード読取", style = MaterialTheme.typography.titleLarge)
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.navigation_back)) }
+            Text(stringResource(R.string.kintone_qr_title), style = MaterialTheme.typography.titleLarge)
         }
         if (granted) QrCamera(Modifier.weight(1f), onQr)
-        else Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Text("専用QRコードを読み取るため、カメラの使用を許可してください。")
-            Button(onClick = { launcher.launch(Manifest.permission.CAMERA) }, modifier = Modifier.padding(top = 16.dp)) { Text("カメラを許可") }
-            if (denied) Button(onClick = { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) }) { Text("Android設定を開く") }
+        else Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Text(stringResource(R.string.kintone_qr_camera_permission))
+            Button(onClick = { launcher.launch(Manifest.permission.CAMERA) }, modifier = Modifier.padding(top = 16.dp).testTag("kintone_allow_camera")) { Text(stringResource(R.string.kintone_allow_camera)) }
+            if (denied) Button(onClick = { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))) }, modifier = Modifier.testTag("kintone_open_settings")) { Text(stringResource(R.string.kintone_open_android_settings)) }
         }
     }
 }
@@ -121,6 +125,6 @@ private fun QrCamera(modifier: Modifier, onQr: (String) -> Unit) {
             val side = size.minDimension * .68f; val left = (size.width - side) / 2; val top = (size.height - side) / 2
             drawRect(Color.White, androidx.compose.ui.geometry.Offset(left, top), androidx.compose.ui.geometry.Size(side, side), style = Stroke(5f))
         }
-        Text("QRコードを枠内に合わせてください", color = Color.White, modifier = Modifier.align(Alignment.TopCenter).padding(24.dp))
+        Text(stringResource(R.string.kintone_qr_frame_hint), color = Color.White, modifier = Modifier.align(Alignment.TopCenter).padding(24.dp))
     }
 }

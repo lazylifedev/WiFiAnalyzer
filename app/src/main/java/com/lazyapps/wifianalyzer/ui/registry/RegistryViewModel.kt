@@ -1,6 +1,7 @@
 package com.lazyapps.wifianalyzer.ui.registry
 
 import android.app.Application
+import com.lazyapps.wifianalyzer.R
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lazyapps.wifianalyzer.data.registry.DeviceRegistryRepository
@@ -14,6 +15,7 @@ import com.lazyapps.wifianalyzer.domain.DeviceBssidInput
 import com.lazyapps.wifianalyzer.domain.DeviceGroup
 import com.lazyapps.wifianalyzer.domain.DeviceInput
 import com.lazyapps.wifianalyzer.domain.DeviceMatching
+import com.lazyapps.wifianalyzer.domain.WifiAnalysis
 import com.lazyapps.wifianalyzer.domain.RegisteredDevice
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorCategory
@@ -89,8 +91,8 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
                 DeviceInput(displayName = "", bssids = listOf(DeviceBssidInput("", "2.4 GHz")), workspaceId = workspaceId)
             } else {
                 DeviceInput(
-                    displayName = accessPoint.ssid.takeUnless { it == "非公開ネットワーク" }.orEmpty(),
-                    ssid = accessPoint.ssid.takeUnless { it == "非公開ネットワーク" }.orEmpty(),
+                    displayName = accessPoint.ssid.takeUnless { it == WifiAnalysis.HIDDEN_SSID }.orEmpty(),
+                    ssid = accessPoint.ssid.takeUnless { it == WifiAnalysis.HIDDEN_SSID }.orEmpty(),
                     bssids = listOf(DeviceBssidInput(accessPoint.bssid, accessPoint.band.label)),
                     initialLastSeenAt = accessPoint.observedAtMillis,
                     initialLastSeenRssi = accessPoint.rssi,
@@ -172,7 +174,7 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
                 _uiState.value = _uiState.value.copy(formGroups = _uiState.value.formGroups + group, groupCreateDialogVisible = false, newGroupName = "", isCreatingGroup = false)
                 onCreated(id)
             } catch (error: Exception) {
-                _uiState.value = _uiState.value.copy(isCreatingGroup = false, groupNameValidationError = error.message ?: "グループを作成できませんでした")
+                _uiState.value = _uiState.value.copy(isCreatingGroup = false, groupNameValidationError = if (error is RegistryValidationException) getApplication<Application>().registryErrorText(error) else userMessage(OperationErrorMapper.classify(error)))
             }
         }
     }
@@ -188,9 +190,9 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
                 block()
                 _uiState.value = _uiState.value.copy(busy = false)
             } catch (error: RegistryValidationException) {
-                _uiState.value = _uiState.value.copy(busy = false, errorMessage = error.message)
+                _uiState.value = _uiState.value.copy(busy = false, errorMessage = getApplication<Application>().registryErrorText(error))
             } catch (_: android.database.sqlite.SQLiteConstraintException) {
-                _uiState.value = _uiState.value.copy(busy = false, errorMessage = "同じ値が既に登録されています")
+                _uiState.value = _uiState.value.copy(busy = false, errorMessage = getApplication<Application>().getString(R.string.error_duplicate_value))
             } catch (error: Exception) {
                 _uiState.value = _uiState.value.copy(busy = false, errorMessage = userMessage(OperationErrorMapper.classify(error)))
             }

@@ -17,6 +17,7 @@ class KintoneRepository(
     context: Context? = null,
     private val photoStore: KintonePhotoSyncStore? = context?.let(::KintonePhotoSyncStore),
 ) {
+    private val context = context?.applicationContext
     private val dao = database.registryDao()
     private val filesDir = context?.applicationContext?.filesDir
 
@@ -117,7 +118,7 @@ class KintoneRepository(
                 else try {
                     val keys = plan.photos.mapIndexed { index, photo ->
                         kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                        onProgress("写真アップロード中", uploaded + 1, photoPlans.sumOf { it.photos.size })
+                        onProgress(context?.getString(com.lazyapps.wifianalyzer.R.string.kintone_uploading_photos).orEmpty(), uploaded + 1, photoPlans.sumOf { it.photos.size })
                         api.uploadFile(connection.domain, token.copyOf(), photo.file, safeFileName(record.deviceUuid, index))
                             .also { uploaded++ }
                     }
@@ -150,7 +151,7 @@ class KintoneRepository(
                 }
             }
             if (batchSucceeded) batchItems.forEach { it.second?.takeIf { plan -> plan.changed }?.let(::saveFingerprint) }
-            onProgress("機器送信中", index + 1, batches.size)
+            onProgress(context?.getString(com.lazyapps.wifianalyzer.R.string.kintone_sending_devices).orEmpty(), index + 1, batches.size)
         } } finally { token.fill('\u0000') }
         return KintoneSyncResult(records.size, success, failed, 0, results, photoPlans.size, photoPlans.sumOf { it.photos.size }, uploaded)
     }

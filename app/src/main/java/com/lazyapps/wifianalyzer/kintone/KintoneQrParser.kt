@@ -26,9 +26,9 @@ object KintoneQrParser {
         val pluginId = wire.pluginId?.trim()?.takeIf(String::isNotEmpty) ?: fail(KintoneErrorCode.KINTONE_QR_INVALID)
         val pluginVersion = wire.pluginVersion?.trim()?.takeIf(String::isNotEmpty) ?: fail(KintoneErrorCode.KINTONE_QR_INVALID)
         val warnings = mutableListOf<String>()
-        if (!semVer.matches(pluginVersion)) warnings += "プラグインバージョンをSemVerとして確認できません"
-        val issuedAt = wire.issuedAt?.let { runCatching { OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrElse { warnings += "発行日時を確認できません"; null } }
-        val nonce = wire.nonce?.also { if (runCatching { UUID.fromString(it) }.isFailure) warnings += "nonceがUUID形式ではありません" }
+        if (!semVer.matches(pluginVersion)) warnings += "PLUGIN_VERSION_INVALID"
+        val issuedAt = wire.issuedAt?.let { runCatching { OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrElse { warnings += "ISSUED_AT_INVALID"; null } }
+        val nonce = wire.nonce?.also { if (runCatching { UUID.fromString(it) }.isFailure) warnings += "NONCE_INVALID" }
         if (wire.guestSpaceId != null) fail(KintoneErrorCode.KINTONE_GUEST_SPACE_UNSUPPORTED)
         return KintoneQrPayload(domain, appId, token, pluginId, pluginVersion, 1, 1, issuedAt, nonce, warnings)
     }

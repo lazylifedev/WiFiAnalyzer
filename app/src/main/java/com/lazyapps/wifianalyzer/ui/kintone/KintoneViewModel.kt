@@ -158,7 +158,7 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun sync() = launchOperation(KintoneFailureContext.SYNC) {
-        mutable.value = mutable.value.copy(message = "データ確認中")
+        mutable.value = mutable.value.copy(message = getApplication<Application>().getString(R.string.kintone_checking_data))
         val records = repository.buildSyncRecordsForConnection(mutable.value.workspaceId)
         if (records.isEmpty()) {
             val uuid = WorkspaceUuid.fromId(mutable.value.workspaceId)
@@ -169,11 +169,11 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
                 lastKintoneErrorCode = null, lastUserMessage = null, failedAt = 0, requiresAttention = false,
                 lastErrorPath = null, lastErrorDetail = null, lastFailedRecordIndex = null,
             ))
-            mutable.value = mutable.value.copy(message = "同期する登録機器がありません", syncPreview = KintoneSyncPreview(0, 0, emptyList(), emptyList()), operation = OperationState.Idle, errorCode = null, failureContext = null)
+            mutable.value = mutable.value.copy(message = getApplication<Application>().getString(R.string.kintone_no_registered_devices), syncPreview = KintoneSyncPreview(0, 0, emptyList(), emptyList()), operation = OperationState.Idle, errorCode = null, failureContext = null)
             return@launchOperation
         }
         val hadPreview = mutable.value.syncPreview != null
-        mutable.value = mutable.value.copy(message = "写真確認中")
+        mutable.value = mutable.value.copy(message = getApplication<Application>().getString(R.string.kintone_checking_photos))
         val preview = mutable.value.syncPreview ?: repository.previewSync(mutable.value.workspaceId).also {
             mutable.value = mutable.value.copy(syncPreview = it)
         }
@@ -187,7 +187,7 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
         if (mutex == null) {
             mutable.value = mutable.value.copy(
                 operation = OperationState.Idle,
-                message = "自動同期が完了してから再試行してください",
+                message = getApplication<Application>().getString(R.string.kintone_wait_for_auto_sync),
             )
             return@launchOperation
         }
@@ -198,7 +198,7 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
         } finally {
             KintoneSyncLock.release(uuid, mutex)
         }
-        mutable.value = mutable.value.copy(message = "結果確認中")
+        mutable.value = mutable.value.copy(message = getApplication<Application>().getString(R.string.kintone_checking_result))
         val failure = result.batches.firstOrNull { it.error != null }
         autoSyncStore.write(uuid, autoSyncStore.read(uuid).copy(
             lastStartedAt = System.currentTimeMillis(), lastFinishedAt = System.currentTimeMillis(),
@@ -210,7 +210,7 @@ class KintoneViewModel(application: Application) : AndroidViewModel(application)
             lastKintoneErrorCode = failure?.kintoneErrorCode, lastUserMessage = failure?.userMessage,
             failedAt = if (failure != null) System.currentTimeMillis() else 0, requiresAttention = failure != null,
         ))
-        mutable.value = mutable.value.copy(message = "完了", syncResult = result, operation = OperationState.Success(R.string.kintone_connected, eventId++))
+        mutable.value = mutable.value.copy(message = getApplication<Application>().getString(R.string.kintone_complete), syncResult = result, operation = OperationState.Success(R.string.kintone_connected, eventId++))
     }
 
     fun setAutoSync(enabled: Boolean) {
