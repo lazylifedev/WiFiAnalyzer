@@ -104,6 +104,7 @@ import com.lazyapps.wifianalyzer.ui.permissions.PermissionSummary
 import kotlinx.coroutines.launch
 import com.lazyapps.wifianalyzer.ads.AdBanner
 import com.lazyapps.wifianalyzer.ads.AdMobManager
+import com.lazyapps.wifianalyzer.ads.InterstitialAdManager
 import com.lazyapps.wifianalyzer.billing.AdVisibilityPolicy
 
 private const val KINTONE_BOOTH_URL = "https://lazylifedev.booth.pm/items/8670244"
@@ -146,6 +147,8 @@ fun WifiAnalyzerApp(
         workspaceState.selected?.let { kintoneViewModel.selectWorkspace(it.id, it.name, fromAppSelection = true) }
     }
     LaunchedEffect(billingState.entitlement, debugForcePro) {
+        InterstitialAdManager.updateEntitlement(billingState.entitlement, debugForcePro)
+        if (billingState.entitlement != com.lazyapps.wifianalyzer.billing.ProEntitlementState.Unknown) InterstitialAdManager.prepare()
         kintoneViewModel.setAccessAllowed(FeatureAccessPolicy.from(billingState.entitlement, debugForcePro).canUseKintone)
     }
 
@@ -397,9 +400,10 @@ fun WifiAnalyzerApp(
                         workspaceState = workspaceState,
                         onBack = { navController.popBackStack() },
                         onOpenWorkspace = { id -> workspaceViewModel.select(id); navController.navigateTopLevel(AppDestination.Devices.route) },
+                        onOperationSuccess = { InterstitialAdManager.showAfterSuccessfulOperation(activity) },
                     )
                 }
-                composable(EXPORT_ROUTE) { ExportScreen(onBack = { navController.popBackStack() }) }
+                composable(EXPORT_ROUTE) { ExportScreen(onBack = { navController.popBackStack() }, onOperationSuccess = { InterstitialAdManager.showAfterSuccessfulOperation(activity) }) }
                 composable(IMPORT_ROUTE) { ImportScreen(onBack = { navController.popBackStack() }) }
                 composable(PRO_ROUTE) {
                     ProScreen(

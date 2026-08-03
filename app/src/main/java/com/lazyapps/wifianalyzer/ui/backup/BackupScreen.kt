@@ -22,8 +22,10 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun BackupScreen(workspaceState:WorkspaceUiState,onBack:()->Unit,onOpenWorkspace:(Long)->Unit,vm:BackupViewModel=viewModel()){
+@Composable fun BackupScreen(workspaceState:WorkspaceUiState,onBack:()->Unit,onOpenWorkspace:(Long)->Unit,onOperationSuccess:()->Unit={},vm:BackupViewModel=viewModel()){
     val state by vm.state.collectAsStateWithLifecycle(); var workspaceExport by remember { mutableStateOf(false) }; var confirmReplace by remember { mutableStateOf(false) }
+    var lastSuccessId by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(state.operation) { (state.operation as? com.lazyapps.wifianalyzer.ui.operation.OperationState.Success)?.let { if (lastSuccessId != it.eventId) { lastSuccessId = it.eventId; onOperationSuccess() } } }
     val create=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")){uri->uri?.let{vm.export(it,if(workspaceExport)workspaceState.selected?.id else null)}}
     val open=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let(vm::inspect)}
     Scaffold(topBar={TopAppBar(title={Text("バックアップと復元")},navigationIcon={IconButton(onClick=onBack){Icon(Icons.AutoMirrored.Rounded.ArrowBack,"戻る")}})}){padding->

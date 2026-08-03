@@ -12,8 +12,11 @@ object AdMobManager {
     val canRequestAds = mutableStateOf(false)
     val privacyOptionsRequired = mutableStateOf(false)
     private var initialized = false
+    var applicationContext: Context? = null
+        private set
 
     fun initialize(activity: Activity) {
+        applicationContext = activity.applicationContext
         val info = UserMessagingPlatform.getConsentInformation(activity)
         val params = ConsentRequestParameters.Builder().build()
         info.requestConsentInfoUpdate(activity, params, {
@@ -38,5 +41,6 @@ object AdMobManager {
             initialized = true
             MobileAds.initialize(context.applicationContext)
         }
+        if (canRequestAds.value) InterstitialAdManager.prepare()
     }
 }

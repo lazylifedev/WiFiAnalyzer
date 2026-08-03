@@ -30,11 +30,12 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExportScreen(onBack: () -> Unit, viewModel: ExportViewModel = androidx.lifecycle.viewmodel.compose.viewModel()) {
+fun ExportScreen(onBack: () -> Unit, onOperationSuccess: () -> Unit = {}, viewModel: ExportViewModel = androidx.lifecycle.viewmodel.compose.viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle(); val context = LocalContext.current; val scope = rememberCoroutineScope()
     var showColumns by remember { mutableStateOf(false) }; var showSensitiveWarning by remember { mutableStateOf(false) }; var showReport by remember { mutableStateOf(false) }
-    val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri -> if (uri != null) scope.launch { viewModel.writeCsv(uri) } }
-    fun shareCsv() { scope.launch { viewModel.shareFile().onSuccess { file -> val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file); val intent = Intent(Intent.ACTION_SEND).setType("text/csv").putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); runCatching { context.startActivity(Intent.createChooser(intent, "CSVを共有")); viewModel.deleteAfterSharing(file) }.onFailure { file.delete(); viewModel.clearNotice() } } } }
+    val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri -> if (uri != null) scope.launch { viewModel.writeCsv(uri).onSuccess { onOperationSuccess() } } }
+    fun shareCsv() { scope.launch { viewModel.shareFile().onSuccess { file -> onOperationSuccess(); val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file); val intent = Intent(Intent.ACTION_SEND).setType("text/csv").putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); runCatching { context.startActivity(Intent.createChooser(intent, "CSVを共有")); viewModel.deleteAfterSharing(file) }.onFailure { file.delete(); viewModel.clearNotice() } } } }
+    LaunchedEffect(state.reportHtml) { if (state.reportHtml != null) onOperationSuccess() }
     Scaffold(topBar = { TopAppBar(title = { Text("データのエクスポート") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "戻る") } }) }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding).testTag("export_screen"), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { Text("種類", style = MaterialTheme.typography.titleMedium); SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) { ExportType.entries.forEachIndexed { i, type -> SegmentedButton(selected = state.type == type, onClick = { viewModel.setType(type) }, shape = SegmentedButtonDefaults.itemShape(i, ExportType.entries.size), label = { Text(type.label, maxLines = 2) }) } } }
