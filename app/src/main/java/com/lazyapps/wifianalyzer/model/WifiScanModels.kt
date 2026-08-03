@@ -1,21 +1,11 @@
 package com.lazyapps.wifianalyzer.model
 
-enum class SignalQuality(val label: String) {
-    EXCELLENT("非常に良好"),
-    GOOD("良好"),
-    FAIR("普通"),
-    WEAK("弱い"),
+enum class SignalQuality {
+    EXCELLENT, GOOD, FAIR, WEAK,
 }
 
-enum class SecurityType(val label: String) {
-    OPEN("オープン"),
-    WEP("WEP"),
-    WPA("WPA"),
-    WPA2("WPA2"),
-    WPA3("WPA3"),
-    OWE("Enhanced Open"),
-    ENTERPRISE("Enterprise"),
-    UNKNOWN("不明"),
+enum class SecurityType {
+    OPEN, WEP, WPA, WPA2, WPA3, OWE, ENTERPRISE, UNKNOWN,
 }
 
 enum class WifiStandard(val label: String) {
@@ -25,21 +15,11 @@ enum class WifiStandard(val label: String) {
     WIFI_6("Wi-Fi 6"),
     WIFI_6E("Wi-Fi 6E"),
     WIFI_7("Wi-Fi 7"),
-    UNKNOWN("不明"),
+    UNKNOWN("Unknown"),
 }
 
-enum class DistanceRange(val label: String) {
-    ONE_TO_THREE("約1～3m"),
-    THREE_TO_EIGHT("約3～8m"),
-    EIGHT_TO_TWENTY("約8～20m"),
-    TWENTY_PLUS("約20m以上"),
-}
-
-fun DistanceRange.displayLabel(feet: Boolean): String = if (!feet) label else when (this) {
-    DistanceRange.ONE_TO_THREE -> "約3～10ft"
-    DistanceRange.THREE_TO_EIGHT -> "約10～26ft"
-    DistanceRange.EIGHT_TO_TWENTY -> "約26～66ft"
-    DistanceRange.TWENTY_PLUS -> "約66ft以上"
+enum class DistanceRange {
+    ONE_TO_THREE, THREE_TO_EIGHT, EIGHT_TO_TWENTY, TWENTY_PLUS,
 }
 
 data class WifiAccessPoint(

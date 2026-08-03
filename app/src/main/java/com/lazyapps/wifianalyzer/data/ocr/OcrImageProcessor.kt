@@ -17,11 +17,11 @@ object OcrImageProcessor {
     fun process(file: File): Bitmap {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(file.absolutePath, bounds)
-        require(bounds.outWidth > 0 && bounds.outHeight > 0) { "撮影画像を読み込めませんでした" }
+        require(bounds.outWidth > 0 && bounds.outHeight > 0) { "OCR_IMAGE_UNREADABLE" }
         var sample = 1
         while (max(bounds.outWidth, bounds.outHeight) / sample > MAX_EDGE * 2) sample *= 2
         val decoded = BitmapFactory.decodeFile(file.absolutePath, BitmapFactory.Options().apply { inSampleSize = sample })
-            ?: error("撮影画像を読み込めませんでした")
+            ?: error("OCR_IMAGE_UNREADABLE")
         val rotation = when (ExifInterface(file).rotationDegrees) { 90 -> 90f; 180 -> 180f; 270 -> 270f; else -> 0f }
         val oriented = if (rotation == 0f) decoded else Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, Matrix().apply { postRotate(rotation) }, true).also { decoded.recycle() }
         val cropWidth = (oriented.width * .80f).toInt().coerceAtLeast(1)

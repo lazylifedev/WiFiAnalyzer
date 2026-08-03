@@ -78,13 +78,13 @@ class DeviceLabelParserTest {
 
     @Test fun sameOuiIsReportedAsWeakerNearbyCandidate() {
         val candidate = parse("BSSID: 00:11:22:AA:BB:CC", listOf(ap("Nearby", "00:11:22:10:20:30"))).macCandidates.single()
-        assertEquals("メーカーOUI候補", candidate.nearbyMatch?.reason)
+        assertEquals("MANUFACTURER_OUI", candidate.nearbyMatch?.reason)
         assertEquals(ConfidenceLevel.MEDIUM, candidate.confidence)
     }
 
     @Test fun normalizedSsidMatchesNearbyScan() {
         val candidate = parse("SSID: Lab Wi-Fi", listOf(ap("lab_wi-fi", "00:11:22:33:44:55"))).ssidCandidates.single()
-        assertEquals("SSID正規化一致", candidate.nearbyMatch?.reason)
+        assertEquals("SSID_NORMALIZED", candidate.nearbyMatch?.reason)
         assertEquals(ConfidenceLevel.MEDIUM, candidate.confidence)
     }
 

@@ -60,15 +60,15 @@ class ImportRepository(private val database: WifiAnalyzerDatabase) {
             val row = source.copy(workspace = workspaceName)
             if (row.errors.isNotEmpty()) { planned += PlannedImportRow(row, ImportRowStatus.ERROR, messages = row.errors); return@forEach }
             val duplicateKey = normalizedName(workspaceName) + "|" + normalizedName(row.deviceName) + "|" + row.serial.lowercase() + "|" + row.bssids.joinToString()
-            if (!seenKeys.add(duplicateKey)) { planned += PlannedImportRow(row, ImportRowStatus.ERROR, messages = listOf("CSV内で機器が重複しています")); return@forEach }
+            if (!seenKeys.add(duplicateKey)) { planned += PlannedImportRow(row, ImportRowStatus.ERROR, messages = listOf("DUPLICATE_CSV_DEVICE")); return@forEach }
             val candidates = if (workspaceId == null) emptySet() else findCandidates(row, workspaceId, allDevices, bssidsByDevice, settings.matchKey)
-            if (candidates.size > 1) { planned += PlannedImportRow(row, ImportRowStatus.CONFLICT, messages = listOf("複数の既存機器に一致しました")); return@forEach }
+            if (candidates.size > 1) { planned += PlannedImportRow(row, ImportRowStatus.CONFLICT, messages = listOf("MULTIPLE_DEVICE_MATCHES")); return@forEach }
             val existing = candidates.singleOrNull()
             val conflictingBssids = if (workspaceId == null) emptyList() else allBssids.filter { it.workspaceId == workspaceId && it.bssid in row.bssids && it.deviceId != existing?.id }
-            if (conflictingBssids.isNotEmpty()) { planned += PlannedImportRow(row, ImportRowStatus.CONFLICT, messages = listOf("同じワークスペースの別機器にBSSIDが登録済みです")); return@forEach }
+            if (conflictingBssids.isNotEmpty()) { planned += PlannedImportRow(row, ImportRowStatus.CONFLICT, messages = listOf("BSSID_IN_OTHER_DEVICE")); return@forEach }
             planned += when {
                 existing == null -> PlannedImportRow(row, ImportRowStatus.NEW)
-                settings.mode == ImportMode.ADD_ONLY -> PlannedImportRow(row, ImportRowStatus.SKIP, existing.id, listOf("既存機器に一致しました"))
+                settings.mode == ImportMode.ADD_ONLY -> PlannedImportRow(row, ImportRowStatus.SKIP, existing.id, listOf("EXISTING_DEVICE_MATCH"))
                 else -> PlannedImportRow(row, ImportRowStatus.UPDATE, existing.id)
             }
         }
@@ -91,7 +91,7 @@ class ImportRepository(private val database: WifiAnalyzerDatabase) {
 
     suspend fun execute(preview: ImportPreview, settings: ImportSettings): ImportResult {
         if (settings.errorMode == ErrorMode.ABORT_ALL && preview.rows.any { it.status in setOf(ImportRowStatus.ERROR, ImportRowStatus.CONFLICT) }) {
-            throw IllegalStateException("エラーまたは競合があるため全件中止しました")
+            throw IllegalStateException("IMPORT_ABORTED_FOR_ERRORS")
         }
         val started = System.currentTimeMillis()
         var createdWorkspaces = 0; var createdGroups = 0; var registeredBssids = 0

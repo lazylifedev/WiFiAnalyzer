@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
 import com.lazyapps.wifianalyzer.data.ChannelDisplayMode
 import com.lazyapps.wifianalyzer.domain.WifiAnalysis
 import com.lazyapps.wifianalyzer.model.DistanceRange
@@ -23,6 +24,7 @@ import com.lazyapps.wifianalyzer.ui.theme.AccentColor
 import com.lazyapps.wifianalyzer.ui.theme.WifiAnalyzerTheme
 import org.junit.Rule
 import org.junit.Test
+import androidx.test.platform.app.InstrumentationRegistry
 
 class ChannelScreenTest {
     @get:Rule
@@ -49,15 +51,19 @@ class ChannelScreenTest {
                     onOpenAccessPoint = {},
                     onRegisterAccessPoint = {},
                     onDisplayModeChange = { mode = it },
+                    selectedBand = WifiBand.BAND_24,
                 )
             }
         }
 
         composeRule.onNodeWithTag("channel_graph").assertIsDisplayed()
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        composeRule.onNodeWithText(context.getString(R.string.available_candidate)).assertIsDisplayed()
+        composeRule.onNodeWithTag("channel_list").performScrollToIndex(3)
         composeRule.onNodeWithTag("channel_selected_ap").assertIsDisplayed()
-        composeRule.onNodeWithText("空いている候補").assertIsDisplayed()
+        composeRule.onNodeWithTag("channel_list").performScrollToIndex(0)
         composeRule.onNodeWithTag("channel_mode_occupancy").performClick()
-        composeRule.onNodeWithText("1ネットワーク").assertIsDisplayed()
+        composeRule.onNodeWithText(context.resources.getQuantityString(R.plurals.network_count, 1, 1)).assertIsDisplayed()
     }
 
     @Test
@@ -88,6 +94,7 @@ class ChannelScreenTest {
                     onOpenAccessPoint = {},
                     onRegisterAccessPoint = {},
                     onDisplayModeChange = {},
+                    selectedBand = WifiBand.BAND_24,
                 )
             }
         }
@@ -116,6 +123,7 @@ class ChannelScreenTest {
                     onOpenAccessPoint = {},
                     onRegisterAccessPoint = {},
                     onDisplayModeChange = {},
+                    selectedBand = WifiBand.BAND_24,
                 )
             }
         }

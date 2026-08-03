@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.runtime.mutableStateOf
 import com.lazyapps.wifianalyzer.domain.ocr.CandidateKind
@@ -29,7 +30,7 @@ class OcrRegistrationScreenTest {
         var requested = false
         var manual = false
         composeRule.setContent { WifiAnalyzerTheme { PermissionExplanation(false, { requested = true }, { manual = true }) } }
-        composeRule.onNodeWithText("カメラ権限が必要です").assertIsDisplayed()
+        composeRule.onNodeWithTag("camera_permission_title").assertIsDisplayed()
         composeRule.onNodeWithTag("request_camera_permission").performClick()
         assertTrue(requested)
         composeRule.onNodeWithTag("ocr_manual").performClick()
@@ -62,7 +63,8 @@ class OcrRegistrationScreenTest {
         assertEquals(false, candidate.selected)
         composeRule.onNodeWithText("Lab-5").performTextReplacement("Lab-6")
         assertEquals("Lab-6", candidate.value)
-        composeRule.onNodeWithTag("retake").performScrollTo().performClick()
+        composeRule.onNodeWithTag("ocr_result_list").performScrollToIndex(4)
+        composeRule.onNodeWithTag("retake").performClick()
         composeRule.onNodeWithTag("use_ocr_result").performScrollTo().performClick()
         assertTrue(retake)
         assertTrue(continued)

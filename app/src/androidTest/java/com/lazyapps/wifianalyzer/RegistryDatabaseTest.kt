@@ -4,6 +4,8 @@ import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.lazyapps.wifianalyzer.data.registry.DeviceRegistryRepository
+import com.lazyapps.wifianalyzer.data.registry.RegistryError
+import com.lazyapps.wifianalyzer.data.registry.RegistryValidationException
 import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
 import com.lazyapps.wifianalyzer.data.registry.WorkspaceRepository
 import com.lazyapps.wifianalyzer.domain.DeviceBssidInput
@@ -65,26 +67,30 @@ class RegistryDatabaseTest {
     @Test fun normalizedBssidIsUniqueAcrossDevices() = runBlocking {
         repository.save(input("AP-1", "aa-bb-cc-dd-ee-06"))
         val error = runCatching { repository.save(input("AP-2", "AABBCCDDEE06")) }.exceptionOrNull()
-        assertTrue(error?.message?.contains("別の機器") == true)
+        assertEquals(RegistryError.BSSID_ALREADY_REGISTERED, (error as RegistryValidationException).error)
     }
 
     @Test fun normalizedGroupNameIsUnique() = runBlocking {
         repository.createGroup("Ｏｆｆｉｃｅ")
         val error = runCatching { repository.createGroup(" office ") }.exceptionOrNull()
-        assertTrue(error?.message?.contains("同名") == true)
+        assertEquals(RegistryError.DUPLICATE_GROUP, (error as RegistryValidationException).error)
     }
 
     @Test fun groupNameValidationAndWorkspaceIsolation() = runBlocking {
         val firstWorkspace = workspaceRepository.snapshot.first().selectedId
         repository.createGroup(firstWorkspace, "Ｏｆｆｉｃｅ")
-        assertTrue(runCatching { repository.createGroup(firstWorkspace, " office ") }.exceptionOrNull()?.message?.contains("同名") == true)
-        assertTrue(runCatching { repository.createGroup(firstWorkspace, " ") }.exceptionOrNull()?.message?.contains("入力") == true)
-        assertTrue(runCatching { repository.createGroup(firstWorkspace, "a".repeat(51)) }.exceptionOrNull()?.message?.contains("50") == true)
+        assertEquals(RegistryError.DUPLICATE_GROUP, (runCatching { repository.createGroup(firstWorkspace, " office ") }.exceptionOrNull() as RegistryValidationException).error)
+        assertEquals(RegistryError.GROUP_NAME_REQUIRED, (runCatching { repository.createGroup(firstWorkspace, " ") }.exceptionOrNull() as RegistryValidationException).error)
+        assertEquals(RegistryError.GROUP_NAME_TOO_LONG, (runCatching { repository.createGroup(firstWorkspace, "a".repeat(51)) }.exceptionOrNull() as RegistryValidationException).error)
 
         val secondWorkspace = workspaceRepository.create("別ワークスペース")
         repository.createGroup(secondWorkspace, "office")
         workspaceRepository.delete(firstWorkspace)
-        assertTrue(runCatching { repository.createGroup(firstWorkspace, "削除後") }.exceptionOrNull()?.message?.contains("削除") == true)
+        assertEquals(
+            RegistryError.WORKSPACE_NOT_FOUND,
+            (runCatching { repository.createGroup(firstWorkspace, "削除後") }
+                .exceptionOrNull() as RegistryValidationException).error,
+        )
     }
 
     private fun input(name: String, vararg bssids: String) = DeviceInput(

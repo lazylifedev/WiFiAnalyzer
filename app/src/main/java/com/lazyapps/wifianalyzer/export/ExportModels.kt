@@ -3,9 +3,11 @@ package com.lazyapps.wifianalyzer.export
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
 
-enum class ExportType(val filePart: String, val label: String) {
-    DEVICES("Devices", "登録機器CSV"), BSSIDS("BSSID", "BSSID CSV"), PHOTOS("Photos", "写真一覧CSV"), REPORT("Report", "簡易レポート")
+enum class ExportType(val filePart: String) {
+    DEVICES("Devices"), BSSIDS("BSSID"), PHOTOS("Photos"), REPORT("Report")
 }
 enum class ExportScope { CURRENT_WORKSPACE, ALL_WORKSPACES }
 enum class ReportPhotoMode { NONE, PRIMARY, ALL }
@@ -46,6 +48,7 @@ data class ExportDataset(val type: ExportType, val rows: List<ExportRow>, val co
 object ExportFormat {
     private val dateTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
     fun dateTime(epochMillis: Long?): String? = epochMillis?.let { dateTime.format(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault())) }
+    fun dateTime(epochMillis: Long?, locale: Locale): String? = epochMillis?.let { DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withLocale(locale).format(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault())) }
     fun fileStamp(epochMillis: Long) = DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmm").format(Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()))
     fun safeFilePart(value: String) = value.replace(Regex("[\\\\/:*?\"<>|\\p{Cntrl}]"), "_").take(50).ifBlank { "Workspace" }
 }

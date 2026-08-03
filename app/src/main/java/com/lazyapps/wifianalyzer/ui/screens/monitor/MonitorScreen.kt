@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -62,6 +63,7 @@ import com.lazyapps.wifianalyzer.ui.components.ScanStatusCard
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
 import com.lazyapps.wifianalyzer.ui.components.RefreshProgress
 import com.lazyapps.wifianalyzer.ui.components.localizedLabel
+import com.lazyapps.wifianalyzer.ui.components.localizedSsid
 import com.lazyapps.wifianalyzer.ui.scan.ScanUiState
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 import com.lazyapps.wifianalyzer.ui.theme.ThemeMode
@@ -141,7 +143,7 @@ private fun SignalSummary(accessPoint: WifiAccessPoint, detected: Boolean, histo
     val progress = ((accessPoint.rssi + 100) / 55f).coerceIn(0f, 1f)
     Card(modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
         Column(Modifier.fillMaxWidth().padding(AppSpacing.large), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(AppSpacing.medium)) {
-            Text(accessPoint.ssid, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+            Text(accessPoint.ssid.localizedSsid(), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
             Text(accessPoint.bssid, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(if (detected) stringResource(R.string.monitor_status) else stringResource(R.string.monitor_not_detected), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Box(contentAlignment = Alignment.Center, modifier = Modifier.size(190.dp)) {
@@ -224,9 +226,22 @@ internal fun SignalChart(history: List<SignalSample>, selectedRangeMillis: Long 
                 Text(stringResource(R.string.signal_history), style = MaterialTheme.typography.titleMedium)
                 Text(stringResource(R.string.dbm_axis), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                maxItemsInEachRow = 2,
+                horizontalArrangement = Arrangement.spacedBy(AppSpacing.small),
+                verticalArrangement = Arrangement.spacedBy(AppSpacing.small),
+            ) {
                 HistoryRange.entries.forEach { item ->
-                    FilterChip(selected = range == item, onClick = { onRangeChange(item.millis); zoom = 1f; panFraction = 0f; selected = null }, label = { Text(stringResource(item.labelRes)) })
+                    val fullLabel = stringResource(item.labelRes)
+                    FilterChip(
+                        selected = range == item,
+                        onClick = { onRangeChange(item.millis); zoom = 1f; panFraction = 0f; selected = null },
+                        label = { Text(fullLabel, maxLines = 1) },
+                        modifier = Modifier
+                            .weight(1f)
+                            .semantics { contentDescription = fullLabel },
+                    )
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

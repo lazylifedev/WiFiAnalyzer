@@ -9,6 +9,7 @@ import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.Locale
 import kotlin.math.pow
 
 class ExportRepository(private val context: Context, database: WifiAnalyzerDatabase) {
@@ -34,7 +35,7 @@ class ExportRepository(private val context: Context, database: WifiAnalyzerDatab
         ExportDataset(type, rows, ExportCounts(allDevices.size, bssids.size, photos.size), if (target.scope == ExportScope.ALL_WORKSPACES) "All" else workspaces.firstOrNull()?.name.orEmpty(), estimate)
     }
 
-    suspend fun reportDevices(target: ExportTarget, unit: DistanceUnitPreference, mode: ReportPhotoMode): Pair<String, List<ReportDevice>> = withContext(Dispatchers.IO) {
+    suspend fun reportDevices(target: ExportTarget, unit: DistanceUnitPreference, mode: ReportPhotoMode, locale: Locale, detectedLabel: String, notDetectedLabel: String, allWorkspacesLabel: String): Pair<String, List<ReportDevice>> = withContext(Dispatchers.IO) {
         val workspaces = dao.getWorkspacesOnce().let { if (target.scope == ExportScope.ALL_WORKSPACES) it else it.filter { w -> w.id == target.workspaceId } }
         val ids = workspaces.map { it.id }.toSet(); val names = workspaces.associate { it.id to it.name }; val groups = dao.getAllGroups().associateBy { it.id }
         val devices = dao.getAllDevices().filter { it.workspaceId in ids }.filterTarget(target)
@@ -42,12 +43,12 @@ class ExportRepository(private val context: Context, database: WifiAnalyzerDatab
         var remainingPhotoBytes = MAX_REPORT_PHOTO_BYTES
         val rows = devices.map { d ->
             val selectedPhotos = when (mode) { ReportPhotoMode.NONE -> emptyList(); ReportPhotoMode.PRIMARY -> photos[d.id].orEmpty().filter { it.isPrimary }.take(1); ReportPhotoMode.ALL -> photos[d.id].orEmpty() }
-            ReportDevice(names[d.workspaceId].orEmpty(), groups[d.groupId]?.name, d.displayName, d.manufacturer, d.model, d.serialNumber, d.ssid, bssids[d.id].orEmpty().map { it.bssid }, d.location, d.notes, detected(d), rssi(d), distance(d.lastSeenRssi, unit), ExportFormat.dateTime(d.lastSeenAt), selectedPhotos.map { photo ->
+            ReportDevice(names[d.workspaceId].orEmpty(), groups[d.groupId]?.name, d.displayName, d.manufacturer, d.model, d.serialNumber, d.ssid, bssids[d.id].orEmpty().map { it.bssid }, d.location, d.notes, if (isDetected(d)) detectedLabel else notDetectedLabel, rssi(d), distance(d.lastSeenRssi, unit, locale), ExportFormat.dateTime(d.lastSeenAt, locale), selectedPhotos.map { photo ->
                 val file = photoFile(photo); val uri = if (file.isFile && file.length() <= remainingPhotoBytes && file.length() <= MAX_SINGLE_PHOTO_BYTES) photoDataUri(file, photo.mimeType).also { if (it != null) remainingPhotoBytes -= file.length() } else null
                 ReportPhoto(photo.caption, uri)
             })
         }
-        (if (target.scope == ExportScope.ALL_WORKSPACES) "すべてのワークスペース" else workspaces.firstOrNull()?.name.orEmpty()) to rows
+        (if (target.scope == ExportScope.ALL_WORKSPACES) allWorkspacesLabel else workspaces.firstOrNull()?.name.orEmpty()) to rows
     }
 
     private fun List<RegisteredWifiDeviceEntity>.filterTarget(target: ExportTarget) = filter { d ->
@@ -57,9 +58,10 @@ class ExportRepository(private val context: Context, database: WifiAnalyzerDatab
     private fun deviceRow(d: RegisteredWifiDeviceEntity, workspace: String, group: String?, bssids: List<String>, photos: List<DevicePhotoEntity>, unit: DistanceUnitPreference) = ExportRow(base(d, workspace, group).apply { put("allBssids", bssids.joinToString("; ")); put("estimatedDistance", distance(d.lastSeenRssi, unit)); put("photoCount", photos.size.toString()); put("primaryPhotoCaption", photos.firstOrNull { it.isPrimary }?.caption) })
     private fun bssidRow(d: RegisteredWifiDeviceEntity, bssid: String, band: String, label: String, workspace: String, group: String?, unit: DistanceUnitPreference) = ExportRow(base(d, workspace, group).apply { put("bssid", bssid); put("band", band); put("label", label); put("estimatedDistance", distance(d.lastSeenRssi, unit)); put("channel", ""); put("frequency", ""); put("channelWidth", ""); put("security", "") })
     private fun photoRow(d: RegisteredWifiDeviceEntity, p: DevicePhotoEntity, workspace: String, group: String?) = ExportRow(base(d, workspace, group).apply { put("photoIndex", (p.sortOrder + 1).toString()); put("caption", p.caption); put("isPrimary", if (p.isPrimary) "はい" else "いいえ"); put("mimeType", p.mimeType); put("width", p.width.toString()); put("height", p.height.toString()); put("fileSize", p.fileSize.toString()) })
-    private fun detected(d: RegisteredWifiDeviceEntity) = if (d.lastSeenAt != null && System.currentTimeMillis() - d.lastSeenAt <= 45_000) "検出中" else "未検出"
+    private fun isDetected(d: RegisteredWifiDeviceEntity) = d.lastSeenAt != null && System.currentTimeMillis() - d.lastSeenAt <= 45_000
+    private fun detected(d: RegisteredWifiDeviceEntity) = if (isDetected(d)) "検出中" else "未検出"
     private fun rssi(d: RegisteredWifiDeviceEntity) = d.lastSeenRssi?.let { "$it dBm" }
-    private fun distance(rssi: Int?, unit: DistanceUnitPreference): String? = rssi?.let { value -> val meters = 10.0.pow((-59 - value) / 20.0); if (unit == DistanceUnitPreference.FEET) "%.2f ft".format(java.util.Locale.ROOT, meters * 3.28084) else "%.2f m".format(java.util.Locale.ROOT, meters) }
+    private fun distance(rssi: Int?, unit: DistanceUnitPreference, locale: Locale = Locale.ROOT): String? = rssi?.let { value -> val meters = 10.0.pow((-59 - value) / 20.0); if (unit == DistanceUnitPreference.FEET) "%.2f ft".format(locale, meters * 3.28084) else "%.2f m".format(locale, meters) }
     private fun photoFile(photo: DevicePhotoEntity) = File(context.filesDir, "devices/${photo.workspaceId}/${photo.deviceId}/photos/${photo.fileName}")
     private fun photoDataUri(file: File, mimeType: String): String? = runCatching { "data:$mimeType;base64," + Base64.encodeToString(file.readBytes(), Base64.NO_WRAP) }.getOrNull()
     private companion object { const val MAX_SINGLE_PHOTO_BYTES = 4L * 1024 * 1024; const val MAX_REPORT_PHOTO_BYTES = 12L * 1024 * 1024 }

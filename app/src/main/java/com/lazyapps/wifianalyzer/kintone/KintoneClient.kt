@@ -231,14 +231,14 @@ object KintoneFieldSchemaV1 {
         if ("削除済" !in fields.getValue("削除状態").options) mismatch(KintoneErrorCode.KINTONE_SCHEMA_MISMATCH)
 
         val warnings = buildList {
-            if (uuid.unique == null) add("APIから重複禁止設定を確認できませんでした。テンプレートどおりの設定を確認してください")
-            if (fields.getValue("アプリ更新日時").defaultNowValue != true) add("アプリ更新日時の初期値が現在日時ではありません")
+            if (uuid.unique == null) add("UNIQUE_SETTING_UNVERIFIED")
+            if (fields.getValue("アプリ更新日時").defaultNowValue != true) add("UPDATED_AT_DEFAULT_INVALID")
             val photo = fields[PHOTO_CODE]
-            if (photo == null) add("写真同期は利用できません")
+            if (photo == null) add("PHOTO_SYNC_UNAVAILABLE")
             else if (photo.code != PHOTO_CODE || photo.type != "FILE") mismatch(KintoneErrorCode.KINTONE_FIELD_TYPE_MISMATCH)
         }
         val hasUserFields = fields.keys.any { it !in requiredFields && it != PHOTO_CODE && it !in systemFieldCodes }
-        val information = if (hasUserFields) listOf("連携対象外の追加フィールドがあります。同期には影響しません。") else emptyList()
+        val information = if (hasUserFields) listOf("EXTRA_FIELDS_IGNORED") else emptyList()
         return KintoneVerification(fields.mapValues { it.value.type }, warnings, information)
     }
 

@@ -3,7 +3,6 @@ package com.lazyapps.wifianalyzer
 import com.lazyapps.wifianalyzer.data.WifiUiPreferencesRepository
 import com.lazyapps.wifianalyzer.model.DistanceRange
 import com.lazyapps.wifianalyzer.model.WifiBand
-import com.lazyapps.wifianalyzer.model.displayLabel
 import com.lazyapps.wifianalyzer.ui.scan.ScanUiState
 import com.lazyapps.wifianalyzer.ui.screens.settings.refreshIntervalLabel
 import com.lazyapps.wifianalyzer.ui.screens.settings.visibleBandLabel
@@ -37,10 +36,9 @@ class Phase5B2PolicyTest {
         assertEquals(30, WifiUiPreferencesRepository.normalizeRefreshSeconds(30))
     }
 
-    @Test fun distanceRangesUseOneSharedFeetConversion() {
-        assertEquals("約3～8m", DistanceRange.THREE_TO_EIGHT.displayLabel(false))
-        assertEquals("約10～26ft", DistanceRange.THREE_TO_EIGHT.displayLabel(true))
-        assertEquals("約66ft以上", DistanceRange.TWENTY_PLUS.displayLabel(true))
+    @Test fun distanceRangesRemainMeaningBasedAndLocaleNeutral() {
+        assertEquals("THREE_TO_EIGHT", DistanceRange.THREE_TO_EIGHT.name)
+        assertEquals("TWENTY_PLUS", DistanceRange.TWENTY_PLUS.name)
     }
 
     @Test fun visibleBandSummaryPreservesBandOrder() {

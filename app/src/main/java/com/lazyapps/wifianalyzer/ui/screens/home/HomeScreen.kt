@@ -53,6 +53,7 @@ import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
 import com.lazyapps.wifianalyzer.ui.components.RegisteredBadge
 import com.lazyapps.wifianalyzer.ui.components.RefreshProgress
 import com.lazyapps.wifianalyzer.ui.components.localizedLabel
+import com.lazyapps.wifianalyzer.ui.components.localizedSsid
 import com.lazyapps.wifianalyzer.ui.scan.ScanUiState
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 import com.lazyapps.wifianalyzer.ui.theme.ThemeMode
@@ -147,7 +148,8 @@ private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Un
         SignalQuality.WEAK -> MaterialTheme.colorScheme.error
     }
     val registeredDescription = if (accessPoint.isRegistered) stringResource(R.string.registered_description_prefix) else ""
-    val rowDescription = stringResource(R.string.access_point_description, registeredDescription, accessPoint.ssid, accessPoint.rssi)
+    val displaySsid = accessPoint.ssid.localizedSsid()
+    val rowDescription = stringResource(R.string.access_point_description, registeredDescription, displaySsid, accessPoint.rssi)
     Card(
         modifier = modifier.fillMaxWidth()
             .testTag("home_access_point_${accessPoint.bssid}")
@@ -163,7 +165,7 @@ private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Un
         ) {
             Icon(Icons.Rounded.Wifi, contentDescription = null, tint = signalColor)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(accessPoint.ssid, modifier = Modifier.testTag("home_ssid_${accessPoint.bssid}"), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+                Text(displaySsid, modifier = Modifier.testTag("home_ssid_${accessPoint.bssid}"), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
                 if (accessPoint.isRegistered) RegisteredBadge(Modifier.testTag("home_registered_${accessPoint.bssid}").clearAndSetSemantics { })
                 accessPoint.registeredDeviceName?.let { name ->
                     Text(stringResource(R.string.saved_name_format, name), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
@@ -176,7 +178,7 @@ private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Un
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    "${accessPoint.frequencyMhz} MHz · ${accessPoint.channelWidthMhz} MHz · ${accessPoint.wifiStandard.label}",
+                    "${accessPoint.frequencyMhz} MHz · ${accessPoint.channelWidthMhz} MHz · ${accessPoint.wifiStandard.localizedLabel()}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

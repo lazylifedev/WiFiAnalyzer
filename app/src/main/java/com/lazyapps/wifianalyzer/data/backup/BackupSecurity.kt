@@ -43,7 +43,7 @@ fun uniqueRestoredName(original: String, existingNormalized: Set<String>): Strin
     if (normalized(original) !in existingNormalized) return original
     var index = 1
     while (true) {
-        val suffix = if (index == 1) " (復元)" else " (復元 $index)"
+        val suffix = " (${index + 1})"
         val candidate = original + suffix
         if (normalized(candidate) !in existingNormalized) return candidate
         index++

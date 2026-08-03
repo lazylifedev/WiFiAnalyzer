@@ -48,7 +48,8 @@ object CsvEncodingDetector {
     }
 }
 
-class CsvImportException(message: String, val row: Int? = null) : IllegalArgumentException(message)
+enum class CsvImportError { FILE_TOO_LARGE, FILE_UNREADABLE, EMPTY_FILE, COLUMN_COUNT_MISMATCH, OUTPUT_UNAVAILABLE, ROW_TOO_LONG, CELL_TOO_LONG, TOO_MANY_COLUMNS, TOO_MANY_ROWS, INVALID_AFTER_QUOTE, INVALID_QUOTE, UNCLOSED_QUOTE }
+class CsvImportException(val error: CsvImportError, val row: Int? = null) : IllegalArgumentException(error.name)
 data class CsvRecord(val rowNumber: Int, val cells: List<String>)
 
 /** RFC 4180 compatible streaming parser. CRLF, LF, and CR are accepted. */
@@ -69,17 +70,17 @@ class CsvImportParser {
 
         fun append(ch: Char) {
             rowChars++
-            if (rowChars > ImportLimits.MAX_ROW_CHARS) throw CsvImportException("1行の上限を超えています", row)
-            if (cell.length >= ImportLimits.MAX_CELL_CHARS) throw CsvImportException("セルの上限を超えています", row)
+            if (rowChars > ImportLimits.MAX_ROW_CHARS) throw CsvImportException(CsvImportError.ROW_TOO_LONG, row)
+            if (cell.length >= ImportLimits.MAX_CELL_CHARS) throw CsvImportException(CsvImportError.CELL_TOO_LONG, row)
             cell.append(ch)
         }
         fun finishCell() {
-            if (cells.size >= ImportLimits.MAX_COLUMNS) throw CsvImportException("列数の上限を超えています", row)
+            if (cells.size >= ImportLimits.MAX_COLUMNS) throw CsvImportException(CsvImportError.TOO_MANY_COLUMNS, row)
             cells += cell.toString(); cell.setLength(0); atCellStart = true; afterQuote = false
         }
         fun finishRow() {
             finishCell()
-            if (row > ImportLimits.MAX_ROWS + 1) throw CsvImportException("総行数の上限を超えています", row)
+            if (row > ImportLimits.MAX_ROWS + 1) throw CsvImportException(CsvImportError.TOO_MANY_ROWS, row)
             onRecord(CsvRecord(row, cells.toList()))
             cells.clear(); row++; rowChars = 0
         }
@@ -99,10 +100,10 @@ class CsvImportParser {
                 continue
             }
             if (afterQuote && ch != ',' && ch != '\r' && ch != '\n') {
-                throw CsvImportException("閉じ引用符の後に不正な文字があります", row)
+                throw CsvImportException(CsvImportError.INVALID_AFTER_QUOTE, row)
             }
             when (ch) {
-                '"' -> if (atCellStart) { inQuotes = true; atCellStart = false } else throw CsvImportException("引用符の位置が不正です", row)
+                '"' -> if (atCellStart) { inQuotes = true; atCellStart = false } else throw CsvImportException(CsvImportError.INVALID_QUOTE, row)
                 ',' -> finishCell()
                 '\r', '\n' -> {
                     if (ch == '\r') { val next = reader.read(); if (next >= 0 && next != '\n'.code) reader.unread(next) }
@@ -111,7 +112,7 @@ class CsvImportParser {
                 else -> { append(ch); atCellStart = false }
             }
         }
-        if (inQuotes) throw CsvImportException("引用符が閉じられていません", row)
+        if (inQuotes) throw CsvImportException(CsvImportError.UNCLOSED_QUOTE, row)
         if (cell.isNotEmpty() || cells.isNotEmpty() || !atCellStart) finishRow()
     }
 
@@ -119,11 +120,9 @@ class CsvImportParser {
         buildList { parse(input, encoding, hasBom, ::add) }
 }
 
-enum class ImportField(val label: String) {
-    UNUSED("未使用"), WORKSPACE("ワークスペース"), GROUP("グループ"), DEVICE_NAME("機器名"),
-    MANUFACTURER("メーカー"), MODEL("型番"), SERIAL("シリアル番号"), SSID("SSID"),
-    PRIMARY_BSSID("主BSSID"), ALL_BSSIDS("全BSSID"), LOCATION("設置場所"), NOTES("メモ"),
-    CREATED_AT("登録日時"), UPDATED_AT("更新日時")
+enum class ImportField {
+    UNUSED, WORKSPACE, GROUP, DEVICE_NAME, MANUFACTURER, MODEL, SERIAL, SSID,
+    PRIMARY_BSSID, ALL_BSSIDS, LOCATION, NOTES, CREATED_AT, UPDATED_AT,
 }
 
 object CsvColumnMapper {
@@ -148,8 +147,8 @@ object CsvColumnMapper {
         return headers.map { aliases[key(it)]?.takeIf(used::add) ?: ImportField.UNUSED }
     }
     fun validate(mapping: List<ImportField>): List<String> = buildList {
-        if (ImportField.DEVICE_NAME !in mapping) add("機器名の列を割り当ててください")
-        mapping.filter { it != ImportField.UNUSED }.groupingBy { it }.eachCount().filterValues { it > 1 }.keys.forEach { add("${it.label}が重複しています") }
+        if (ImportField.DEVICE_NAME !in mapping) add("MISSING_DEVICE_NAME_COLUMN")
+        mapping.filter { it != ImportField.UNUSED }.groupingBy { it }.eachCount().filterValues { it > 1 }.keys.forEach { add("DUPLICATE_FIELD:${it.name}") }
     }
 }
 
@@ -182,16 +181,16 @@ object ImportValidator {
         val values = ImportField.entries.associateWith { field -> mapping.indexOf(field).takeIf { it >= 0 }?.let { record.cells.getOrElse(it) { "" } }.orEmpty() }
         val errors = mutableListOf<String>(); val warnings = mutableListOf<String>()
         val name = values.getValue(ImportField.DEVICE_NAME).trim()
-        if (name.isBlank()) errors += "機器名が空欄です"
-        if (name.length > 100) errors += "機器名が長すぎます"
+        if (name.isBlank()) errors += "DEVICE_NAME_REQUIRED"
+        if (name.length > 100) errors += "DEVICE_NAME_TOO_LONG"
         val rawBssids = buildList {
             values.getValue(ImportField.PRIMARY_BSSID).trim().takeIf(String::isNotEmpty)?.let(::add)
             values.getValue(ImportField.ALL_BSSIDS).split(';').map(String::trim).filter(String::isNotEmpty).forEach(::add)
         }
-        if (rawBssids.size > ImportLimits.MAX_BSSIDS) errors += "BSSID数の上限を超えています"
-        val normalized = rawBssids.map { raw -> BssidFormat.normalize(raw) ?: run { errors += "不正なBSSIDです"; raw } }.distinct()
+        if (rawBssids.size > ImportLimits.MAX_BSSIDS) errors += "TOO_MANY_BSSIDS"
+        val normalized = rawBssids.map { raw -> BssidFormat.normalize(raw) ?: run { errors += "INVALID_BSSID"; raw } }.distinct()
         val primary = values.getValue(ImportField.PRIMARY_BSSID).trim().let { if (it.isBlank()) normalized.firstOrNull().orEmpty() else BssidFormat.normalize(it).orEmpty() }
-        val created = parseDate(values.getValue(ImportField.CREATED_AT)).also { if (values.getValue(ImportField.CREATED_AT).isNotBlank() && it == null) warnings += "登録日時を現在日時へ補正しました" } ?: now
+        val created = parseDate(values.getValue(ImportField.CREATED_AT)).also { if (values.getValue(ImportField.CREATED_AT).isNotBlank() && it == null) warnings += "CREATED_AT_CORRECTED" } ?: now
         return ImportedDeviceRow(record.rowNumber, values.getValue(ImportField.WORKSPACE).trim(), values.getValue(ImportField.GROUP).trim(), name,
             values.getValue(ImportField.MANUFACTURER).trim(), values.getValue(ImportField.MODEL).trim(), values.getValue(ImportField.SERIAL).trim(), values.getValue(ImportField.SSID).trim(),
             primary, normalized.filter { BssidFormat.isValid(it) }.let { if (primary.isNotBlank() && primary !in it) listOf(primary) + it else it },

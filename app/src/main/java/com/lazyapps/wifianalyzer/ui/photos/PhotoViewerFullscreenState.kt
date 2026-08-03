@@ -6,8 +6,6 @@ internal data class PhotoViewerFullscreenState(
     val chromeVisible: Boolean = true,
 ) {
     val applySystemBarInsets: Boolean get() = !immersive
-    val fullscreenActionDescription: String get() = if (immersive) "全画面を終了" else "全画面"
-
     fun toggleFullscreen(): PhotoViewerFullscreenState = copy(
         immersive = !immersive,
         chromeVisible = immersive,

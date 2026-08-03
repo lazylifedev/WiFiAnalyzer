@@ -50,9 +50,9 @@ class ImportViewModel(application: Application) : AndroidViewModel(application) 
             val name = resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null } ?: "import.csv"
             val data = resolver.openInputStream(uri)?.use { input ->
                 val out = ByteArrayOutputStream(); val buffer = ByteArray(32 * 1024); var total = 0L
-                while (true) { val read = input.read(buffer); if (read < 0) break; total += read; if (total > ImportLimits.MAX_FILE_BYTES) error("ファイルサイズの上限50MBを超えています"); out.write(buffer, 0, read) }
+                while (true) { val read = input.read(buffer); if (read < 0) break; total += read; if (total > ImportLimits.MAX_FILE_BYTES) throw CsvImportException(CsvImportError.FILE_TOO_LARGE); out.write(buffer, 0, read) }
                 out.toByteArray()
-            } ?: error("CSVを開けません")
+            } ?: throw CsvImportException(CsvImportError.FILE_UNREADABLE)
             Triple(name, data, CsvEncodingDetector.detect(data))
         } }.onSuccess { (name, data, detection) -> bytes = data; parse(name, detection.encoding, detection.hasBom) }
             .onFailure { mutable.value = mutable.value.copy(busy = false, error = userMessage(it)) }
@@ -61,10 +61,10 @@ class ImportViewModel(application: Application) : AndroidViewModel(application) 
     fun setEncoding(encoding: CsvEncoding) { val name = mutable.value.fileName; parse(name, encoding, encoding == CsvEncoding.UTF8 && mutable.value.hasBom) }
     private fun parse(name: String, encoding: CsvEncoding, hasBom: Boolean) { viewModelScope.launch {
         mutable.value = mutable.value.copy(busy = true, error = null)
-        runCatching { withContext(Dispatchers.Default) { CsvImportParser().readAll(ByteArrayInputStream(bytes ?: error("CSVがありません")), encoding, hasBom) } }
+        runCatching { withContext(Dispatchers.Default) { CsvImportParser().readAll(ByteArrayInputStream(bytes ?: throw CsvImportException(CsvImportError.FILE_UNREADABLE)), encoding, hasBom) } }
             .onSuccess { records ->
-                require(records.isNotEmpty()) { "CSVが空です" }; val width = records.first().cells.size
-                val mismatch = records.drop(1).firstOrNull { it.cells.size != width }; require(mismatch == null) { "${mismatch?.rowNumber}行目の列数が一致しません" }
+                if (records.isEmpty()) throw CsvImportException(CsvImportError.EMPTY_FILE); val width = records.first().cells.size
+                val mismatch = records.drop(1).firstOrNull { it.cells.size != width }; if (mismatch != null) throw CsvImportException(CsvImportError.COLUMN_COUNT_MISMATCH, mismatch.rowNumber)
                 parsedRows = records.drop(1); val mapping = preferences.loadMapping(records.first().cells) ?: CsvColumnMapper.autoMap(records.first().cells)
                 mutable.value = mutable.value.copy(step = ImportStep.ENCODING, fileName = name, encoding = encoding, hasBom = hasBom, headers = records.first().cells,
                     samples = records.drop(1).take(3).map { it.cells }, mapping = mapping, preview = null, result = null, busy = false)
@@ -91,7 +91,7 @@ class ImportViewModel(application: Application) : AndroidViewModel(application) 
         runCatching { repository.execute(preview, settings) }.onSuccess { result -> preferences.save(mutable.value.fileName, settings, result, true); mutable.value = mutable.value.copy(step = ImportStep.RESULT, result = result, busy = false) }
             .onFailure { preferences.save(mutable.value.fileName, settings, null, false); mutable.value = mutable.value.copy(step = ImportStep.CONFIRM, busy = false, error = userMessage(it)) }
     } }
-    fun cancel() { job?.cancel(); mutable.value = mutable.value.copy(step = if (mutable.value.preview == null) ImportStep.SELECT else ImportStep.PREVIEW, busy = false, error = "処理をキャンセルしました") }
+    fun cancel() { job?.cancel(); mutable.value = mutable.value.copy(step = if (mutable.value.preview == null) ImportStep.SELECT else ImportStep.PREVIEW, busy = false, error = getApplication<Application>().getString(com.lazyapps.wifianalyzer.R.string.operation_cancelled)) }
     fun writeErrorCsv(uri: Uri) { viewModelScope.launch {
         runCatching { withContext(Dispatchers.IO) {
             getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { stream ->
@@ -102,7 +102,7 @@ class ImportViewModel(application: Application) : AndroidViewModel(application) 
                         writer.write(values.joinToString(",") { value -> "\"${value.replace("\"", "\"\"")}\"" } + "\r\n")
                     }
                 }
-            } ?: error("保存先を開けません")
+            } ?: throw CsvImportException(CsvImportError.OUTPUT_UNAVAILABLE)
         } }.onFailure { mutable.value = mutable.value.copy(error = userMessage(it)) }
     } }
     private fun userMessage(error: Throwable): String =

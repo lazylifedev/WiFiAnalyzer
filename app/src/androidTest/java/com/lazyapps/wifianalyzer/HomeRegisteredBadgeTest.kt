@@ -12,6 +12,7 @@ import com.lazyapps.wifianalyzer.ui.screens.home.HomeScreen
 import com.lazyapps.wifianalyzer.ui.theme.WifiAnalyzerTheme
 import org.junit.Rule
 import org.junit.Test
+import androidx.test.platform.app.InstrumentationRegistry
 
 class HomeRegisteredBadgeTest {
     @get:Rule val rule = createComposeRule()
@@ -35,8 +36,9 @@ class HomeRegisteredBadgeTest {
         val ssid = rule.onNodeWithTag("home_ssid_$bssid", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val badge = rule.onNodeWithTag("home_registered_$bssid", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         assert(badge.top >= ssid.bottom)
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
         rule.onNodeWithTag("home_access_point_$bssid").assertContentDescriptionEquals(
-            "登録済み、SSID ${accessPoint.ssid}、信号強度 -39 デシベルミリワット",
+            context.getString(R.string.registered_description_prefix) + context.getString(R.string.access_point_description, "", accessPoint.ssid, -39),
         )
     }
 }

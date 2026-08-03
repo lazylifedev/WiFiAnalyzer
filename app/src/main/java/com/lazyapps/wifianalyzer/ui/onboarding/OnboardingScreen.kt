@@ -36,15 +36,18 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.annotation.StringRes
+import androidx.compose.ui.res.stringResource
+import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 
-data class OnboardingPage(val title: String, val body: String, val icon: ImageVector)
+data class OnboardingPage(@StringRes val titleRes: Int, @StringRes val bodyRes: Int, val icon: ImageVector)
 
 val onboardingPages = listOf(
-    OnboardingPage("Wi-Fiの状態を見える化", "周辺ネットワーク、チャネルの混雑、電波の強さを確認できます。", Icons.Rounded.Wifi),
-    OnboardingPage("機器を登録して管理", "BSSIDで照合し、写真、グループ、メモと一緒に管理できます。", Icons.Rounded.Devices),
-    OnboardingPage("データを安全に保管", "ZIPバックアップ、CSV入出力、PDF・印刷を利用できます。", Icons.Rounded.Backup),
-    OnboardingPage("端末内で大切に扱います", "Wi-Fi情報と登録データは端末内で処理・保存します。共有やバックアップを選んだときだけ外部へ出ます。", Icons.Rounded.PrivacyTip),
+    OnboardingPage(R.string.onboarding_wifi_title, R.string.onboarding_wifi_body, Icons.Rounded.Wifi),
+    OnboardingPage(R.string.onboarding_devices_title, R.string.onboarding_devices_body, Icons.Rounded.Devices),
+    OnboardingPage(R.string.onboarding_data_title, R.string.onboarding_data_body, Icons.Rounded.Backup),
+    OnboardingPage(R.string.onboarding_privacy_title, R.string.onboarding_privacy_body, Icons.Rounded.PrivacyTip),
 )
 
 @Composable
@@ -56,26 +59,26 @@ fun OnboardingScreen(onComplete: () -> Unit) {
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onComplete, modifier = Modifier.testTag("onboarding_skip")) { Text("スキップ", color = MaterialTheme.colorScheme.primary) }
+            TextButton(onClick = onComplete, modifier = Modifier.testTag("onboarding_skip")) { Text(stringResource(R.string.skip), color = MaterialTheme.colorScheme.primary) }
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(AppSpacing.large)) {
             Icon(item.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Text(item.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
-            Text(item.body, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(item.titleRes), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+            Text(stringResource(item.bodyRes), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
                 "${page + 1} / ${onboardingPages.size}",
-                modifier = Modifier.semantics { contentDescription = "${onboardingPages.size}ページ中${page + 1}ページ" }.testTag("onboarding_indicator"),
+                modifier = Modifier.semantics { contentDescription = "${page + 1} / ${onboardingPages.size}" }.testTag("onboarding_indicator"),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Spacer(Modifier.height(32.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-            if (page > 0) OutlinedButton(onClick = { page-- }, Modifier.weight(1f)) { Text("戻る") }
+            if (page > 0) OutlinedButton(onClick = { page-- }, Modifier.weight(1f)) { Text(stringResource(R.string.back)) }
             Button(
                 onClick = { if (page == onboardingPages.lastIndex) onComplete() else page++ },
                 modifier = Modifier.weight(1f).testTag(if (page == onboardingPages.lastIndex) "onboarding_complete" else "onboarding_next"),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary),
-            ) { Text(if (page == onboardingPages.lastIndex) "利用を開始" else "次へ") }
+            ) { Text(stringResource(if (page == onboardingPages.lastIndex) R.string.onboarding_start else R.string.next)) }
         }
     }
 }

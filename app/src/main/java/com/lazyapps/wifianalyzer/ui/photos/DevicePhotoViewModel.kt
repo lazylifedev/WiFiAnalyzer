@@ -11,6 +11,8 @@ import com.lazyapps.wifianalyzer.domain.DevicePhoto
 import com.lazyapps.wifianalyzer.kintone.KintoneAutoSyncScheduler
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorCategory
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorMapper
+import com.lazyapps.wifianalyzer.R
+import com.lazyapps.wifianalyzer.ui.registry.registryErrorText
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,6 +44,6 @@ class DevicePhotoViewModel(application: Application) : AndroidViewModel(applicat
     fun primary(id: Long) = action { repository.setPrimary(id); autoSync.requestPhotoChange(workspaceId) }
     fun caption(id: Long, value: String) = action { repository.caption(id, value) }
     fun move(id: Long, direction: Int) = action { repository.move(id, direction); autoSync.requestPhotoChange(workspaceId) }
-    private fun action(block: suspend () -> Unit) { if (_state.value.busy) return; _state.value = _state.value.copy(busy = true, error = null); viewModelScope.launch { try { block(); _state.value = _state.value.copy(busy = false) } catch (e: RegistryValidationException) { _state.value = _state.value.copy(busy = false, error = e.message) } catch (e: Exception) { _state.value = _state.value.copy(busy = false, error = message(OperationErrorMapper.classify(e))) } } }
+    private fun action(block: suspend () -> Unit) { if (_state.value.busy) return; _state.value = _state.value.copy(busy = true, error = null); viewModelScope.launch { try { block(); _state.value = _state.value.copy(busy = false) } catch (error: RegistryValidationException) { _state.value = _state.value.copy(busy = false, error = getApplication<Application>().registryErrorText(error)) } catch (e: Exception) { _state.value = _state.value.copy(busy = false, error = message(OperationErrorMapper.classify(e))) } } }
     private fun message(category: OperationErrorCategory) = getApplication<Application>().getString(category.messageRes)
 }

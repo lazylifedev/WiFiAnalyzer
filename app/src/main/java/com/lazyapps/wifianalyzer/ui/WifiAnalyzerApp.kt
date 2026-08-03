@@ -83,6 +83,7 @@ import com.lazyapps.wifianalyzer.billing.BillingViewModel
 import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import com.lazyapps.wifianalyzer.billing.DebugProPreferences
 import com.lazyapps.wifianalyzer.BuildConfig
+import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.debug.DebugDisplayPreferences
 import com.lazyapps.wifianalyzer.debug.DebugLogPanel
 import com.lazyapps.wifianalyzer.debug.DebugLogs
@@ -542,16 +543,16 @@ fun WifiAnalyzerApp(
         if (showPermissionExplanation) {
             AlertDialog(
                 onDismissRequest = { showPermissionExplanation = false },
-                title = { Text("Wi-Fiスキャンの権限") },
-                text = { Text(AppPermissionPolicy.wifiExplanation()) },
+                title = { Text(stringResource(R.string.wifi_scan_permission_title)) },
+                text = { Text(stringResource(AppPermissionPolicy.wifiExplanationRes())) },
                 confirmButton = {
                     Button(onClick = {
                         showPermissionExplanation = false
                         permissionLauncher.launch(AppPermissionPolicy.wifiScanPermissions().toTypedArray())
-                    }) { Text("許可する") }
+                    }) { Text(stringResource(R.string.allow)) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { showPermissionExplanation = false }) { Text("今はしない") }
+                    TextButton(onClick = { showPermissionExplanation = false }) { Text(stringResource(R.string.not_now)) }
                 },
             )
         }
@@ -572,7 +573,7 @@ private fun Context.openPlayStoreRating() {
     }
     val web = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$packageName"))
     runCatching { startActivity(market) }.recoverCatching { startActivity(web) }.onFailure {
-        Toast.makeText(this, "Playストアを開けませんでした。", Toast.LENGTH_LONG).show()
+        Toast.makeText(this, getString(R.string.play_store_unavailable), Toast.LENGTH_LONG).show()
     }
 }
 

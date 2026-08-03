@@ -43,7 +43,10 @@ class ExportRepositoryTest {
     @Test fun photoCsvHasNoPathAndMissingReportPhotoDoesNotFail() = runBlocking {
         val photos = repo.dataset(ExportType.PHOTOS, ExportTarget(ExportScope.CURRENT_WORKSPACE, 1), DistanceUnitPreference.METERS)
         assertEquals(1, photos.rows.size); assertFalse(photos.rows.single().values.keys.any { it.contains("path", true) })
-        val report = repo.reportDevices(ExportTarget(ExportScope.CURRENT_WORKSPACE, 1), DistanceUnitPreference.FEET, ReportPhotoMode.ALL).second.single()
+        val report = repo.reportDevices(
+            ExportTarget(ExportScope.CURRENT_WORKSPACE, 1), DistanceUnitPreference.FEET, ReportPhotoMode.ALL,
+            java.util.Locale.ENGLISH, "Detected", "Not detected", "All workspaces",
+        ).second.single()
         assertNull(report.photos.single().dataUri)
     }
 }

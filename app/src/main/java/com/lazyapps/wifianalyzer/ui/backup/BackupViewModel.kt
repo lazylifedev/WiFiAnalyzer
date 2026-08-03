@@ -10,6 +10,7 @@ import com.lazyapps.wifianalyzer.data.backup.BackupHistory
 import com.lazyapps.wifianalyzer.data.backup.BackupHistoryRepository
 import com.lazyapps.wifianalyzer.data.backup.BackupImportService
 import com.lazyapps.wifianalyzer.data.backup.BackupPreview
+import com.lazyapps.wifianalyzer.data.backup.BackupProgressStage
 import com.lazyapps.wifianalyzer.data.backup.BackupScope
 import com.lazyapps.wifianalyzer.data.backup.RestoreMode
 import com.lazyapps.wifianalyzer.data.backup.RestoreRepository
@@ -61,11 +62,11 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
         val manifest = exporter.export(
             workspaceId?.let { BackupScope.Workspace(it) } ?: BackupScope.All,
             uri,
-        ) { _, current, total ->
+        ) { stage, current, total ->
             mutable.value = mutable.value.copy(
                 operation = OperationState.Running(
                     R.string.operation_backup,
-                    R.string.backup_stage_photos,
+                    stage.messageResource(),
                     if (total > 0) OperationProgress.Count(current.coerceAtMost(total), total) else OperationProgress.Indeterminate,
                     cancellable = true,
                 ),
@@ -78,7 +79,7 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
 
     fun inspect(uri: Uri) = runTask(R.string.operation_restore, cancellable = true) {
         running(R.string.operation_restore, R.string.restore_stage_verify, cancellable = true)
-        val preview = importer.inspect(uri)
+        val preview = importer.inspect(uri) { stage, current, total -> updateProgress(R.string.operation_restore, stage, current, total, true) }
         mutable.value = mutable.value.copy(preview = preview)
         success(R.string.backup_verified)
     }
@@ -87,7 +88,7 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
         val preview = mutable.value.preview ?: return
         runTask(R.string.operation_restore, cancellable = false) {
             running(R.string.operation_restore, R.string.restore_stage_database, cancellable = false)
-            val result = restorer.restore(preview, mode)
+            val result = restorer.restore(preview, mode) { stage, current, total -> updateProgress(R.string.operation_restore, stage, current, total, false) }
             if (mode == RestoreMode.REPLACE) result.workspaceIds.firstOrNull()?.let { workspaces.select(it) }
             importer.discard(preview)
             mutable.value = mutable.value.copy(preview = null, restoredWorkspaceId = result.workspaceIds.firstOrNull())
@@ -134,6 +135,17 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
         )
     }
 
+    private fun updateProgress(title: Int, stage: BackupProgressStage, current: Int, total: Int, cancellable: Boolean) {
+        mutable.value = mutable.value.copy(
+            operation = OperationState.Running(
+                title,
+                stage.messageResource(),
+                if (total > 0) OperationProgress.Count(current.coerceAtMost(total), total) else OperationProgress.Indeterminate,
+                cancellable,
+            ),
+        )
+    }
+
     private fun success(message: Int) {
         mutable.value = mutable.value.copy(
             operation = OperationState.Success(message, nextEventId++),
@@ -149,4 +161,16 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
             error = getApplication<Application>().getString(error.category.messageRes),
         )
     }
+}
+
+private fun BackupProgressStage.messageResource(): Int = when (this) {
+    BackupProgressStage.PREPARING -> R.string.backup_stage_preparing
+    BackupProgressStage.EXPORTING_DATABASE -> R.string.backup_stage_database
+    BackupProgressStage.COPYING_PHOTOS -> R.string.backup_stage_photos
+    BackupProgressStage.CREATING_ARCHIVE -> R.string.backup_stage_archive
+    BackupProgressStage.VERIFYING -> R.string.restore_stage_verify
+    BackupProgressStage.RESTORING_DATABASE -> R.string.restore_stage_database
+    BackupProgressStage.RESTORING_PHOTOS -> R.string.restore_stage_photos
+    BackupProgressStage.COMPLETED -> R.string.processing
+    BackupProgressStage.FAILED -> R.string.processing
 }

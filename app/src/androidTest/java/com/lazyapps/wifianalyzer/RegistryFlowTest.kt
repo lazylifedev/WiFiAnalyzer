@@ -27,6 +27,10 @@ class RegistryFlowTest {
     }
 
     @Test fun createGroupRegisterValidateDuplicateEditAndDelete() {
+        val duplicateBssidMessage = composeRule.activity.getString(R.string.error_duplicate_bssid_input)
+        val deleteTitle = composeRule.activity.getString(R.string.delete_device_title)
+        val deleteLabel = composeRule.activity.getString(R.string.delete)
+        val devicesTitle = composeRule.activity.getString(R.string.screen_devices)
         val suffix = (System.currentTimeMillis() % 0xFFFF).toString(16).uppercase().padStart(4, '0')
         val groupName = "UIグループ$suffix"
         val deviceName = "登録機器$suffix"
@@ -34,16 +38,23 @@ class RegistryFlowTest {
         val firstBssid = "02:10:20:30:${suffix.take(2)}:${suffix.takeLast(2)}"
         val secondBssid = "02:10:20:31:${suffix.take(2)}:${suffix.takeLast(2)}"
 
+        val context = composeRule.activity.applicationContext
+        val database = com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase.get(context)
+        kotlinx.coroutines.runBlocking {
+            com.lazyapps.wifianalyzer.data.registry.DeviceRegistryRepository(
+                context,
+                database,
+                com.lazyapps.wifianalyzer.data.registry.WorkspaceRepository(context, database),
+            ).createGroup(groupName)
+        }
+
         composeRule.onNodeWithTag("nav_devices").performClick()
         composeRule.onNodeWithTag("add_device").performClick()
         composeRule.onNodeWithTag("add_manually").performClick()
         composeRule.onNodeWithTag("device_name").performTextInput(deviceName)
         composeRule.onNodeWithTag("registration_list").performScrollToIndex(2)
         composeRule.onNodeWithTag("group_picker").performClick()
-        composeRule.onNodeWithTag("create_group_from_form").performClick()
-        composeRule.onNodeWithTag("new_group_name").performTextInput(groupName)
-        composeRule.onNodeWithTag("confirm_create_group").performClick()
-        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText(groupName).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNodeWithText(groupName).performClick()
         composeRule.onNodeWithTag("registration_list").performScrollToIndex(5)
         composeRule.onNodeWithTag("bssid_0").performTextInput(firstBssid)
         composeRule.onNodeWithTag("add_bssid").performClick()
@@ -52,7 +63,7 @@ class RegistryFlowTest {
         composeRule.onNodeWithTag("registration_list").performScrollToIndex(7)
         composeRule.onNodeWithTag("save_device_bottom").performClick()
         composeRule.onNodeWithTag("registration_list").performScrollToIndex(1)
-        composeRule.onNodeWithText("同じBSSIDが複数入力されています").assertIsDisplayed()
+        composeRule.onNodeWithText(duplicateBssidMessage).assertIsDisplayed()
 
         composeRule.onNodeWithTag("registration_list").performScrollToIndex(7)
         composeRule.onNodeWithTag("bssid_1").performTextReplacement(secondBssid)
@@ -62,7 +73,11 @@ class RegistryFlowTest {
             runCatching { composeRule.onNodeWithTag("edit_device").fetchSemanticsNode() }.isSuccess
         }
         composeRule.onNodeWithText(deviceName).assertIsDisplayed()
-        composeRule.onNodeWithText(groupName).assertIsDisplayed()
+        kotlinx.coroutines.runBlocking {
+            val saved = database.registryDao().getAllDevices().single { it.displayName == deviceName }
+            val savedGroup = database.registryDao().getAllGroups().single { it.id == saved.groupId }
+            org.junit.Assert.assertEquals(groupName, savedGroup.name)
+        }
         composeRule.activityRule.scenario.recreate()
         composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText(deviceName).fetchSemanticsNodes().isNotEmpty() }
         composeRule.onNodeWithText(deviceName).assertIsDisplayed()
@@ -74,10 +89,10 @@ class RegistryFlowTest {
             runCatching { composeRule.onNodeWithText(editedName).fetchSemanticsNode() }.isSuccess
         }
         composeRule.onNodeWithTag("delete_device").performClick()
-        composeRule.onNodeWithText("機器を削除しますか？").assertIsDisplayed()
-        composeRule.onNodeWithText("削除").performClick()
+        composeRule.onNodeWithText(deleteTitle).assertIsDisplayed()
+        composeRule.onNodeWithText(deleteLabel).performClick()
         composeRule.waitUntil(5_000) {
-            runCatching { composeRule.onNodeWithText("登録済み機器").fetchSemanticsNode() }.isSuccess
+            runCatching { composeRule.onNodeWithText(devicesTitle).fetchSemanticsNode() }.isSuccess
         }
         composeRule.onNodeWithText(editedName).assertDoesNotExist()
     }

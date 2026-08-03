@@ -8,6 +8,7 @@ import androidx.room.withTransaction
 import com.lazyapps.wifianalyzer.data.registry.DevicePhotoEntity
 import com.lazyapps.wifianalyzer.data.registry.PendingFileDeletionEntity
 import com.lazyapps.wifianalyzer.data.registry.RegistryValidationException
+import com.lazyapps.wifianalyzer.data.registry.RegistryError
 import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
 import com.lazyapps.wifianalyzer.domain.DevicePhoto
 import com.lazyapps.wifianalyzer.domain.DevicePhotoPolicy
@@ -24,13 +25,13 @@ class PhotoRepository(private val context: Context, private val database: WifiAn
 
     fun observe(deviceId: Long): Flow<List<DevicePhoto>> = dao.observePhotos(deviceId).map { items -> items.map(DevicePhotoEntity::domain) }
     fun file(photo: DevicePhoto): File = File(context.filesDir, "devices/${photo.workspaceId}/${photo.deviceId}/photos/${photo.fileName}")
-    suspend fun ensureCapacity(deviceId: Long) { if (deviceId != 0L && dao.getPhotos(deviceId).size >= DevicePhotoPolicy.MAX_PHOTOS_PER_DEVICE) throw RegistryValidationException("写真は9枚まで登録できます") }
+    suspend fun ensureCapacity(deviceId: Long) { if (deviceId != 0L && dao.getPhotos(deviceId).size >= DevicePhotoPolicy.MAX_PHOTOS_PER_DEVICE) throw RegistryValidationException(RegistryError.PHOTO_LIMIT) }
 
     suspend fun save(deviceId: Long, workspaceId: Long, source: Uri): Long = withContext(Dispatchers.IO) {
         val existing = dao.getPhotos(deviceId)
-        if (existing.size >= DevicePhotoPolicy.MAX_PHOTOS_PER_DEVICE) throw RegistryValidationException("写真は9枚まで登録できます")
-        val device = dao.getDevice(deviceId) ?: throw RegistryValidationException("対象機器が見つかりません")
-        if (device.workspaceId != workspaceId) throw RegistryValidationException("対象ワークスペースが変更または削除されました")
+        if (existing.size >= DevicePhotoPolicy.MAX_PHOTOS_PER_DEVICE) throw RegistryValidationException(RegistryError.PHOTO_LIMIT)
+        val device = dao.getDevice(deviceId) ?: throw RegistryValidationException(RegistryError.DEVICE_NOT_FOUND)
+        if (device.workspaceId != workspaceId) throw RegistryValidationException(RegistryError.WORKSPACE_NOT_FOUND)
         val directory = File(context.filesDir, "devices/$workspaceId/$deviceId/photos").apply { mkdirs() }
         val temp = File(directory, ".${UUID.randomUUID()}.tmp")
         val final = File(directory, "${UUID.randomUUID()}.jpg")
@@ -38,13 +39,13 @@ class PhotoRepository(private val context: Context, private val database: WifiAn
             val bitmap = try {
                 decodeOriented(source)
             } catch (_: OutOfMemoryError) {
-                throw RegistryValidationException("画像を処理するためのメモリが不足しています")
+                throw RegistryValidationException(RegistryError.PHOTO_OUT_OF_MEMORY)
             }
             val scaled = try {
                 scale(bitmap)
             } catch (_: OutOfMemoryError) {
                 bitmap.recycle()
-                throw RegistryValidationException("画像を処理するためのメモリが不足しています")
+                throw RegistryValidationException(RegistryError.PHOTO_OUT_OF_MEMORY)
             }
             if (scaled !== bitmap) bitmap.recycle()
             val width = scaled.width; val height = scaled.height
@@ -53,8 +54,8 @@ class PhotoRepository(private val context: Context, private val database: WifiAn
             } finally {
                 scaled.recycle()
             }
-            if (!compressed) throw RegistryValidationException("画像を保存できません")
-            if (!temp.renameTo(final)) throw IllegalStateException("画像ファイルを確定できません")
+            if (!compressed) throw RegistryValidationException(RegistryError.INVALID_PHOTO)
+            if (!temp.renameTo(final)) throw RegistryValidationException(RegistryError.PHOTO_WRITE_FAILED)
             val now = System.currentTimeMillis()
             try {
                 database.withTransaction { dao.insertPhoto(DevicePhotoEntity(deviceId = deviceId, workspaceId = workspaceId, fileName = final.name, mimeType = "image/jpeg", width = width, height = height, fileSize = final.length(), sortOrder = existing.size, isPrimary = existing.isEmpty(), createdAt = now, updatedAt = now)) }
@@ -93,7 +94,7 @@ class PhotoRepository(private val context: Context, private val database: WifiAn
     private fun decodeOriented(uri: Uri): Bitmap {
         val resolver = context.contentResolver
         val declaredSize = resolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
-        if (declaredSize > MAX_SOURCE_BYTES) throw RegistryValidationException("画像ファイルが大きすぎます")
+        if (declaredSize > MAX_SOURCE_BYTES) throw RegistryValidationException(RegistryError.PHOTO_TOO_LARGE)
         var boundedCopy: File? = null
         return try {
             val source = if (declaredSize >= 0L) {
@@ -105,7 +106,7 @@ class PhotoRepository(private val context: Context, private val database: WifiAn
             ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
                 val width = info.size.width
                 val height = info.size.height
-                if (width <= 0 || height <= 0) throw RegistryValidationException("対応していない画像形式です")
+                if (width <= 0 || height <= 0) throw RegistryValidationException(RegistryError.INVALID_PHOTO)
                 val edge = maxOf(width, height)
                 if (edge > DevicePhotoPolicy.MAX_LONG_EDGE) {
                     val ratio = DevicePhotoPolicy.MAX_LONG_EDGE.toFloat() / edge
@@ -119,13 +120,13 @@ class PhotoRepository(private val context: Context, private val database: WifiAn
         } catch (error: RegistryValidationException) {
             throw error
         } catch (_: ImageDecoder.DecodeException) {
-            throw RegistryValidationException("画像を読み込めません")
+            throw RegistryValidationException(RegistryError.INVALID_PHOTO)
         } catch (_: IOException) {
-            throw RegistryValidationException("画像を読み込めません")
+            throw RegistryValidationException(RegistryError.INVALID_PHOTO)
         } catch (_: SecurityException) {
-            throw RegistryValidationException("画像を読み込めません")
+            throw RegistryValidationException(RegistryError.INVALID_PHOTO)
         } catch (_: IllegalArgumentException) {
-            throw RegistryValidationException("画像を読み込めません")
+            throw RegistryValidationException(RegistryError.INVALID_PHOTO)
         } finally {
             boundedCopy?.delete()
         }
@@ -135,7 +136,7 @@ class PhotoRepository(private val context: Context, private val database: WifiAn
         val copy = File.createTempFile("photo-source-", ".image", context.cacheDir)
         try {
             val input = context.contentResolver.openInputStream(uri)
-                ?: throw RegistryValidationException("画像を読み込めません")
+                ?: throw RegistryValidationException(RegistryError.INVALID_PHOTO)
             input.use { source ->
                 copy.outputStream().use { target ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -144,7 +145,7 @@ class PhotoRepository(private val context: Context, private val database: WifiAn
                         val count = source.read(buffer)
                         if (count < 0) break
                         total += count
-                        if (total > MAX_SOURCE_BYTES) throw RegistryValidationException("画像ファイルが大きすぎます")
+                        if (total > MAX_SOURCE_BYTES) throw RegistryValidationException(RegistryError.PHOTO_TOO_LARGE)
                         target.write(buffer, 0, count)
                     }
                 }

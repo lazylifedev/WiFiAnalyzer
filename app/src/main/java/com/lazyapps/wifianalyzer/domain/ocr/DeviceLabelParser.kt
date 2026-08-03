@@ -118,20 +118,20 @@ object WifiCandidateMatcher {
     private fun matchBssid(candidate: ParsedFieldCandidate, nearby: List<WifiAccessPoint>): ParsedFieldCandidate {
         val normalized = BssidFormat.normalize(candidate.value)
         val exact = normalized?.let { value -> nearby.firstOrNull { BssidFormat.normalize(it.bssid) == value } }
-        if (exact != null) return candidate.copy(nearbyMatch = NearbyWifiMatch(exact, reason = "BSSID完全一致"), confidence = ConfidenceLevel.HIGH)
+        if (exact != null) return candidate.copy(nearbyMatch = NearbyWifiMatch(exact, reason = "BSSID_EXACT"), confidence = ConfidenceLevel.HIGH)
         val correction = candidate.correctionCandidate
         val corrected = correction?.let { value -> nearby.firstOrNull { BssidFormat.normalize(it.bssid) == value } }
-        if (corrected != null) return candidate.copy(nearbyMatch = NearbyWifiMatch(corrected, corrected.bssid, "OCR補正候補"))
+        if (corrected != null) return candidate.copy(nearbyMatch = NearbyWifiMatch(corrected, corrected.bssid, "OCR_CORRECTED"))
         val oui = normalized?.take(8)?.let { prefix -> nearby.firstOrNull { BssidFormat.normalize(it.bssid)?.take(8) == prefix } }
-        return if (oui != null) candidate.copy(nearbyMatch = NearbyWifiMatch(oui, reason = "メーカーOUI候補"), confidence = ConfidenceLevel.MEDIUM) else candidate
+        return if (oui != null) candidate.copy(nearbyMatch = NearbyWifiMatch(oui, reason = "MANUFACTURER_OUI"), confidence = ConfidenceLevel.MEDIUM) else candidate
     }
 
     private fun matchSsid(candidate: ParsedFieldCandidate, nearby: List<WifiAccessPoint>): ParsedFieldCandidate {
         val exact = nearby.firstOrNull { it.ssid == candidate.value }
-        if (exact != null) return candidate.copy(nearbyMatch = NearbyWifiMatch(exact, reason = "SSID完全一致"), confidence = ConfidenceLevel.HIGH)
+        if (exact != null) return candidate.copy(nearbyMatch = NearbyWifiMatch(exact, reason = "SSID_EXACT"), confidence = ConfidenceLevel.HIGH)
         val key = normalizeSsid(candidate.value)
         val normalized = nearby.firstOrNull { normalizeSsid(it.ssid) == key }
-        return if (normalized != null) candidate.copy(nearbyMatch = NearbyWifiMatch(normalized, reason = "SSID正規化一致"), confidence = ConfidenceLevel.MEDIUM) else candidate
+        return if (normalized != null) candidate.copy(nearbyMatch = NearbyWifiMatch(normalized, reason = "SSID_NORMALIZED"), confidence = ConfidenceLevel.MEDIUM) else candidate
     }
 
     private fun normalizeSsid(value: String) = Normalizer.normalize(value.trim(), Normalizer.Form.NFKC).lowercase().replace(Regex("[ _-]+"), "")

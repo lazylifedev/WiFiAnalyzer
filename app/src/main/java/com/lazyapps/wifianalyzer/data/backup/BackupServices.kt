@@ -12,12 +12,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 sealed interface BackupScope { data object All : BackupScope; data class Workspace(val id: Long) : BackupScope }
+enum class BackupProgressStage { PREPARING, EXPORTING_DATABASE, COPYING_PHOTOS, CREATING_ARCHIVE, VERIFYING, RESTORING_DATABASE, RESTORING_PHOTOS, COMPLETED, FAILED }
 
 class BackupExportService(private val context: Context, private val database: WifiAnalyzerDatabase) {
     private val dao = database.registryDao()
-    suspend fun export(scope: BackupScope, output: Uri, onProgress: (String, Int, Int) -> Unit = { _,_,_ -> }): BackupManifest = withContext(Dispatchers.IO) {
+    suspend fun export(scope: BackupScope, output: Uri, onProgress: (BackupProgressStage, Int, Int) -> Unit = { _,_,_ -> }): BackupManifest = withContext(Dispatchers.IO) {
+      try {
+        onProgress(BackupProgressStage.PREPARING, 0, 0)
         val workspaces = when (scope) { BackupScope.All -> dao.getWorkspacesOnce(); is BackupScope.Workspace -> listOfNotNull(dao.getWorkspace(scope.id)) }
-        if (workspaces.isEmpty()) throw BackupException(BackupException.Code.INVALID_REFERENCE, "バックアップ対象のワークスペースがありません")
+        if (workspaces.isEmpty()) throw BackupException(BackupException.Code.INVALID_REFERENCE, "NO_WORKSPACE")
         val workspaceDbIds = workspaces.map { it.id }.toSet()
         val devices = when (scope) { BackupScope.All -> dao.getAllDevices(); is BackupScope.Workspace -> dao.getDevicesOnce(scope.id) }
         val groups = when (scope) { BackupScope.All -> dao.getAllGroups(); is BackupScope.Workspace -> dao.getGroupsOnce(scope.id) }
@@ -27,6 +30,7 @@ class BackupExportService(private val context: Context, private val database: Wi
         val workspaceIds = workspaces.associate { it.id to UUID.randomUUID().toString() }
         val groupIds = groups.associate { it.id to UUID.randomUUID().toString() }
         val deviceIds = devices.associate { it.id to UUID.randomUUID().toString() }
+        onProgress(BackupProgressStage.EXPORTING_DATABASE, 0, 0)
         val data = BackupData(
             workspaces.map { BackupWorkspace(workspaceIds.getValue(it.id), it.name, it.sortOrder, it.createdAt, it.updatedAt) },
             groups.map { BackupGroup(UUID.randomUUID().toString(), workspaceIds.getValue(it.workspaceId), it.name, it.sortOrder, it.createdAt, it.updatedAt) }.mapIndexed { index, item -> item.copy(backupId = groupIds.getValue(groups[index].id)) },
@@ -35,6 +39,8 @@ class BackupExportService(private val context: Context, private val database: Wi
             photos.map { photo -> val wid = workspaceIds.getValue(photo.workspaceId); val did = deviceIds.getValue(photo.deviceId); BackupPhoto(UUID.randomUUID().toString(), did, wid, photo.fileName, "photos/$wid/$did/${UUID.randomUUID()}.${photo.fileName.substringAfterLast('.', "jpg")}", photo.mimeType, photo.width, photo.height, photo.fileSize, photo.sortOrder, photo.caption, photo.isPrimary, photo.createdAt, photo.updatedAt) },
         )
         val photoByBackupId = data.photos.zip(photos).associate { it.first.backupId to it.second }
+        onProgress(BackupProgressStage.COPYING_PHOTOS, 0, data.photos.size)
+        onProgress(BackupProgressStage.CREATING_ARCHIVE, 0, data.photos.size)
         context.contentResolver.openOutputStream(output, "w")?.use { stream ->
             BackupArchiveWriter().write(stream, data, { checksums ->
                 val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
@@ -42,20 +48,26 @@ class BackupExportService(private val context: Context, private val database: Wi
             }, { photo ->
                 val source = photoByBackupId.getValue(photo.backupId)
                 File(context.filesDir, "devices/${source.workspaceId}/${source.deviceId}/photos/${source.fileName}")
-            }).also { onProgress("完了", data.photos.size, data.photos.size) }
-        } ?: throw BackupException(BackupException.Code.INVALID_ZIP, "保存先を開けません")
+            }).also { onProgress(BackupProgressStage.COMPLETED, data.photos.size, data.photos.size) }
+        } ?: throw BackupException(BackupException.Code.INVALID_ZIP, "OUTPUT_UNAVAILABLE")
+      } catch (error: Exception) {
+        onProgress(BackupProgressStage.FAILED, 0, 0)
+        throw error
+      }
     }
 }
 
 class BackupImportService(private val context: Context) {
-    suspend fun inspect(uri: Uri): BackupPreview = withContext(Dispatchers.IO) {
+    suspend fun inspect(uri: Uri, onProgress: (BackupProgressStage, Int, Int) -> Unit = { _,_,_ -> }): BackupPreview = withContext(Dispatchers.IO) {
+        onProgress(BackupProgressStage.PREPARING, 0, 0)
         val root = File(context.cacheDir, "backup-import-${UUID.randomUUID()}").apply { mkdirs() }
         val archive = File(root, "source.zip")
         try {
-            context.contentResolver.openInputStream(uri)?.use { input -> archive.outputStream().use { output -> input.copyTo(output, limit = BackupLimits.MAX_ZIP_BYTES + 1) } } ?: throw BackupException(BackupException.Code.INVALID_ZIP, "ファイルを開けません")
-            if (archive.length() > BackupLimits.MAX_ZIP_BYTES) throw BackupException(BackupException.Code.LIMIT_EXCEEDED, "ZIPファイルが大きすぎます")
+            context.contentResolver.openInputStream(uri)?.use { input -> archive.outputStream().use { output -> input.copyTo(output, limit = BackupLimits.MAX_ZIP_BYTES + 1) } } ?: throw BackupException(BackupException.Code.INVALID_ZIP, "INPUT_UNAVAILABLE")
+            if (archive.length() > BackupLimits.MAX_ZIP_BYTES) throw BackupException(BackupException.Code.LIMIT_EXCEEDED, "ZIP_LIMIT_EXCEEDED")
+            onProgress(BackupProgressStage.VERIFYING, 0, 0)
             BackupArchiveReader().read(archive, File(root, "expanded"))
-        } catch (e: Exception) { root.deleteRecursively(); throw e }
+        } catch (e: Exception) { onProgress(BackupProgressStage.FAILED, 0, 0); root.deleteRecursively(); throw e }
     }
     fun discard(preview: BackupPreview) { preview.extractedDirectory.parentFile?.deleteRecursively() }
 }
@@ -69,18 +81,23 @@ class RestorePlanner {
 
 class RestoreRepository(private val context: Context, private val database: WifiAnalyzerDatabase) {
     private val dao = database.registryDao()
-    suspend fun restore(preview: BackupPreview, mode: RestoreMode): RestoreResult = withContext(Dispatchers.IO) {
+    suspend fun restore(preview: BackupPreview, mode: RestoreMode, onProgress: (BackupProgressStage, Int, Int) -> Unit = { _,_,_ -> }): RestoreResult = withContext(Dispatchers.IO) {
+      try {
+        onProgress(BackupProgressStage.VERIFYING, 0, 0)
         BackupValidator.validate(preview.manifest, preview.data, preview.extractedDirectory)
         val data = preview.data; val plannedNames = RestorePlanner().workspaceNames(data, dao.getWorkspacesOnce(), mode)
         val staged = File(context.cacheDir, "restore-stage-${UUID.randomUUID()}").apply { mkdirs() }
         val newFiles = mutableListOf<File>(); val oldPhotoFiles = if (mode == RestoreMode.REPLACE) dao.getAllPhotos().map { File(context.filesDir, "devices/${it.workspaceId}/${it.deviceId}/photos/${it.fileName}") } else emptyList()
         try {
-            data.photos.forEach { photo ->
+            onProgress(BackupProgressStage.RESTORING_PHOTOS, 0, data.photos.size)
+            data.photos.forEachIndexed { index, photo ->
                 val source = BackupSecurity.resolve(preview.extractedDirectory, photo.archivePath)
                 val target = File(staged, photo.backupId); source.copyTo(target)
-                if (target.length() != photo.fileSize) throw BackupException(BackupException.Code.PHOTO_WRITE_FAILED, "写真の一時保存に失敗しました")
+                if (target.length() != photo.fileSize) throw BackupException(BackupException.Code.PHOTO_WRITE_FAILED, "PHOTO_STAGE_WRITE_FAILED")
+                onProgress(BackupProgressStage.RESTORING_PHOTOS, index + 1, data.photos.size)
             }
             val workspaceMap = mutableMapOf<String,Long>(); val groupMap = mutableMapOf<String,Long>(); val deviceMap = mutableMapOf<String,Long>()
+            onProgress(BackupProgressStage.RESTORING_DATABASE, 0, 0)
             database.withTransaction {
                 if (mode == RestoreMode.REPLACE) dao.deleteAllWorkspaces()
                 data.workspaces.sortedBy { it.sortOrder }.forEach { item -> workspaceMap[item.backupId] = dao.insertWorkspace(WorkspaceEntity(name=plannedNames.getValue(item.backupId), normalizedName=WorkspaceName.normalized(plannedNames.getValue(item.backupId)), sortOrder=item.sortOrder, createdAt=item.createdAt, updatedAt=item.updatedAt)) }
@@ -94,10 +111,15 @@ class RestoreRepository(private val context: Context, private val database: Wifi
                 }
             }
             if (mode == RestoreMode.REPLACE) oldPhotoFiles.filter { it !in newFiles }.forEach { it.delete() }
+            onProgress(BackupProgressStage.COMPLETED, data.photos.size, data.photos.size)
             RestoreResult(workspaceMap.values.toList())
-        } catch (e: Exception) { newFiles.forEach { it.delete() }; throw e }
+        } catch (e: Exception) { onProgress(BackupProgressStage.FAILED, 0, 0); newFiles.forEach { it.delete() }; throw e }
         finally { staged.deleteRecursively() }
+      } catch (error: Exception) {
+        onProgress(BackupProgressStage.FAILED, 0, 0)
+        throw error
+      }
     }
 }
 
-private fun java.io.InputStream.copyTo(output: java.io.OutputStream, limit: Long) { val buffer=ByteArray(DEFAULT_BUFFER_SIZE); var total=0L; while(true){ val n=read(buffer); if(n<0) break; total+=n; if(total>limit) throw BackupException(BackupException.Code.LIMIT_EXCEEDED,"ZIPファイルが大きすぎます"); output.write(buffer,0,n) } }
+private fun java.io.InputStream.copyTo(output: java.io.OutputStream, limit: Long) { val buffer=ByteArray(DEFAULT_BUFFER_SIZE); var total=0L; while(true){ val n=read(buffer); if(n<0) break; total+=n; if(total>limit) throw BackupException(BackupException.Code.LIMIT_EXCEEDED,"ZIP_LIMIT_EXCEEDED"); output.write(buffer,0,n) } }

@@ -38,26 +38,26 @@ class WorkspaceRepository(private val context: Context, private val database: Wi
     }
 
     suspend fun select(id: Long) {
-        if (dao.getWorkspace(id) == null) throw RegistryValidationException("ワークスペースが見つかりません")
+        if (dao.getWorkspace(id) == null) throw RegistryValidationException(RegistryError.WORKSPACE_NOT_FOUND)
         context.workspaceDataStore.edit { it[selectedKey] = id }
     }
 
     suspend fun create(name: String): Long = database.withTransaction {
         val display = WorkspaceName.display(name)
         val normalized = WorkspaceName.normalized(name)
-        if (normalized.isBlank()) throw RegistryValidationException("ワークスペース名を入力してください")
+        if (normalized.isBlank()) throw RegistryValidationException(RegistryError.WORKSPACE_NAME_REQUIRED)
         val all = dao.getWorkspacesOnce()
-        if (all.any { it.normalizedName == normalized }) throw RegistryValidationException("同名のワークスペースがあります")
+        if (all.any { it.normalizedName == normalized }) throw RegistryValidationException(RegistryError.DUPLICATE_WORKSPACE)
         val now = System.currentTimeMillis()
         dao.insertWorkspace(WorkspaceEntity(name = display, normalizedName = normalized, sortOrder = (all.maxOfOrNull { it.sortOrder } ?: -1) + 1, createdAt = now, updatedAt = now))
     }
 
     suspend fun rename(id: Long, name: String) = database.withTransaction {
-        val current = dao.getWorkspace(id) ?: throw RegistryValidationException("ワークスペースが見つかりません")
+        val current = dao.getWorkspace(id) ?: throw RegistryValidationException(RegistryError.WORKSPACE_NOT_FOUND)
         val display = WorkspaceName.display(name)
         val normalized = WorkspaceName.normalized(name)
-        if (normalized.isBlank()) throw RegistryValidationException("ワークスペース名を入力してください")
-        if (dao.getWorkspacesOnce().any { it.id != id && it.normalizedName == normalized }) throw RegistryValidationException("同名のワークスペースがあります")
+        if (normalized.isBlank()) throw RegistryValidationException(RegistryError.WORKSPACE_NAME_REQUIRED)
+        if (dao.getWorkspacesOnce().any { it.id != id && it.normalizedName == normalized }) throw RegistryValidationException(RegistryError.DUPLICATE_WORKSPACE)
         dao.updateWorkspace(current.copy(name = display, normalizedName = normalized, updatedAt = System.currentTimeMillis()))
     }
 
@@ -76,7 +76,7 @@ class WorkspaceRepository(private val context: Context, private val database: Wi
     suspend fun delete(id: Long): Pair<Long, List<String>> {
         val pending = mutableListOf<String>()
         val next = database.withTransaction {
-            if (dao.getWorkspace(id) == null) throw RegistryValidationException("ワークスペースが見つかりません")
+            if (dao.getWorkspace(id) == null) throw RegistryValidationException(RegistryError.WORKSPACE_NOT_FOUND)
             dao.getPhotosForWorkspace(id).forEach { photo ->
                 val path = "devices/${photo.workspaceId}/${photo.deviceId}/photos/${photo.fileName}"
                 pending += path; dao.insertPendingDeletion(PendingFileDeletionEntity(path, System.currentTimeMillis()))
