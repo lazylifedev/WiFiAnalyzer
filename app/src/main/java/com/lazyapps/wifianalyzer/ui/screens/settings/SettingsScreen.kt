@@ -97,6 +97,8 @@ fun SettingsScreen(
     onOpenExport: () -> Unit = {},
     onOpenImport: () -> Unit = {},
     onOpenPro: () -> Unit = {},
+    onOpenPrivacyOptions: () -> Unit = {},
+    showPrivacyOptions: Boolean = false,
     onOpenKintone: () -> Unit = {},
     onRateApp: () -> Unit = {},
     permissionSummary: PermissionSummary = PermissionSummary(PermissionStatus.NOT_GRANTED, PermissionStatus.NOT_GRANTED),
@@ -217,6 +219,7 @@ fun SettingsScreen(
         item {
             Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
                 SettingRow("Pro版", onClick = onOpenPro)
+                if (showPrivacyOptions) SettingRow("広告のプライバシー設定", onClick = onOpenPrivacyOptions)
                 SettingRow("Playストアで評価する", onClick = onRateApp)
             }
         }

@@ -42,6 +42,10 @@ android {
     }
 }
 
+configurations.configureEach {
+    resolutionStrategy.force("com.google.android.ump:user-messaging-platform:3.2.0")
+}
+
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
     arg("room.generateKotlin", "true")
@@ -75,6 +79,8 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.play.billing)
     implementation(libs.play.review)
+    implementation(libs.play.services.ads)
+    implementation(libs.user.messaging.platform)
     implementation(libs.androidx.work.runtime.ktx)
     ksp(libs.androidx.room.compiler)
     debugImplementation(libs.androidx.compose.ui.tooling)
