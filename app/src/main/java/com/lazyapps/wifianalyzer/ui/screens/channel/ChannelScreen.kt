@@ -69,12 +69,12 @@ fun ChannelScreen(
     val updated = state.lastUpdatedMillis?.let {
         val pattern = if (DateFormat.is24HourFormat(context)) "HH:mm:ss" else "h:mm:ss a"
         stringResource(R.string.last_updated_time, DateFormat.format(pattern, it))
-    } ?: stringResource(R.string.last_updated_time, "—")
+    } ?: stringResource(R.string.last_updated_time, stringResource(R.string.not_available))
     LaunchedEffect(selectedBand, state.selectedBssid, accessPoints) {
         if (state.selectedBssid != null && selected == null) onClearAccessPointSelection()
     }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().testTag("channel_screen")) {
         ScreenHeader(stringResource(R.string.screen_channel), listOfNotNull(workspaceName, updated).joinToString(" ・ ")) {
             IconButton(onClick = onRefresh) { Icon(Icons.Rounded.Refresh, stringResource(R.string.refresh_scan)) }
         }
@@ -171,7 +171,7 @@ private fun DisplayModeSelector(
                 selected = selected == mode,
                 onClick = { onSelected(mode) },
                 shape = SegmentedButtonDefaults.itemShape(index, options.size),
-                label = { Text(if (mode == ChannelDisplayMode.GRAPH) "グラフ" else "混雑状況") },
+                label = { Text(stringResource(if (mode == ChannelDisplayMode.GRAPH) R.string.channel_mode_graph else R.string.channel_mode_occupancy)) },
             )
         }
     }

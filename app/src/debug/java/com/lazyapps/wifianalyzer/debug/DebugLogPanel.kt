@@ -74,17 +74,17 @@ fun DebugLogPanel(
                     TextButton(
                         modifier = Modifier.testTag("debug_log_copy"),
                         onClick = { context.copyDebugLog(entries) },
-                    ) { Text("コピー", color = DebugActionColor) }
+                    ) { Text("Copy", color = DebugActionColor) }
                     TextButton(
                         modifier = Modifier.testTag("debug_log_clear"),
                         onClick = store::clear,
-                    ) { Text("クリア", color = DebugActionColor) }
+                    ) { Text("Clear", color = DebugActionColor) }
                     TextButton(
                         modifier = Modifier.testTag("debug_log_toggle"),
                         onClick = { expanded = !expanded },
                     ) {
                         Text(
-                            text = if (expanded) "折りたたむ" else "展開",
+                            text = if (expanded) "Collapse" else "Expand",
                             color = DebugActionColor,
                         )
                     }

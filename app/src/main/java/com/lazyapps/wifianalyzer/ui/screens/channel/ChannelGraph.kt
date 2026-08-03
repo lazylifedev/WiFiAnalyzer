@@ -37,6 +37,9 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
+import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.domain.ChannelCandidate
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import com.lazyapps.wifianalyzer.model.WifiBand
@@ -100,11 +103,11 @@ fun ChannelGraph(
         }
     }
     val strongest = accessPoints.maxByOrNull { it.rssi }
-    val summary = buildString {
-        append("${band.label}チャンネルグラフ。${accessPoints.size}ネットワークを検出。")
-        strongest?.let { append("最も強いネットワークは${it.registeredDeviceName ?: it.ssid}、チャンネル${it.channel}、マイナス${-it.rssi}dBm。") }
-        candidate?.let { append("空いている候補はチャンネル${it.channel}。") }
-    }
+    val summaryBase = stringResource(R.string.channel_graph_description, band.label, pluralStringResource(R.plurals.network_count, accessPoints.size, accessPoints.size))
+    val strongestSummary = strongest?.let { stringResource(R.string.channel_graph_strongest, it.registeredDeviceName ?: it.ssid, it.channel, it.rssi) }.orEmpty()
+    val candidateSummary = candidate?.let { stringResource(R.string.channel_graph_candidate, it.channel) }.orEmpty()
+    val summary = "$summaryBase $strongestSummary $candidateSummary".trim()
+    val selectStrongestLabel = stringResource(R.string.select_strongest_network)
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val graphHeight = graphHeightDp(maxWidth.value.toInt(), configuration.screenHeightDp).dp
         Canvas(
@@ -113,7 +116,7 @@ fun ChannelGraph(
                 .semantics {
                     contentDescription = summary
                     role = Role.Button
-                    onClick("最も強いネットワークを選択") {
+                    onClick(selectStrongestLabel) {
                         strongest?.let { onSelect(it.bssid) }
                         strongest != null
                     }

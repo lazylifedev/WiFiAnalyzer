@@ -36,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Color
@@ -56,11 +57,11 @@ import com.lazyapps.wifianalyzer.model.ScanState
 import com.lazyapps.wifianalyzer.domain.SignalHistoryPolicy
 import com.lazyapps.wifianalyzer.model.SignalSample
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
-import com.lazyapps.wifianalyzer.model.displayLabel
 import com.lazyapps.wifianalyzer.data.DistanceUnitPreference
 import com.lazyapps.wifianalyzer.ui.components.ScanStatusCard
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
 import com.lazyapps.wifianalyzer.ui.components.RefreshProgress
+import com.lazyapps.wifianalyzer.ui.components.localizedLabel
 import com.lazyapps.wifianalyzer.ui.scan.ScanUiState
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 import com.lazyapps.wifianalyzer.ui.theme.ThemeMode
@@ -77,7 +78,7 @@ fun MonitorScreen(
 ) {
     val accessPoint = state.selectedAccessPoint
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().testTag("monitor_screen"),
         contentPadding = PaddingValues(bottom = AppSpacing.xLarge),
         verticalArrangement = Arrangement.spacedBy(AppSpacing.medium),
     ) {
@@ -153,13 +154,13 @@ private fun SignalSummary(accessPoint: WifiAccessPoint, detected: Boolean, histo
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(if (detected) accessPoint.rssi.toString() else "—", fontSize = 52.sp, lineHeight = 56.sp, fontWeight = FontWeight.Bold)
                     Text("dBm", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(if (detected) accessPoint.signalQuality.label else stringResource(R.string.monitor_not_detected), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    Text(if (detected) accessPoint.signalQuality.localizedLabel() else stringResource(R.string.monitor_not_detected), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 }
             }
             HorizontalDivider()
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
                 MetricCard(Icons.AutoMirrored.Rounded.ShowChart, stringResource(R.string.stability), stability, Modifier.weight(1f))
-                MetricCard(Icons.Rounded.LocationOn, stringResource(R.string.monitor_distance), if (detected) "推定 ${accessPoint.distanceRange.displayLabel(feet)}" else "—", Modifier.weight(1f))
+                MetricCard(Icons.Rounded.LocationOn, stringResource(R.string.monitor_distance), if (detected) stringResource(R.string.estimated_prefix, accessPoint.distanceRange.localizedLabel(feet)) else stringResource(R.string.not_available), Modifier.weight(1f))
             }
         }
     }
@@ -167,7 +168,7 @@ private fun SignalSummary(accessPoint: WifiAccessPoint, detected: Boolean, histo
 
 @Composable
 private fun stabilityLabel(history: List<SignalSample>): String {
-    if (history.size < 2) return "測定中"
+    if (history.size < 2) return stringResource(R.string.measuring)
     val spread = history.maxOf { it.rssi } - history.minOf { it.rssi }
     return when {
         spread <= 4 -> stringResource(R.string.stable)
@@ -189,8 +190,8 @@ private fun MetricCard(icon: androidx.compose.ui.graphics.vector.ImageVector, la
     }
 }
 
-private enum class HistoryRange(val label: String, val millis: Long) {
-    THIRTY_SECONDS("30秒", 30_000L), ONE_MINUTE("1分", 60_000L), FIVE_MINUTES("5分", 300_000L), FIFTEEN_MINUTES("15分", 900_000L)
+private enum class HistoryRange(val labelRes: Int, val millis: Long) {
+    THIRTY_SECONDS(R.string.duration_30_seconds, 30_000L), ONE_MINUTE(R.string.duration_1_minute, 60_000L), FIVE_MINUTES(R.string.duration_5_minutes, 300_000L), FIFTEEN_MINUTES(R.string.duration_15_minutes, 900_000L)
 }
 
 @Composable
@@ -225,18 +226,20 @@ internal fun SignalChart(history: List<SignalSample>, selectedRangeMillis: Long 
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
                 HistoryRange.entries.forEach { item ->
-                    FilterChip(selected = range == item, onClick = { onRangeChange(item.millis); zoom = 1f; panFraction = 0f; selected = null }, label = { Text(item.label) })
+                    FilterChip(selected = range == item, onClick = { onRangeChange(item.millis); zoom = 1f; panFraction = 0f; selected = null }, label = { Text(stringResource(item.labelRes)) })
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("最大 ${max?.let { "$it dBm" } ?: "—"}", style = MaterialTheme.typography.labelMedium)
-                Text("平均 ${average?.let { "%.1f dBm".format(it) } ?: "—"}", style = MaterialTheme.typography.labelMedium)
-                Text("最小 ${min?.let { "$it dBm" } ?: "—"}", style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(R.string.signal_maximum, max?.let { "$it dBm" } ?: stringResource(R.string.not_available)), style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(R.string.signal_average, average?.let { "%.1f dBm".format(it) } ?: stringResource(R.string.not_available)), style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(R.string.signal_minimum, min?.let { "$it dBm" } ?: stringResource(R.string.not_available)), style = MaterialTheme.typography.labelMedium)
             }
             selected?.let { Text("${android.text.format.DateFormat.format("HH:mm:ss", it.timestampMillis)}  ${it.rssi} dBm", color = MaterialTheme.colorScheme.primary) }
+            val selectedDescription = selected?.let { stringResource(R.string.signal_chart_selected_description, it.rssi, android.text.format.DateFormat.format("HH:mm:ss", it.timestampMillis)) }
+                ?: stringResource(R.string.signal_chart_description)
             Canvas(
                 Modifier.fillMaxWidth().aspectRatio(1.9f)
-                    .semantics { contentDescription = selected?.let { "選択値 ${it.rssi} dBm、${android.text.format.DateFormat.format("HH:mm:ss", it.timestampMillis)}" } ?: "信号履歴グラフ。縦軸はdBm、横軸は時間。ピンチで拡大、ドラッグで移動、ダブルタップでリセット" }
+                    .semantics { contentDescription = selectedDescription }
                     .transformable(transformState)
                     .pointerInput(visible, visibleStart, visibleDuration) {
                         detectTapGestures(
@@ -289,8 +292,8 @@ internal fun SignalChart(history: List<SignalSample>, selectedRangeMillis: Long 
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("${visibleDuration / 1000}秒前", style = MaterialTheme.typography.labelSmall)
-                Text("時間", style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(R.string.seconds_ago_format, visibleDuration / 1000), style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(R.string.time_axis), style = MaterialTheme.typography.labelSmall)
                 Text(stringResource(R.string.now), style = MaterialTheme.typography.labelSmall)
             }
         }
