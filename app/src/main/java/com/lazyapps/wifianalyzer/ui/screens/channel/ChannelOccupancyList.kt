@@ -21,8 +21,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.unit.dp
 import com.lazyapps.wifianalyzer.model.ChannelOccupancy
+import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import com.lazyapps.wifianalyzer.model.WifiBand
 import com.lazyapps.wifianalyzer.ui.components.RegisteredBadge
@@ -50,7 +52,7 @@ fun ChannelOccupancyCard(
                 Text("CH ${usage.channel}", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                 Text("${(usage.estimatedCongestion * 100).toInt()}%", color = color, fontWeight = FontWeight.Bold)
             }
-            Text("${usage.accessPoints.size}ネットワーク", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(pluralStringResource(R.plurals.network_count, usage.accessPoints.size, usage.accessPoints.size), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             LinearProgressIndicator(
                 progress = { usage.estimatedCongestion },
                 modifier = Modifier.fillMaxWidth(),

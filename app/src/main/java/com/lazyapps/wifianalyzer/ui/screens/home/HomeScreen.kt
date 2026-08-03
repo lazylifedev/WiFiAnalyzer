@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -45,13 +46,13 @@ import com.lazyapps.wifianalyzer.model.SignalQuality
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import com.lazyapps.wifianalyzer.model.WifiBand
 import com.lazyapps.wifianalyzer.model.WifiStandard
-import com.lazyapps.wifianalyzer.model.displayLabel
 import com.lazyapps.wifianalyzer.data.DistanceUnitPreference
 import com.lazyapps.wifianalyzer.ui.components.BandSelector
 import com.lazyapps.wifianalyzer.ui.components.ScanStatusCard
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
 import com.lazyapps.wifianalyzer.ui.components.RegisteredBadge
 import com.lazyapps.wifianalyzer.ui.components.RefreshProgress
+import com.lazyapps.wifianalyzer.ui.components.localizedLabel
 import com.lazyapps.wifianalyzer.ui.scan.ScanUiState
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 import com.lazyapps.wifianalyzer.ui.theme.ThemeMode
@@ -77,9 +78,9 @@ fun HomeScreen(
     val context = LocalContext.current
     val updated = state.lastUpdatedMillis?.let {
         stringResource(R.string.last_updated_time, DateFormat.getTimeFormat(context).format(Date(it)))
-    } ?: stringResource(R.string.last_updated_time, "—")
+    } ?: stringResource(R.string.last_updated_time, stringResource(R.string.not_available))
 
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().testTag("home_screen")) {
         ScreenHeader(stringResource(R.string.screen_home), listOfNotNull(workspaceName, updated).joinToString(" ・ ")) {
             IconButton(onClick = onRefresh) { Icon(Icons.Rounded.Refresh, stringResource(R.string.refresh_scan)) }
         }
@@ -107,18 +108,18 @@ fun HomeScreen(
                     Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large),
                     verticalArrangement = Arrangement.spacedBy(AppSpacing.small),
                 ) {
-                    Text("まずは周辺Wi-Fiを確認しましょう", style = MaterialTheme.typography.titleMedium)
-                    Text("権限はスキャンを始めるときにご案内します。登録は手動やOCRからも始められます。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) { Text("Wi-Fiをスキャン") }
-                    OutlinedButton(onClick = onOpenDevices, modifier = Modifier.fillMaxWidth()) { Text("機器を登録") }
-                    TextButton(onClick = onOpenOcr, modifier = Modifier.fillMaxWidth()) { Text("OCRで読み取る") }
+                    Text(stringResource(R.string.home_get_started_title), style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(R.string.home_get_started_body), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.scan_wifi)) }
+                    OutlinedButton(onClick = onOpenDevices, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.add_device)) }
+                    TextButton(onClick = onOpenOcr, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.scan_with_ocr)) }
                 }
             }
         }
         item {
             Column(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large, vertical = AppSpacing.small)) {
                 Text(stringResource(R.string.nearby_access_points), style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(R.string.access_point_count, accessPoints.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(pluralStringResource(R.plurals.access_point_count, accessPoints.size, accessPoints.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         if (accessPoints.isEmpty() && state.scanState in setOf(ScanState.READY, ScanState.THROTTLED, ScanState.SCANNING)) {
@@ -145,11 +146,12 @@ private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Un
         SignalQuality.FAIR -> MaterialTheme.colorScheme.tertiary
         SignalQuality.WEAK -> MaterialTheme.colorScheme.error
     }
-    val registeredDescription = if (accessPoint.isRegistered) "登録済み、" else ""
+    val registeredDescription = if (accessPoint.isRegistered) stringResource(R.string.registered_description_prefix) else ""
+    val rowDescription = stringResource(R.string.access_point_description, registeredDescription, accessPoint.ssid, accessPoint.rssi)
     Card(
         modifier = modifier.fillMaxWidth()
             .testTag("home_access_point_${accessPoint.bssid}")
-            .semantics { contentDescription = "${registeredDescription}SSID ${accessPoint.ssid}、信号強度 ${accessPoint.rssi} デシベルミリワット" }
+            .semantics { contentDescription = rowDescription }
             .clickable { onClick(accessPoint.bssid) },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = CardDefaults.outlinedCardBorder(),
@@ -164,12 +166,12 @@ private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Un
                 Text(accessPoint.ssid, modifier = Modifier.testTag("home_ssid_${accessPoint.bssid}"), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
                 if (accessPoint.isRegistered) RegisteredBadge(Modifier.testTag("home_registered_${accessPoint.bssid}").clearAndSetSemantics { })
                 accessPoint.registeredDeviceName?.let { name ->
-                    Text("登録名: $name", maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                    Text("グループ: ${accessPoint.registeredGroupName ?: "未分類"}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.saved_name_format, name), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.group_format, accessPoint.registeredGroupName ?: stringResource(R.string.uncategorized)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 }
                 Text(accessPoint.bssid, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
-                    "${accessPoint.securityType.label} · ${accessPoint.band.label} · CH ${accessPoint.channel}",
+                    "${accessPoint.securityType.localizedLabel()} · ${accessPoint.band.label} · CH ${accessPoint.channel}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -181,13 +183,13 @@ private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Un
                 if (accessPoint.isRegistered) {
                     Text(stringResource(R.string.select_for_monitor), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                 } else {
-                    TextButton(onClick = { onRegister(accessPoint) }) { Text("機器として登録") }
+                    TextButton(onClick = { onRegister(accessPoint) }) { Text(stringResource(R.string.save_as_device)) }
                 }
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text("${accessPoint.rssi} dBm", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = signalColor)
-                Text(accessPoint.signalQuality.label, style = MaterialTheme.typography.labelSmall, color = signalColor)
-                Text(stringResource(R.string.estimated_prefix, accessPoint.distanceRange.displayLabel(feet)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(accessPoint.signalQuality.localizedLabel(), style = MaterialTheme.typography.labelSmall, color = signalColor)
+                Text(stringResource(R.string.estimated_prefix, accessPoint.distanceRange.localizedLabel(feet)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

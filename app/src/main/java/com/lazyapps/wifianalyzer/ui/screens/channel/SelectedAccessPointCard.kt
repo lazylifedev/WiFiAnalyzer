@@ -16,9 +16,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
+import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
-import com.lazyapps.wifianalyzer.model.displayLabel
 import com.lazyapps.wifianalyzer.ui.components.RegisteredBadge
+import com.lazyapps.wifianalyzer.ui.components.localizedLabel
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 
 @Composable
@@ -42,12 +44,12 @@ fun SelectedAccessPointCard(
             }
             Text(accessPoint.bssid, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("CH ${accessPoint.channel} ・ ${accessPoint.frequencyMhz}MHz ・ ${accessPoint.channelWidthMhz}MHz")
-            Text("${accessPoint.rssi}dBm ・ ${accessPoint.signalQuality.label} ・ 推定 ${accessPoint.distanceRange.displayLabel(useFeet)}")
+            Text(stringResource(R.string.selected_ap_signal_detail, accessPoint.rssi, accessPoint.signalQuality.localizedLabel(), accessPoint.distanceRange.localizedLabel(useFeet)))
             accessPoint.registeredGroupName?.let {
-                Text("グループ: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                Text(stringResource(R.string.group_format, it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
             if (!accessPoint.isRegistered) {
-                TextButton(onClick = { onRegister(accessPoint) }, modifier = Modifier.align(Alignment.End)) { Text("登録") }
+                TextButton(onClick = { onRegister(accessPoint) }, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.save)) }
             }
         }
     }

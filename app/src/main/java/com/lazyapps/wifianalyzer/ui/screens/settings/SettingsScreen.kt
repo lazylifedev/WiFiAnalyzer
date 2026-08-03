@@ -121,18 +121,18 @@ fun SettingsScreen(
     var showHelp by remember { mutableStateOf(false) }
     var showPrivacy by remember { mutableStateOf(false) }
     LazyColumn(
-        modifier = Modifier.fillMaxSize().testTag("settings_list"),
+        modifier = Modifier.fillMaxSize().testTag("settings_screen"),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = AppSpacing.xLarge),
         verticalArrangement = Arrangement.spacedBy(AppSpacing.medium),
     ) {
         item { ScreenHeader(stringResource(R.string.screen_settings)) }
-        item { SectionLabel("ワークスペース", Modifier.padding(horizontal = AppSpacing.large)) }
+        item { SectionLabel(stringResource(R.string.workspace), Modifier.padding(horizontal = AppSpacing.large)) }
         item {
             Card(
                 onClick = { showWorkspaces = true },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large).testTag("workspace_settings"),
                 border = CardDefaults.outlinedCardBorder(),
-            ) { SettingRow("ワークスペース", workspaceState.selected?.name ?: "default") }
+            ) { SettingRow(stringResource(R.string.workspace), workspaceState.selected?.name ?: stringResource(R.string.default_workspace)) }
         }
         item { SectionLabel(stringResource(R.string.theme_section), Modifier.padding(horizontal = AppSpacing.large)) }
         item {
@@ -172,18 +172,18 @@ fun SettingsScreen(
                 }
             }
         }
-        item { SectionLabel("表示", Modifier.padding(horizontal = AppSpacing.large)) }
+        item { SectionLabel(stringResource(R.string.display_section), Modifier.padding(horizontal = AppSpacing.large)) }
         item {
             Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
-                SettingRow(stringResource(R.string.distance_unit), if (distanceUnit == DistanceUnitPreference.METERS) "メートル (m)" else "フィート (ft)", onClick = { showDistanceUnits = true })
+                SettingRow(stringResource(R.string.distance_unit), stringResource(if (distanceUnit == DistanceUnitPreference.METERS) R.string.distance_meters_value else R.string.distance_feet_value), onClick = { showDistanceUnits = true })
                 SettingRow(stringResource(R.string.frequency_bands), visibleBandLabel(visibleBands), onClick = { showBands = true })
-                SettingRow("スキャン要求間隔", refreshIntervalLabel(refreshIntervalMillis), trailing = {
+                SettingRow(stringResource(R.string.scan_request_interval), localizedRefreshIntervalLabel(refreshIntervalMillis), trailing = {
                     IconButton(onClick = { showRefreshIntervals = true }, modifier = Modifier.testTag("refresh_interval")) {
-                        Icon(Icons.Rounded.ChevronRight, "スキャン要求間隔を変更")
+                        Icon(Icons.Rounded.ChevronRight, stringResource(R.string.change_scan_request_interval))
                     }
                 })
                 Text(
-                    "画面はOSの最新情報を随時反映します。新しいWi-Fiスキャンの要求間隔を設定します。",
+                    stringResource(R.string.scan_request_interval_explanation),
                     modifier = Modifier.padding(horizontal = AppSpacing.large),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -191,50 +191,50 @@ fun SettingsScreen(
                 SettingRow(stringResource(R.string.animations), trailing = { Switch(state.animationsEnabled, onAnimationChange) })
             }
         }
-        item { SectionLabel("データ", Modifier.padding(horizontal = AppSpacing.large)) }
+        item { SectionLabel(stringResource(R.string.data_section), Modifier.padding(horizontal = AppSpacing.large)) }
         item {
             Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
-                SettingRow("データのエクスポート", "CSV・レポート", onClick = onOpenExport)
-                SettingRow("CSVからインポート", "CSV", onClick = onOpenImport)
-                SettingRow("バックアップと復元", "ZIP", onClick = onOpenBackup)
-                SettingRow("kintone連携", "Pro", onClick = onOpenKintone)
+                SettingRow(stringResource(R.string.export_data), stringResource(R.string.csv_and_reports), onClick = onOpenExport)
+                SettingRow(stringResource(R.string.import_from_csv), "CSV", onClick = onOpenImport)
+                SettingRow(stringResource(R.string.backup_and_restore), "ZIP", onClick = onOpenBackup)
+                SettingRow(stringResource(R.string.kintone_integration), "Pro", onClick = onOpenKintone)
             }
         }
-        item { SectionLabel("スキャン", Modifier.padding(horizontal = AppSpacing.large)) }
+        item { SectionLabel(stringResource(R.string.scan_section), Modifier.padding(horizontal = AppSpacing.large)) }
         item {
             Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), border = CardDefaults.outlinedCardBorder()) {
-                SettingRow("権限", permissionSummary.wifiScan.label(), onClick = { showPermissions = true })
+                SettingRow(stringResource(R.string.permissions), permissionSummary.wifiScan.label(), onClick = { showPermissions = true })
             }
         }
-        item { SectionLabel("サポート", Modifier.padding(horizontal = AppSpacing.large)) }
+        item { SectionLabel(stringResource(R.string.support_section), Modifier.padding(horizontal = AppSpacing.large)) }
         item {
             Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
-                SettingRow("使い方", "アプリ内ヘルプ", onClick = { showHelp = true })
-                SettingRow("初回案内を再表示", onClick = onShowOnboarding)
-                SettingRow("プライバシー", "データと権限", onClick = { showPrivacy = true })
-                SettingRow(stringResource(R.string.about_app), "バージョン ${packageInfo.versionName}", onClick = { showAbout = true })
+                SettingRow(stringResource(R.string.help), stringResource(R.string.in_app_help), onClick = { showHelp = true })
+                SettingRow(stringResource(R.string.show_onboarding_again), onClick = onShowOnboarding)
+                SettingRow(stringResource(R.string.privacy), stringResource(R.string.data_and_permissions), onClick = { showPrivacy = true })
+                SettingRow(stringResource(R.string.about_app), stringResource(R.string.version_format, packageInfo.versionName.orEmpty()), onClick = { showAbout = true })
             }
         }
-        item { SectionLabel("Pro・連携", Modifier.padding(horizontal = AppSpacing.large)) }
+        item { SectionLabel(stringResource(R.string.pro_and_integrations), Modifier.padding(horizontal = AppSpacing.large)) }
         item {
             Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
-                SettingRow("Pro版", onClick = onOpenPro)
-                if (showPrivacyOptions) SettingRow("広告のプライバシー設定", onClick = onOpenPrivacyOptions)
-                SettingRow("Playストアで評価する", onClick = onRateApp)
+                SettingRow(stringResource(R.string.pro_version), onClick = onOpenPro)
+                if (showPrivacyOptions) SettingRow(stringResource(R.string.ad_privacy_settings), onClick = onOpenPrivacyOptions)
+                SettingRow(stringResource(R.string.rate_on_play_store), onClick = onRateApp)
             }
         }
         if (BuildConfig.DEBUG) {
-            item { SectionLabel("開発者向け", Modifier.padding(horizontal = AppSpacing.large)) }
+            item { SectionLabel(stringResource(R.string.developer_section), Modifier.padding(horizontal = AppSpacing.large)) }
             item {
                 Card(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large), border = CardDefaults.outlinedCardBorder()) {
                     Column(Modifier.padding(AppSpacing.large)) {
-                        SettingRow("Pro状態を強制する", if (debugForcePro) "開発用Pro状態" else null, trailing = {
+                        SettingRow(stringResource(R.string.force_pro_status), if (debugForcePro) stringResource(R.string.development_pro_status) else null, trailing = {
                             Switch(checked = debugForcePro, onCheckedChange = onDebugForceProChange)
                         })
-                        if (debugForcePro) Text("開発用Pro状態", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                        if (debugForcePro) Text(stringResource(R.string.development_pro_status), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                         SettingRow(
-                            "デバッグ表示",
-                            "Wi-Fiスキャンと画面更新の内部状態を画面上に表示します",
+                            stringResource(R.string.debug_display),
+                            stringResource(R.string.debug_display_explanation),
                             trailing = {
                                 Switch(
                                     checked = debugDisplayEnabled,
@@ -255,7 +255,7 @@ fun SettingsScreen(
     )
     if (showRefreshIntervals) AlertDialog(
         onDismissRequest = { showRefreshIntervals = false },
-        title = { Text("スキャン要求間隔") },
+        title = { Text(stringResource(R.string.scan_request_interval)) },
         text = {
             Column {
                 WifiUiPreferencesRepository.REFRESH_INTERVAL_SECONDS.forEach { seconds ->
@@ -269,28 +269,28 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         RadioButton(refreshIntervalMillis == interval, onClick = null)
-                        Text(refreshIntervalLabel(interval))
+                        Text(localizedRefreshIntervalLabel(interval))
                     }
                 }
                 Text(
-                    "3秒・5秒ではバッテリー消費が増える場合があります。端末やAndroidの制限により、設定どおりにスキャンされないことがあります。",
+                    stringResource(R.string.scan_interval_warning),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { showRefreshIntervals = false }) { Text("閉じる") } },
+        confirmButton = { TextButton(onClick = { showRefreshIntervals = false }) { Text(stringResource(R.string.close)) } },
     )
     if (showDistanceUnits) ChoiceDialog(
-        title = "距離単位",
-        choices = DistanceUnitPreference.entries.map { it to if (it == DistanceUnitPreference.METERS) "メートル" else "フィート" },
+        title = stringResource(R.string.distance_unit),
+        choices = DistanceUnitPreference.entries.map { it to stringResource(if (it == DistanceUnitPreference.METERS) R.string.meters else R.string.feet) },
         selected = distanceUnit,
         onSelect = { onDistanceUnitChange(it); showDistanceUnits = false },
         onDismiss = { showDistanceUnits = false },
     )
     if (showBands) AlertDialog(
         onDismissRequest = { showBands = false },
-        title = { Text("表示対象周波数帯") },
+        title = { Text(stringResource(R.string.frequency_bands)) },
         text = { Column { WifiBand.entries.forEach { band ->
             val selected = band in visibleBands
             Row(
@@ -304,72 +304,72 @@ fun SettingsScreen(
                 Text(band.label)
             }
         } } },
-        confirmButton = { TextButton(onClick = { showBands = false }) { Text("完了") } },
+        confirmButton = { TextButton(onClick = { showBands = false }) { Text(stringResource(R.string.done)) } },
     )
     if (showAbout) AlertDialog(
         onDismissRequest = { showAbout = false },
-        title = { Text("アプリについて") },
+        title = { Text(stringResource(R.string.about_app)) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
-            Text("Wi-Fiアナライザー")
-            Text("バージョン名: ${packageInfo.versionName}")
-            Text("バージョンコード: ${packageInfo.longVersionCode}")
-            Text("パッケージ名: ${context.packageName}")
-            Text("Android対応バージョン: Android 8.0以上")
-            Text("オープンソースライセンス: 準備中")
-            Text("プライバシーポリシー: 準備中")
-            Text("利用規約: 準備中")
-            Text("問い合わせ: 準備中")
+            Text(stringResource(R.string.app_name))
+            Text(stringResource(R.string.version_name_format, packageInfo.versionName.orEmpty()))
+            Text(stringResource(R.string.version_code_format, packageInfo.longVersionCode))
+            Text(stringResource(R.string.package_name_format, context.packageName))
+            Text(stringResource(R.string.android_version_support))
+            Text(stringResource(R.string.open_source_licenses_coming_soon))
+            Text(stringResource(R.string.privacy_policy_coming_soon))
+            Text(stringResource(R.string.terms_coming_soon))
+            Text(stringResource(R.string.contact_coming_soon))
         } },
-        confirmButton = { TextButton(onClick = { showAbout = false }) { Text("閉じる") } },
+        confirmButton = { TextButton(onClick = { showAbout = false }) { Text(stringResource(R.string.close)) } },
     )
     if (showPermissions) AlertDialog(
         onDismissRequest = { showPermissions = false },
-        title = { Text("権限") },
+        title = { Text(stringResource(R.string.permissions)) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.medium)) {
-            PermissionRow("Wi-Fiスキャン", permissionSummary.wifiScan, AppPermissionPolicy.wifiExplanation())
-            PermissionRow("カメラ", permissionSummary.camera, "OCR撮影に使用します。撮影を始める直前に要求します。")
-            PermissionRow("写真選択", permissionSummary.photoPicker, "Androidの写真選択画面を使用するため、写真ライブラリ全体の権限は要求しません。")
+            PermissionRow(stringResource(R.string.wifi_scan), permissionSummary.wifiScan, stringResource(R.string.wifi_permission_explanation))
+            PermissionRow(stringResource(R.string.camera), permissionSummary.camera, stringResource(R.string.camera_permission_explanation))
+            PermissionRow(stringResource(R.string.photo_picker), permissionSummary.photoPicker, stringResource(R.string.photo_picker_explanation))
         } },
         confirmButton = {
-            if (permissionSummary.wifiScan == PermissionStatus.SETTINGS_REQUIRED) Button(onClick = onOpenAppSettings) { Text("Android設定を開く") }
-            else Button(onClick = onRequestScanPermission) { Text("Wi-Fi権限を許可") }
+            if (permissionSummary.wifiScan == PermissionStatus.SETTINGS_REQUIRED) Button(onClick = onOpenAppSettings) { Text(stringResource(R.string.open_android_settings)) }
+            else Button(onClick = onRequestScanPermission) { Text(stringResource(R.string.allow_wifi_permission)) }
         },
-        dismissButton = { TextButton(onClick = { showPermissions = false }) { Text("閉じる") } },
+        dismissButton = { TextButton(onClick = { showPermissions = false }) { Text(stringResource(R.string.close)) } },
     )
     if (showHelp) AlertDialog(
         onDismissRequest = { showHelp = false },
-        title = { Text("使い方") },
+        title = { Text(stringResource(R.string.help)) },
         text = { Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(AppSpacing.medium)) {
-            HelpItem("Wi-Fiを調べる", "画面はOSの最新情報を随時反映します。ホームの「更新」では新しいWi-Fiスキャンを要求します。")
-            HelpItem("機器を登録する", "スキャン結果の「機器として登録」、または登録済み機器画面の追加操作を使います。")
-            HelpItem("OCRで登録する", "ラベルを撮影または選択し、読み取り結果を確認してから登録します。")
-            HelpItem("写真を管理する", "機器詳細から写真を追加・確認します。写真には機密情報が含まれる場合があります。")
-            HelpItem("ワークスペースとグループ", "ワークスペースはデータを分ける保管場所、グループは機器の分類です。")
-            HelpItem("バックアップと復元", "設定のデータ欄からZIPを作成・復元します。")
-            HelpItem("CSV入出力", "登録データをCSVへ出力、または確認後に取り込みます。")
-            HelpItem("よくある質問", "スキャンできない場合は、権限、位置情報サービス、Wi-Fi設定を確認してください。")
-            HelpItem("権限について", AppPermissionPolicy.wifiExplanation())
+            HelpItem(stringResource(R.string.help_scan_title), stringResource(R.string.help_scan_body))
+            HelpItem(stringResource(R.string.help_add_device_title), stringResource(R.string.help_add_device_body))
+            HelpItem(stringResource(R.string.help_ocr_title), stringResource(R.string.help_ocr_body))
+            HelpItem(stringResource(R.string.help_photos_title), stringResource(R.string.help_photos_body))
+            HelpItem(stringResource(R.string.help_workspace_groups_title), stringResource(R.string.help_workspace_groups_body))
+            HelpItem(stringResource(R.string.backup_and_restore), stringResource(R.string.help_backup_body))
+            HelpItem(stringResource(R.string.help_csv_title), stringResource(R.string.help_csv_body))
+            HelpItem(stringResource(R.string.faq), stringResource(R.string.help_faq_body))
+            HelpItem(stringResource(R.string.about_permissions), stringResource(R.string.wifi_permission_explanation))
         } },
-        confirmButton = { TextButton(onClick = { showHelp = false }) { Text("閉じる") } },
+        confirmButton = { TextButton(onClick = { showHelp = false }) { Text(stringResource(R.string.close)) } },
     )
     if (showPrivacy) AlertDialog(
         onDismissRequest = { showPrivacy = false },
-        title = { Text("プライバシー") },
-        text = { Text("Wi-Fi情報は端末内で処理し、登録データも端末内へ保存します。アプリがデータを自動で外部送信することはありません。バックアップや共有を選択した場合のみ、選んだ保存先やアプリへデータが渡ります。写真には機密情報が含まれる可能性があります。位置情報権限はWi-Fiスキャンのためにだけ使用し、位置情報そのものは保存しません。") },
-        confirmButton = { TextButton(onClick = { showPrivacy = false }) { Text("閉じる") } },
+        title = { Text(stringResource(R.string.privacy)) },
+        text = { Text(stringResource(R.string.privacy_summary)) },
+        confirmButton = { TextButton(onClick = { showPrivacy = false }) { Text(stringResource(R.string.close)) } },
     )
 }
 
-private fun PermissionStatus.label() = when (this) {
-    PermissionStatus.GRANTED -> "許可済み"
-    PermissionStatus.NOT_GRANTED -> "未許可"
-    PermissionStatus.PARTIALLY_GRANTED -> "一部許可"
-    PermissionStatus.SETTINGS_REQUIRED -> "設定が必要"
+@Composable private fun PermissionStatus.label() = when (this) {
+    PermissionStatus.GRANTED -> stringResource(R.string.permission_granted)
+    PermissionStatus.NOT_GRANTED -> stringResource(R.string.permission_not_granted)
+    PermissionStatus.PARTIALLY_GRANTED -> stringResource(R.string.permission_partially_granted)
+    PermissionStatus.SETTINGS_REQUIRED -> stringResource(R.string.permission_settings_required)
 }
 
 @Composable private fun PermissionRow(title: String, status: PermissionStatus, explanation: String) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text("$title：${status.label()}", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.permission_status_format, title, status.label()), style = MaterialTheme.typography.titleSmall)
         Text(explanation, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -381,16 +381,16 @@ private fun PermissionStatus.label() = when (this) {
     }
 }
 
+@Composable private fun localizedRefreshIntervalLabel(milliseconds: Long): String = when (milliseconds) {
+    60_000L -> stringResource(R.string.duration_1_minute)
+    120_000L -> stringResource(R.string.duration_2_minutes)
+    300_000L -> stringResource(R.string.duration_5_minutes)
+    else -> stringResource(R.string.duration_seconds, milliseconds / 1_000L)
+}
+
 internal fun refreshIntervalLabel(milliseconds: Long): String = when (milliseconds) {
-    3_000L -> "3秒"
-    5_000L -> "5秒"
-    10_000L -> "10秒"
-    15_000L -> "15秒"
-    20_000L -> "20秒"
-    30_000L -> "30秒"
-    60_000L -> "1分"
-    120_000L -> "2分"
-    300_000L -> "5分"
+    3_000L -> "3秒"; 5_000L -> "5秒"; 10_000L -> "10秒"; 15_000L -> "15秒"; 20_000L -> "20秒"
+    30_000L -> "30秒"; 60_000L -> "1分"; 120_000L -> "2分"; 300_000L -> "5分"
     else -> "${milliseconds / 1_000L}秒"
 }
 
@@ -405,7 +405,7 @@ private fun <T> ChoiceDialog(title: String, choices: List<Pair<T, String>>, sele
             Modifier.fillMaxWidth().selectable(choice == selected, onClick = { onSelect(choice) }, role = Role.RadioButton).padding(vertical = AppSpacing.small),
             verticalAlignment = Alignment.CenterVertically,
         ) { RadioButton(choice == selected, null); Text(label) } }
-    } }, confirmButton = { TextButton(onClick = onDismiss) { Text("閉じる") } })
+    } }, confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } })
 }
 
 @Composable
@@ -418,13 +418,13 @@ private fun WorkspaceDialog(
     var deleting by remember { mutableStateOf<Workspace?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("ワークスペース") },
+        title = { Text(stringResource(R.string.workspace)) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
             state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            Text("現在選択中: ${state.selected?.name ?: "—"}", style = MaterialTheme.typography.labelLarge)
+            Text(stringResource(R.string.current_workspace_format, state.selected?.name ?: stringResource(R.string.not_available)), style = MaterialTheme.typography.labelLarge)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(newName, { newName = it }, Modifier.weight(1f).testTag("workspace_name"), label = { Text("追加する名前") }, singleLine = true)
-                IconButton(enabled = !state.busy && newName.isNotBlank(), onClick = { onCreate(newName); newName = "" }, modifier = Modifier.testTag("workspace_add")) { Icon(Icons.Rounded.Add, "ワークスペースを追加") }
+                OutlinedTextField(newName, { newName = it }, Modifier.weight(1f).testTag("workspace_name"), label = { Text(stringResource(R.string.name_to_add)) }, singleLine = true)
+                IconButton(enabled = !state.busy && newName.isNotBlank(), onClick = { onCreate(newName); newName = "" }, modifier = Modifier.testTag("workspace_add")) { Icon(Icons.Rounded.Add, stringResource(R.string.add_workspace)) }
             }
             state.workspaces.forEachIndexed { index, workspace ->
                 Card(
@@ -433,23 +433,23 @@ private fun WorkspaceDialog(
                     border = CardDefaults.outlinedCardBorder(),
                     modifier = Modifier.fillMaxWidth().testTag("workspace_${workspace.id}"),
                 ) { Row(Modifier.fillMaxWidth().padding(AppSpacing.small), verticalAlignment = Alignment.CenterVertically) {
-                    Text((if (workspace.id == state.selectedId) "選択中・" else "") + workspace.name, Modifier.weight(1f))
-                    IconButton(enabled = index > 0 && !state.busy, onClick = { onMove(workspace.id, -1) }) { Icon(Icons.Rounded.ArrowUpward, "上へ移動") }
-                    IconButton(enabled = index < state.workspaces.lastIndex && !state.busy, onClick = { onMove(workspace.id, 1) }) { Icon(Icons.Rounded.ArrowDownward, "下へ移動") }
-                    IconButton(enabled = !state.busy, onClick = { editing = workspace }) { Icon(Icons.Rounded.Edit, "名前変更") }
-                    IconButton(enabled = !state.busy, onClick = { onLoadCounts(workspace.id); deleting = workspace }) { Icon(Icons.Rounded.Delete, "削除") }
+                    Text((if (workspace.id == state.selectedId) stringResource(R.string.selected_prefix) else "") + workspace.name, Modifier.weight(1f))
+                    IconButton(enabled = index > 0 && !state.busy, onClick = { onMove(workspace.id, -1) }) { Icon(Icons.Rounded.ArrowUpward, stringResource(R.string.move_up)) }
+                    IconButton(enabled = index < state.workspaces.lastIndex && !state.busy, onClick = { onMove(workspace.id, 1) }) { Icon(Icons.Rounded.ArrowDownward, stringResource(R.string.move_down)) }
+                    IconButton(enabled = !state.busy, onClick = { editing = workspace }) { Icon(Icons.Rounded.Edit, stringResource(R.string.rename)) }
+                    IconButton(enabled = !state.busy, onClick = { onLoadCounts(workspace.id); deleting = workspace }) { Icon(Icons.Rounded.Delete, stringResource(R.string.delete)) }
                 } }
             }
         } },
-        confirmButton = { Button(onClick = onDismiss) { Text("閉じる") } },
+        confirmButton = { Button(onClick = onDismiss) { Text(stringResource(R.string.close)) } },
     )
     editing?.let { workspace ->
         var value by remember(workspace.id) { mutableStateOf(workspace.name) }
-        AlertDialog(onDismissRequest = { editing = null }, title = { Text("名前変更") }, text = { OutlinedTextField(value, { value = it }, singleLine = true) }, confirmButton = { Button(onClick = { onRename(workspace.id, value); editing = null }) { Text("変更") } }, dismissButton = { Button(onClick = { editing = null }) { Text("キャンセル") } })
+        AlertDialog(onDismissRequest = { editing = null }, title = { Text(stringResource(R.string.rename)) }, text = { OutlinedTextField(value, { value = it }, singleLine = true) }, confirmButton = { Button(onClick = { onRename(workspace.id, value); editing = null }) { Text(stringResource(R.string.change)) } }, dismissButton = { Button(onClick = { editing = null }) { Text(stringResource(R.string.cancel)) } })
     }
     deleting?.let { workspace ->
         val counts = state.deleteCounts[workspace.id]
-        AlertDialog(onDismissRequest = { deleting = null }, title = { Text("「${workspace.name}」を削除しますか？") }, text = { Text("登録機器 ${counts?.devices ?: 0}台\nグループ ${counts?.groups ?: 0}件\n写真 ${counts?.photos ?: 0}枚\n\nこのワークスペース内のデータも削除されます。最後の1件の場合は新しいdefaultを作成します。") }, confirmButton = { Button(enabled = !state.busy, onClick = { onDelete(workspace.id); deleting = null }) { Text("削除") } }, dismissButton = { Button(onClick = { deleting = null }) { Text("キャンセル") } })
+        AlertDialog(onDismissRequest = { deleting = null }, title = { Text(stringResource(R.string.delete_workspace_title, workspace.name)) }, text = { Text(stringResource(R.string.delete_workspace_message, counts?.devices ?: 0, counts?.groups ?: 0, counts?.photos ?: 0)) }, confirmButton = { Button(enabled = !state.busy, onClick = { onDelete(workspace.id); deleting = null }) { Text(stringResource(R.string.delete)) } }, dismissButton = { Button(onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } })
     }
 }
 
