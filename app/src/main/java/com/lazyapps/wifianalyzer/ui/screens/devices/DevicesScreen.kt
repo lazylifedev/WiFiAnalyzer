@@ -69,6 +69,8 @@ import com.lazyapps.wifianalyzer.domain.DetectionPolicy
 import com.lazyapps.wifianalyzer.domain.DeviceGroup
 import com.lazyapps.wifianalyzer.domain.RegisteredDevice
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
+import com.lazyapps.wifianalyzer.ui.components.SmoothScanProgressIndicator
+import com.lazyapps.wifianalyzer.ui.scan.ScanUiState
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 
 private enum class DeviceSort { NAME, RECENT, RSSI, REGISTERED }
@@ -87,6 +89,7 @@ fun DevicesScreen(
     onDeleteGroup: (DeviceGroup) -> Unit,
     onMoveGroup: (DeviceGroup, Int) -> Unit,
     isRefreshing: Boolean = false,
+    scanState: ScanUiState? = null,
     onRefresh: () -> Unit = {},
     workspaceName: String? = null,
     showInlineNativeAd: Boolean = false,
@@ -133,7 +136,9 @@ fun DevicesScreen(
         debugPlacement = "saved_devices_2",
     ) else null
 
-    PullToRefreshBox(isRefreshing = isRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize()) {
+    scanState?.let { SmoothScanProgressIndicator(it, progressTag = "devices_scan_progress") }
+    PullToRefreshBox(isRefreshing = isRefreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f), indicator = {}) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("devices_screen"),
         contentPadding = PaddingValues(bottom = AppSpacing.xLarge),
@@ -259,6 +264,7 @@ fun DevicesScreen(
             confirmButton = {},
             dismissButton = { TextButton(onClick = { showAddMethods = false }) { Text(stringResource(R.string.cancel)) } },
         )
+    }
     }
 }
 

@@ -66,7 +66,7 @@ import com.lazyapps.wifianalyzer.data.DistanceUnitPreference
 import com.lazyapps.wifianalyzer.ui.components.BandSelector
 import com.lazyapps.wifianalyzer.ui.components.ScanStatusCard
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
-import com.lazyapps.wifianalyzer.ui.components.RefreshProgress
+import com.lazyapps.wifianalyzer.ui.components.SmoothScanProgressIndicator
 import com.lazyapps.wifianalyzer.ui.components.localizedLabel
 import com.lazyapps.wifianalyzer.ui.components.localizedSsid
 import com.lazyapps.wifianalyzer.ui.scan.ScanUiState
@@ -111,7 +111,7 @@ fun HomeScreen(
             IconButton(onClick = onRefresh) { Icon(Icons.Rounded.Refresh, stringResource(R.string.refresh_scan)) }
         }
         BandSelector(band, onBandSelected, Modifier.padding(horizontal = AppSpacing.large), state.visibleBands)
-        RefreshProgress(state)
+        SmoothScanProgressIndicator(state)
         PullToRefreshBox(
             isRefreshing = state.isRefreshing,
             onRefresh = onRefresh,

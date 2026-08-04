@@ -61,7 +61,7 @@ import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import com.lazyapps.wifianalyzer.data.DistanceUnitPreference
 import com.lazyapps.wifianalyzer.ui.components.ScanStatusCard
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
-import com.lazyapps.wifianalyzer.ui.components.RefreshProgress
+import com.lazyapps.wifianalyzer.ui.components.SmoothScanProgressIndicator
 import com.lazyapps.wifianalyzer.ui.components.localizedLabel
 import com.lazyapps.wifianalyzer.ui.components.localizedSsid
 import com.lazyapps.wifianalyzer.ui.scan.ScanUiState
@@ -92,11 +92,11 @@ fun MonitorScreen(
                 IconButton(onClick = onRefresh) { Icon(Icons.Rounded.Refresh, stringResource(R.string.refresh_scan)) }
             }
         }
-        item { RefreshProgress(state) }
+        item { SmoothScanProgressIndicator(state, progressTag = "monitor_scan_progress") }
         item {
             ScanStatusCard(
                 state.scanState, state.accessPoints.isNotEmpty(), onRequestPermission, onOpenSettings, onRefresh,
-                Modifier.padding(horizontal = AppSpacing.large),
+                Modifier.padding(horizontal = AppSpacing.large), showScanningStatus = false,
             )
         }
         if (accessPoint == null && state.selectedBssid == null) {
