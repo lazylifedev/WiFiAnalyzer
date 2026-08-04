@@ -279,8 +279,8 @@ private fun DeviceRow(device: RegisteredDevice, onOpen: () -> Unit, onDelete: ()
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = CardDefaults.outlinedCardBorder(),
     ) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.medium, vertical = AppSpacing.small)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.medium, vertical = 6.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Icon(Icons.Rounded.Wifi, null, tint = if (detected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 Column(Modifier.weight(1f).clickable(onClick = onOpen)) {
                 Text(device.displayName, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -300,7 +300,7 @@ private fun DeviceRow(device: RegisteredDevice, onOpen: () -> Unit, onDelete: ()
             }
         }
         if (expanded) {
-            Column(Modifier.fillMaxWidth().padding(start = 40.dp, top = AppSpacing.small).testTag("saved_device_details_${device.id}")) {
+            Column(Modifier.fillMaxWidth().padding(start = 36.dp, top = 4.dp).testTag("saved_device_details_${device.id}"), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                 DetailLine("BSSID", device.primaryBssid)
                 DetailLine(stringResource(R.string.workspace), device.workspaceId.takeIf { it != 0L }?.toString().orEmpty())
                 DetailLine(stringResource(R.string.manufacturer), device.manufacturer)
