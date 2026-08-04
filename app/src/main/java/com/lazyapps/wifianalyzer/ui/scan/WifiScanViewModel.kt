@@ -69,6 +69,7 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
     private val samplesByBssid = mutableMapOf<String, ArrayDeque<SignalSample>>()
     private var permissionState = ScanState.PERMISSION_REQUIRED
     private var autoRefreshJob: Job? = null
+    private var historyJob: Job? = null
     private var activeSchedule: ScheduledScanRequest? = null
     private var foreground = true
     private val scanSchedule = ScanRequestSchedule { SystemClock.elapsedRealtime() }
@@ -202,6 +203,7 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun clearAccessPointSelection() {
+        historyJob?.cancel(); historyJob = null
         _uiState.value = _uiState.value.copy(
             selectedBssid = null,
             selectedAccessPoint = null,
@@ -329,9 +331,18 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
             selectedDetected = detected,
             signalHistory = samplesByBssid[normalized]?.toList().orEmpty(),
         )
+        historyJob?.cancel()
+        historyJob = viewModelScope.launch {
+            val workspace = workspaceRepository.snapshot.first()
+            if (workspace.selectedId == 0L) return@launch
+            historyRepository.observe(workspace.selectedId, normalized).collectLatest { rows ->
+                _uiState.value = _uiState.value.copy(signalHistory = rows.takeLast(MAX_HISTORY_SAMPLES).map { SignalSample(it.timestampMillis, it.rssi) })
+            }
+        }
     }
 
     override fun onCleared() {
+        historyJob?.cancel()
         scanSchedule.stop()
         repository.close()
         super.onCleared()
