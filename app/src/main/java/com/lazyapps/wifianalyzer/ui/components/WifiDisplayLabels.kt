@@ -1,17 +1,13 @@
 package com.lazyapps.wifianalyzer.ui.components
 
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Wifi
-import androidx.compose.material.icons.rounded.Wifi1Bar
-import androidx.compose.material.icons.rounded.Wifi2Bar
-import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import com.lazyapps.wifianalyzer.R
@@ -30,32 +26,33 @@ internal fun SignalQuality.wifiIconLevel(): WifiIconLevel = when (this) {
     SignalQuality.WEAK -> WifiIconLevel.ZERO
 }
 
-private val Wifi0Bar: ImageVector = ImageVector.Builder(
-    name = "Wifi0Bar",
-    defaultWidth = 24.dp,
-    defaultHeight = 24.dp,
-    viewportWidth = 24f,
-    viewportHeight = 24f,
-).path(fill = SolidColor(Color.Black)) {
-    moveTo(8f, 17f)
-    curveTo(8f, 15.9f, 8.9f, 15f, 10f, 15f)
-    horizontalLineTo(14f)
-    curveTo(15.1f, 15f, 16f, 15.9f, 16f, 17f)
-    curveTo(16f, 18.1f, 15.1f, 19f, 14f, 19f)
-    horizontalLineTo(10f)
-    curveTo(8.9f, 19f, 8f, 18.1f, 8f, 17f)
-    close()
-}.build()
-
 @Composable
 fun SignalQualityWifiIcon(quality: SignalQuality, tint: Color, modifier: Modifier = Modifier) {
-    val image = when (quality.wifiIconLevel()) {
-        WifiIconLevel.THREE -> Icons.Rounded.Wifi
-        WifiIconLevel.TWO -> Icons.Rounded.Wifi2Bar
-        WifiIconLevel.ONE -> Icons.Rounded.Wifi1Bar
-        WifiIconLevel.ZERO -> Wifi0Bar
+    val activeBars = when (quality.wifiIconLevel()) {
+        WifiIconLevel.THREE -> 3
+        WifiIconLevel.TWO -> 2
+        WifiIconLevel.ONE -> 1
+        WifiIconLevel.ZERO -> 0
     }
-    Icon(image, contentDescription = null, tint = tint, modifier = modifier.size(18.dp))
+    val inactive = MaterialTheme.colorScheme.outlineVariant
+    Canvas(modifier.size(18.dp)) {
+        val stroke = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round)
+        val centerX = size.width / 2f
+        val centerY = size.height * 0.72f
+        listOf(4.0f, 6.7f, 9.4f).forEachIndexed { index, radiusDp ->
+            val radius = radiusDp.dp.toPx()
+            drawArc(
+                color = if (index < activeBars) tint else inactive,
+                startAngle = 225f,
+                sweepAngle = 90f,
+                useCenter = false,
+                topLeft = androidx.compose.ui.geometry.Offset(centerX - radius, centerY - radius),
+                size = androidx.compose.ui.geometry.Size(radius * 2f, radius * 2f),
+                style = stroke,
+            )
+        }
+        drawCircle(if (activeBars > 0) tint else inactive, radius = 1.2.dp.toPx(), center = androidx.compose.ui.geometry.Offset(centerX, centerY))
+    }
 }
 
 @Composable
