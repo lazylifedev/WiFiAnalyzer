@@ -59,6 +59,7 @@ import com.lazyapps.wifianalyzer.model.DistanceRange
 import com.lazyapps.wifianalyzer.model.ScanState
 import com.lazyapps.wifianalyzer.model.SecurityType
 import com.lazyapps.wifianalyzer.model.SignalQuality
+import com.lazyapps.wifianalyzer.ui.components.SignalQualityWifiIcon
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import com.lazyapps.wifianalyzer.model.WifiBand
 import com.lazyapps.wifianalyzer.model.WifiStandard
@@ -201,7 +202,7 @@ private fun DenseAccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) 
                 }
                 Row(Modifier.fillMaxWidth().clickable { onClick(accessPoint.bssid) }, verticalAlignment = Alignment.CenterVertically) {
                     Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(Icons.Rounded.Wifi, null, tint = signalColor, modifier = Modifier.size(18.dp))
+                        SignalQualityWifiIcon(accessPoint.signalQuality, signalColor)
                         Text(accessPoint.bssid, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall.copy(lineHeight = 15.sp), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("home_bssid_$stableId"))
                     }
                     Column(Modifier.widthIn(min = 72.dp), horizontalAlignment = Alignment.End) {
@@ -230,7 +231,7 @@ private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Un
         Box(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.medium, vertical = 8.dp)) {
             Column(Modifier.fillMaxWidth().padding(end = 92.dp, bottom = 48.dp).testTag("home_access_point_${accessPoint.bssid}").clickable { onClick(accessPoint.bssid) }, verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(displaySsid, Modifier.testTag("home_ssid_${accessPoint.bssid}"), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium.copy(lineHeight = 20.sp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Icon(Icons.Rounded.Wifi, null, tint = signalColor, modifier = Modifier.size(18.dp)); Text(accessPoint.bssid, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall.copy(lineHeight = 15.sp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { SignalQualityWifiIcon(accessPoint.signalQuality, signalColor); Text(accessPoint.bssid, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall.copy(lineHeight = 15.sp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 Text("${accessPoint.band.label} ﾂｷ CH ${accessPoint.channel} ﾂｷ ${stringResource(R.string.estimated_prefix, accessPoint.distanceRange.localizedLabel(feet))}", maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (expanded) Column(Modifier.testTag("home_access_point_details_$stableId").padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("${accessPoint.securityType.localizedLabel()} ﾂｷ ${accessPoint.frequencyMhz} MHz", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -276,7 +277,7 @@ private fun LegacyAccessPointRow(accessPoint: WifiAccessPoint, onClick: (String)
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Icon(Icons.Rounded.Wifi, contentDescription = null, tint = signalColor)
+            SignalQualityWifiIcon(accessPoint.signalQuality, signalColor)
             Column(
                 Modifier.weight(1f).testTag("home_access_point_${accessPoint.bssid}").clickable { onClick(accessPoint.bssid) },
                 verticalArrangement = Arrangement.spacedBy(2.dp),

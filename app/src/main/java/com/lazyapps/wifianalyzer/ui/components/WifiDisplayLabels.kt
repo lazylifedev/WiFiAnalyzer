@@ -1,6 +1,16 @@
 package com.lazyapps.wifianalyzer.ui.components
 
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material.icons.rounded.Wifi1Bar
+import androidx.compose.material.icons.rounded.Wifi2Bar
+import androidx.compose.material.icons.rounded.WifiOff
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.model.DistanceRange
@@ -8,6 +18,17 @@ import com.lazyapps.wifianalyzer.model.SecurityType
 import com.lazyapps.wifianalyzer.model.SignalQuality
 import com.lazyapps.wifianalyzer.model.WifiStandard
 import com.lazyapps.wifianalyzer.domain.WifiAnalysis
+
+@Composable
+fun SignalQualityWifiIcon(quality: SignalQuality, tint: Color, modifier: Modifier = Modifier) {
+    val image = when (quality) {
+        SignalQuality.EXCELLENT -> Icons.Rounded.Wifi
+        SignalQuality.GOOD -> Icons.Rounded.Wifi2Bar
+        SignalQuality.FAIR -> Icons.Rounded.Wifi1Bar
+        SignalQuality.WEAK -> Icons.Rounded.WifiOff
+    }
+    Icon(image, contentDescription = null, tint = tint, modifier = modifier.size(18.dp))
+}
 
 @Composable
 fun SignalQuality.localizedLabel(): String = stringResource(when (this) {

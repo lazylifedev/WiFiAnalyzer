@@ -24,7 +24,6 @@ import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.SwapVert
-import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material3.AlertDialog
@@ -53,6 +52,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import com.lazyapps.wifianalyzer.domain.WifiAnalysis
+import com.lazyapps.wifianalyzer.model.SignalQuality
+import com.lazyapps.wifianalyzer.ui.components.SignalQualityWifiIcon
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.activity.compose.BackHandler
@@ -278,6 +280,7 @@ fun DevicesScreen(
 @Composable
 private fun DeviceRow(device: RegisteredDevice, onOpen: () -> Unit, onDelete: () -> Unit, modifier: Modifier = Modifier) {
     val detected = DetectionPolicy.isDetected(device.lastSeenAt, System.currentTimeMillis())
+    val signalQuality = device.lastSeenRssi?.let(WifiAnalysis::signalQuality) ?: SignalQuality.WEAK
     var menu by remember { mutableStateOf(false) }
     var expanded by rememberSaveable(device.id) { mutableStateOf(false) }
     Card(modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
@@ -287,7 +290,7 @@ private fun DeviceRow(device: RegisteredDevice, onOpen: () -> Unit, onDelete: ()
                 if (device.ssid.isNotBlank()) Text(device.ssid, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text("${device.groupName ?: stringResource(R.string.uncategorized)} ·", maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = if (detected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                    Icon(Icons.Rounded.Wifi, null, tint = if (detected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp).testTag("saved_device_status_wifi_${device.id}"))
+                    SignalQualityWifiIcon(signalQuality, if (detected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, Modifier.testTag("saved_device_status_wifi_${device.id}"))
                     Text(stringResource(if (detected) R.string.detected else R.string.not_detected), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = if (detected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text("${device.lastSeenRssi?.let { "$it dBm" } ?: stringResource(R.string.rssi_not_available)} ﾂｷ ${relativeTime(device.lastSeenAt)}", maxLines = 1, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -302,6 +305,7 @@ private fun DeviceRow(device: RegisteredDevice, onOpen: () -> Unit, onDelete: ()
 @Composable
 private fun CompactDeviceRow(device: RegisteredDevice, onOpen: () -> Unit, onDelete: () -> Unit, modifier: Modifier = Modifier) {
     val detected = DetectionPolicy.isDetected(device.lastSeenAt, System.currentTimeMillis())
+    val signalQuality = device.lastSeenRssi?.let(WifiAnalysis::signalQuality) ?: SignalQuality.WEAK
     var menu by remember { mutableStateOf(false) }
     var expanded by rememberSaveable(device.id) { mutableStateOf(false) }
     val detailsDescription = stringResource(if (expanded) R.string.hide_details else R.string.show_details)
@@ -312,7 +316,7 @@ private fun CompactDeviceRow(device: RegisteredDevice, onOpen: () -> Unit, onDel
     ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.medium, vertical = 6.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Icon(Icons.Rounded.Wifi, null, tint = if (detected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+            SignalQualityWifiIcon(signalQuality, if (detected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 Column(Modifier.weight(1f).clickable(onClick = onOpen)) {
                 Text(device.displayName, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (device.ssid.isNotBlank()) Text(device.ssid, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
