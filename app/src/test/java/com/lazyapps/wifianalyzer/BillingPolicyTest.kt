@@ -29,7 +29,15 @@ class BillingPolicyTest {
         val access = FeatureAccessPolicy.from(ProEntitlementState.Free)
         assertFalse(access.canUseKintone)
         assertTrue(access.canUseCsvImport)
-        assertNull(access.maxWorkspaceCount)
+        assertEquals(1, access.maxWorkspaceCount)
+        assertEquals(AccessRestriction.SavedDeviceLimitReached, access.restrictionForDeviceCount(5))
+        assertNull(access.restrictionForDeviceCount(4))
+        assertEquals(AccessRestriction.WorkspaceLimitReached, access.restrictionForWorkspaceCount(1))
+        assertEquals(AccessRestriction.DevicePhotoLimitReached, access.restrictionForPhotoCount(1))
+        assertFalse(access.canExportCsv)
+        assertFalse(access.canExportPdf)
+        assertFalse(access.canBackup)
+        assertFalse(access.canRestore)
         assertTrue(AdVisibilityPolicy(access).canShow(AdPlacement.HOME))
     }
     @Test fun acknowledgementResponseSeparatesSuccessRetryableAndPermanentFailures() {

@@ -105,7 +105,6 @@ import com.lazyapps.wifianalyzer.ui.permissions.PermissionSummary
 import kotlinx.coroutines.launch
 import com.lazyapps.wifianalyzer.ads.AdBanner
 import com.lazyapps.wifianalyzer.ads.AdMobManager
-import com.lazyapps.wifianalyzer.ads.InterstitialAdManager
 import com.lazyapps.wifianalyzer.billing.AdVisibilityPolicy
 
 private const val KINTONE_BOOTH_URL = "https://lazylifedev.booth.pm/items/8670244"
@@ -148,9 +147,9 @@ fun WifiAnalyzerApp(
         workspaceState.selected?.let { kintoneViewModel.selectWorkspace(it.id, it.name, fromAppSelection = true) }
     }
     LaunchedEffect(billingState.entitlement, debugForcePro) {
-        InterstitialAdManager.updateEntitlement(billingState.entitlement, debugForcePro)
-        if (billingState.entitlement != com.lazyapps.wifianalyzer.billing.ProEntitlementState.Unknown) InterstitialAdManager.prepare()
-        kintoneViewModel.setAccessAllowed(FeatureAccessPolicy.from(billingState.entitlement, debugForcePro).canUseKintone)
+        val access = FeatureAccessPolicy.from(billingState.entitlement, debugForcePro)
+        if (!access.isPro && billingState.entitlement != com.lazyapps.wifianalyzer.billing.ProEntitlementState.Unknown) activity?.let { AdMobManager.initialize(it) }
+        kintoneViewModel.setAccessAllowed(access.canUseKintone)
     }
 
     fun currentPermissionState(): ScanState {
@@ -242,9 +241,6 @@ fun WifiAnalyzerApp(
             AppDestination.Devices.route -> com.lazyapps.wifianalyzer.billing.AdPlacement.DEVICE_LIST
             AppDestination.Settings.route -> com.lazyapps.wifianalyzer.billing.AdPlacement.SETTINGS
             else -> null
-        }
-        LaunchedEffect(currentRoute, billingState.entitlement, debugForcePro) {
-            InterstitialAdManager.observeRoute(activity, adPlacement)
         }
         val showAd = billingState.entitlement != com.lazyapps.wifianalyzer.billing.ProEntitlementState.Unknown &&
             adPlacement != null && AdVisibilityPolicy(accessPolicy).canShow(adPlacement)
@@ -407,10 +403,10 @@ fun WifiAnalyzerApp(
                         workspaceState = workspaceState,
                         onBack = { navController.popBackStack() },
                         onOpenWorkspace = { id -> workspaceViewModel.select(id); navController.navigateTopLevel(AppDestination.Devices.route) },
-                        onOperationSuccess = { InterstitialAdManager.showAfterSuccessfulOperation(activity) },
+                        onOperationSuccess = {},
                     )
                 }
-                composable(EXPORT_ROUTE) { ExportScreen(onBack = { navController.popBackStack() }, onOperationSuccess = { InterstitialAdManager.showAfterSuccessfulOperation(activity) }) }
+                composable(EXPORT_ROUTE) { ExportScreen(onBack = { navController.popBackStack() }, onOperationSuccess = {}) }
                 composable(IMPORT_ROUTE) { ImportScreen(onBack = { navController.popBackStack() }) }
                 composable(PRO_ROUTE) {
                     ProScreen(

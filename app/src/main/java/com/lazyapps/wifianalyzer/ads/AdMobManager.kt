@@ -44,6 +44,5 @@ object AdMobManager {
                 mobileAdsInitialized.value = true
             }
         }
-        if (canRequestAds.value) InterstitialAdManager.prepare()
     }
 }
