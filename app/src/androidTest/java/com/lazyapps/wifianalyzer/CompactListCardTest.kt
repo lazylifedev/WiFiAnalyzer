@@ -53,6 +53,7 @@ class CompactListCardTest {
                 DevicesScreen(listOf(device), emptyList(), null, {}, {}, {}, {}, {}, { _, _ -> }, {}, { _, _ -> })
             }
         }
+        rule.onNodeWithTag("saved_device_status_wifi_7", useUnmergedTree = true).assertExists()
         rule.onNodeWithTag("saved_device_details_7").assertDoesNotExist()
         rule.onNodeWithTag("saved_device_expand_7", useUnmergedTree = true).performClick()
         rule.waitForIdle()
