@@ -3,6 +3,7 @@ package com.lazyapps.wifianalyzer
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.lazyapps.wifianalyzer.billing.AccessRestriction
 import com.lazyapps.wifianalyzer.ui.pro.ProRestrictionDialog
