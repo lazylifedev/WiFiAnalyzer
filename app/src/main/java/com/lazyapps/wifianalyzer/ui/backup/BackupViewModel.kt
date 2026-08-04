@@ -20,6 +20,7 @@ import com.lazyapps.wifianalyzer.data.registry.WorkspaceRepository
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorMapper
 import com.lazyapps.wifianalyzer.ui.operation.OperationProgress
 import com.lazyapps.wifianalyzer.ui.operation.OperationState
+import com.lazyapps.wifianalyzer.ui.operation.ExternalDataOperationCoordinator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +44,7 @@ data class BackupUiState(
 
 class BackupViewModel(application: Application) : AndroidViewModel(application) {
     @Volatile private var access = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Free)
+    private val operationCoordinator = ExternalDataOperationCoordinator(access = { access })
     fun setAccess(value: FeatureAccessPolicy) { access = value }
     fun canBackup() = access.canBackup
     fun canRestore() = access.canRestore
@@ -64,7 +66,7 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun export(uri: Uri, workspaceId: Long?) = runTask(R.string.operation_backup, cancellable = true) {
-        check(access.canBackup) { "BACKUP_REQUIRES_PRO" }
+        operationCoordinator.authorizeBackup().getOrThrow()
         val manifest = exporter.export(
             workspaceId?.let { BackupScope.Workspace(it) } ?: BackupScope.All,
             uri,
@@ -84,7 +86,7 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun inspect(uri: Uri) = runTask(R.string.operation_restore, cancellable = true) {
-        check(access.canRestore) { "RESTORE_REQUIRES_PRO" }
+        operationCoordinator.authorizeRestore().getOrThrow()
         running(R.string.operation_restore, R.string.restore_stage_verify, cancellable = true)
         val preview = importer.inspect(uri) { stage, current, total -> updateProgress(R.string.operation_restore, stage, current, total, true) }
         mutable.value = mutable.value.copy(preview = preview)
@@ -95,6 +97,7 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
         if (!access.canRestore) return
         val preview = mutable.value.preview ?: return
         runTask(R.string.operation_restore, cancellable = false) {
+            operationCoordinator.authorizeRestore().getOrThrow()
             running(R.string.operation_restore, R.string.restore_stage_database, cancellable = false)
             val result = restorer.restore(preview, mode) { stage, current, total -> updateProgress(R.string.operation_restore, stage, current, total, false) }
             if (mode == RestoreMode.REPLACE) result.workspaceIds.firstOrNull()?.let { workspaces.select(it) }

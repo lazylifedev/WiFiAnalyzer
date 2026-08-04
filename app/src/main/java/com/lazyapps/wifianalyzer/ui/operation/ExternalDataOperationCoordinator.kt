@@ -12,7 +12,11 @@ interface ExternalDataOperations {
     fun createTemporaryFile(name: String): java.io.File
 }
 
-class ExternalDataOperationCoordinator(private val access: () -> FeatureAccessPolicy, private val external: ExternalDataOperations) {
+class ExternalDataOperationCoordinator(private val access: () -> FeatureAccessPolicy, private val external: ExternalDataOperations = NoOpExternalDataOperations) {
+    fun authorizeCsv(): Result<Unit> = run(Feature.CSV) {}
+    fun authorizePdf(): Result<Unit> = run(Feature.PDF) {}
+    fun authorizeBackup(): Result<Unit> = run(Feature.BACKUP) {}
+    fun authorizeRestore(): Result<Unit> = run(Feature.RESTORE) {}
     fun createCsv(name: String, uri: Uri? = null, write: ((java.io.OutputStream) -> Unit)? = null): Result<Unit> = run(Feature.CSV) {
         if (uri == null) external.launchCreateDocument(name) else write?.let { external.openOutputStream(uri)?.use(it) ?: error("OUTPUT_UNAVAILABLE") }
     }
@@ -39,4 +43,13 @@ class ExternalDataOperationCoordinator(private val access: () -> FeatureAccessPo
         Feature.BACKUP -> access().canBackup
         Feature.RESTORE -> access().canRestore
     }
+}
+
+private object NoOpExternalDataOperations : ExternalDataOperations {
+    override fun launchCreateDocument(name: String) = Unit
+    override fun launchOpenDocument() = Unit
+    override fun launchShareIntent(file: java.io.File) = Unit
+    override fun openInputStream(uri: Uri): java.io.InputStream? = null
+    override fun openOutputStream(uri: Uri): java.io.OutputStream? = null
+    override fun createTemporaryFile(name: String) = java.io.File(name)
 }
