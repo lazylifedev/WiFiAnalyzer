@@ -112,7 +112,12 @@ fun HomeScreen(
         }
         BandSelector(band, onBandSelected, Modifier.padding(horizontal = AppSpacing.large), state.visibleBands)
         RefreshProgress(state)
-        PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
+        PullToRefreshBox(
+            isRefreshing = state.isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.weight(1f),
+            indicator = {},
+        ) {
         LazyColumn(
         modifier = Modifier.fillMaxSize().testTag("home_access_point_list"),
         contentPadding = PaddingValues(bottom = AppSpacing.xLarge),
@@ -126,6 +131,7 @@ fun HomeScreen(
                 onOpenSettings = onOpenSettings,
                 onRefresh = onRefresh,
                 modifier = Modifier.padding(horizontal = AppSpacing.large),
+                showScanningStatus = false,
             )
         }
         if (state.accessPoints.isEmpty() && state.lastUpdatedMillis == null) {
@@ -143,7 +149,7 @@ fun HomeScreen(
             }
         }
         item {
-            Column(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large, vertical = AppSpacing.small)) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large, vertical = AppSpacing.small).testTag("home_access_point_section")) {
                 Text(stringResource(R.string.nearby_access_points), style = MaterialTheme.typography.titleMedium)
                 Text(pluralStringResource(R.plurals.access_point_count, accessPoints.size, accessPoints.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

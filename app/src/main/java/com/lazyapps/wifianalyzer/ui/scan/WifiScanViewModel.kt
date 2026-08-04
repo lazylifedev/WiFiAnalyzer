@@ -36,8 +36,7 @@ data class ScanUiState(
     val selectedDetected: Boolean = false,
     val signalHistory: List<SignalSample> = emptyList(),
     val errorMessage: String? = null,
-    val refreshProgress: Float = 0f,
-    val refreshSecondsRemaining: Int? = null,
+    val refreshCycleStartedElapsedMillis: Long? = null,
     val isRefreshing: Boolean = false,
     val homeBand: WifiBand = WifiBand.BAND_24,
     val channelBand: WifiBand = WifiBand.BAND_24,
@@ -59,6 +58,7 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
     private val samplesByBssid = mutableMapOf<String, ArrayDeque<SignalSample>>()
     private var permissionState = ScanState.PERMISSION_REQUIRED
     private var autoRefreshJob: Job? = null
+    private var activeSchedule: ScheduledScanRequest? = null
     private var foreground = true
     private val scanSchedule = ScanRequestSchedule { SystemClock.elapsedRealtime() }
 
@@ -74,17 +74,20 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
                     visibleBands = value.visibleBands,
                     channelDisplayMode = value.channelDisplayMode,
                 )
-                if (intervalChanged) scheduleAutoRefresh()
+                if (intervalChanged) {
+                    if (foreground) scheduleAutoRefresh() else clearRefreshSchedule()
+                }
             }
         }
         viewModelScope.launch {
             repository.snapshot.collectLatest { snapshot ->
+                val wasRefreshing = _uiState.value.isRefreshing
                 if (permissionState != ScanState.READY) {
-                    _uiState.value = _uiState.value.copy(scanState = permissionState, selectedDetected = false)
+                    _uiState.value = _uiState.value.copy(scanState = permissionState, selectedDetected = false, isRefreshing = false)
                     return@collectLatest
                 }
                 if (snapshot.state == ScanState.PERMISSION_REQUIRED) {
-                    _uiState.value = _uiState.value.copy(scanState = permissionState, selectedDetected = false)
+                    _uiState.value = _uiState.value.copy(scanState = permissionState, selectedDetected = false, isRefreshing = false)
                     return@collectLatest
                 }
                 if (snapshot.state in NON_DETECTING_STATES) {
@@ -92,7 +95,9 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
                         scanState = snapshot.state,
                         selectedDetected = false,
                         errorMessage = scanErrorMessage(snapshot.state),
+                        isRefreshing = false,
                     )
+                    if (wasRefreshing) scheduleAutoRefresh()
                     return@collectLatest
                 }
                 val now = System.currentTimeMillis()
@@ -125,6 +130,7 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
                     errorMessage = if (snapshot.state == ScanState.THROTTLED) scanErrorMessage(snapshot.state) else null,
                     isRefreshing = snapshot.state == ScanState.SCANNING,
                 )
+                if (wasRefreshing && snapshot.state != ScanState.SCANNING) scheduleAutoRefresh()
                 if (BuildConfig.DEBUG) {
                     if (addedHistoryCount > 0) {
                         DebugLogs.store.add(
@@ -152,7 +158,7 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
             }
         } else {
             repository.stopMonitoring()
-            scanSchedule.stop()
+            clearRefreshSchedule()
             autoRefreshJob?.cancel()
             autoRefreshJob = null
             _uiState.value = _uiState.value.copy(scanState = state, selectedDetected = false)
@@ -220,10 +226,9 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
         }
         if (isForeground) {
             if (permissionState == ScanState.READY) repository.startMonitoring()
-            scheduleAutoRefresh()
+            resumeAutoRefresh()
         } else {
             repository.stopMonitoring()
-            scanSchedule.stop()
             autoRefreshJob?.cancel()
             autoRefreshJob = null
         }
@@ -242,22 +247,28 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
     private fun scheduleAutoRefresh() {
         if (permissionState != ScanState.READY || !foreground) return
         val first = scanSchedule.restart(_uiState.value.refreshIntervalMillis)
+        publishRefreshCycle(first)
+        launchAutoRefresh(first)
+    }
+
+    private fun resumeAutoRefresh() {
+        if (permissionState != ScanState.READY || !foreground) return
+        val saved = activeSchedule
+        val resumed = saved?.let { scanSchedule.current(it.generation) } ?: run {
+            scheduleAutoRefresh()
+            return
+        }
+        publishRefreshCycle(resumed)
+        launchAutoRefresh(resumed)
+    }
+
+    private fun launchAutoRefresh(first: ScheduledScanRequest) {
         autoRefreshJob?.cancel()
         autoRefreshJob = viewModelScope.launch {
             var scheduled = first
             while (true) {
-                while (scheduled.delayMillis > 0L) {
-                    val waitMillis = minOf(250L, scheduled.delayMillis)
-                    delay(waitMillis)
-                    val current = scanSchedule.current(scheduled.generation) ?: return@launch
-                    val cycleMillis = _uiState.value.refreshIntervalMillis
-                    val remaining = current.delayMillis
-                    _uiState.value = _uiState.value.copy(
-                        refreshProgress = (1f - remaining.toFloat() / cycleMillis).coerceIn(0f, 1f),
-                        refreshSecondsRemaining = ((remaining + 999L) / 1_000L).toInt(),
-                    )
-                    scheduled = current
-                }
+                delay(scheduled.delayMillis)
+                scheduled = scanSchedule.current(scheduled.generation) ?: return@launch
                 if (scanSchedule.current(scheduled.generation) == null) return@launch
                 if (permissionState == ScanState.READY && foreground) {
                     if (BuildConfig.DEBUG) {
@@ -274,8 +285,22 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
                     )
                 }
                 scheduled = scanSchedule.advance(scheduled.generation) ?: return@launch
+                publishRefreshCycle(scheduled)
             }
         }
+    }
+
+    private fun publishRefreshCycle(scheduled: ScheduledScanRequest) {
+        activeSchedule = scheduled
+        _uiState.value = _uiState.value.copy(
+            refreshCycleStartedElapsedMillis = scheduled.scheduledAtMillis - _uiState.value.refreshIntervalMillis,
+        )
+    }
+
+    private fun clearRefreshSchedule() {
+        scanSchedule.stop()
+        activeSchedule = null
+        _uiState.value = _uiState.value.copy(refreshCycleStartedElapsedMillis = null)
     }
 
     fun selectAccessPoint(bssid: String) {
