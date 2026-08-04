@@ -104,7 +104,8 @@ class BillingPolicyTest {
         val access = FeatureAccessPolicy.from(ProEntitlementState.Pro)
         assertTrue(access.deviceDecision(100).allowed)
         assertTrue(access.workspaceDecision(100).allowed)
-        assertTrue(access.photoDecision(100).allowed)
+        assertTrue(access.photoDecision(8).allowed)
+        assertFalse(access.photoDecision(9).allowed)
     }
     @Test fun eachRestrictionHasItsOwnReason() {
         val access = FeatureAccessPolicy.from(ProEntitlementState.Free)

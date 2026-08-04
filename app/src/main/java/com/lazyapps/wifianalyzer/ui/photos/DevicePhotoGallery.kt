@@ -138,7 +138,7 @@ fun DevicePhotoGallery(deviceId: Long, workspaceId: Long, access: FeatureAccessP
                 } else {
                     IconButton(onClick = { photoMenu = true }, modifier = Modifier.testTag("photo_menu")) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.photo_menu)) }
                     DropdownMenu(photoMenu, { photoMenu = false }) {
-                        DropdownMenuItem({ Text(stringResource(R.string.photo_add)) }, { photoMenu = false; if (access.photoDecision(state.photos.size).allowed) showAdd = true else showPro = true }, modifier = Modifier.testTag("photo_add"), enabled = !state.busy, leadingIcon = { Icon(Icons.Rounded.Add, null) })
+                        DropdownMenuItem({ Text(stringResource(R.string.photo_add)) }, { photoMenu = false; if (access.photoDecision(state.photos.size).allowed) showAdd = true else if (!access.isPro) showPro = true }, modifier = Modifier.testTag("photo_add"), enabled = !state.busy, leadingIcon = { Icon(Icons.Rounded.Add, null) })
                         DropdownMenuItem({ Text(stringResource(R.string.photo_select)) }, { photoMenu = false; state.photos.firstOrNull()?.let { photoViewModel.enterSelection(it.id) } }, enabled = state.photos.isNotEmpty(), leadingIcon = { Icon(Icons.Rounded.Check, null) })
                         DropdownMenuItem({ Text(stringResource(R.string.photo_reorder_action)) }, { photoMenu = false; photoViewModel.setReorderMode(true) }, enabled = state.photos.size > 1, leadingIcon = { Icon(Icons.Rounded.ArrowForward, null) })
                     }

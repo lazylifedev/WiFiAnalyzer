@@ -33,13 +33,16 @@ data class FeatureAccessPolicy(
         fun from(state: ProEntitlementState, debugForcePro: Boolean = false) = FeatureAccessPolicy(
             isPro = debugForcePro || state == ProEntitlementState.Pro ||
                 (state is ProEntitlementState.Error && state.retainedPro),
-            limits = if (debugForcePro || state == ProEntitlementState.Pro || (state is ProEntitlementState.Error && state.retainedPro)) FeatureLimits(null, null, null) else FeatureLimits(),
+            limits = if (debugForcePro || state == ProEntitlementState.Pro || (state is ProEntitlementState.Error && state.retainedPro)) FeatureLimits(null, null, 9) else FeatureLimits(),
         )
     }
 
     fun deviceDecision(total: Int) = decision(total, limits.maxDeviceCount, AccessRestriction.SavedDeviceLimitReached, 5, null)
     fun workspaceDecision(total: Int) = decision(total, limits.maxWorkspaceCount, AccessRestriction.WorkspaceLimitReached, 1, null)
-    fun photoDecision(total: Int) = decision(total, limits.maxPhotosPerDevice, AccessRestriction.DevicePhotoLimitReached, 1, 9)
+    fun photoDecision(total: Int): AccessDecision {
+        val limit = if (isPro) 9 else 1
+        return AccessDecision(total < limit, if (total >= limit) AccessRestriction.DevicePhotoLimitReached else null, total, 1, 9)
+    }
     fun restrictionForDeviceCount(total: Int) = deviceDecision(total).reason
     fun restrictionForWorkspaceCount(total: Int) = workspaceDecision(total).reason
     fun restrictionForPhotoCount(total: Int) = photoDecision(total).reason
