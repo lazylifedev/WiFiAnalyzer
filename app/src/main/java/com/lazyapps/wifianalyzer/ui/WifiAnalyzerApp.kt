@@ -346,7 +346,8 @@ fun WifiAnalyzerApp(
                         onRenameGroup = registryViewModel::renameGroup,
                         onDeleteGroup = registryViewModel::deleteGroup,
                         onMoveGroup = registryViewModel::moveGroup,
-                        isRefreshing = scanState.isRefreshing || registryState.busy,
+                        isRefreshing = scanState.isRefreshing,
+                        scanState = enrichedScanState,
                         onRefresh = {
                             scanViewModel.refresh()
                             registryViewModel.reconcile(scanState.accessPoints)

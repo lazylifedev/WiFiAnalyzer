@@ -38,7 +38,7 @@ import com.lazyapps.wifianalyzer.model.ScanState
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import com.lazyapps.wifianalyzer.model.WifiBand
 import com.lazyapps.wifianalyzer.ui.components.BandSelector
-import com.lazyapps.wifianalyzer.ui.components.RefreshProgress
+import com.lazyapps.wifianalyzer.ui.components.SmoothScanProgressIndicator
 import com.lazyapps.wifianalyzer.ui.components.ScanStatusCard
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
 import com.lazyapps.wifianalyzer.ui.scan.ScanUiState
@@ -79,8 +79,8 @@ fun ChannelScreen(
             IconButton(onClick = onRefresh) { Icon(Icons.Rounded.Refresh, stringResource(R.string.refresh_scan)) }
         }
         BandSelector(selectedBand, onBandSelected, Modifier.padding(horizontal = AppSpacing.large), state.visibleBands)
-        RefreshProgress(state)
-        PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
+        SmoothScanProgressIndicator(state, progressTag = "channel_scan_progress")
+        PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f), indicator = {}) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().testTag("channel_list"),
                 contentPadding = PaddingValues(bottom = AppSpacing.xLarge),
@@ -93,7 +93,7 @@ fun ChannelScreen(
                     item {
                         ScanStatusCard(
                             state.scanState, state.accessPoints.isNotEmpty(), onRequestPermission, onOpenSettings, onRefresh,
-                            Modifier.padding(horizontal = AppSpacing.large),
+                            Modifier.padding(horizontal = AppSpacing.large), showScanningStatus = false,
                         )
                     }
                 }

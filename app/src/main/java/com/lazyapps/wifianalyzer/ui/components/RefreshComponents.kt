@@ -30,10 +30,13 @@ internal fun refreshProgressAt(nowMillis: Long, cycleStartMillis: Long, interval
     ((nowMillis - cycleStartMillis).coerceAtLeast(0L).toFloat() / intervalMillis).coerceIn(0f, 1f)
 
 @Composable
-fun RefreshProgress(
+fun SmoothScanProgressIndicator(
     state: ScanUiState,
     modifier: Modifier = Modifier,
     elapsedRealtime: () -> Long = SystemClock::elapsedRealtime,
+    progressTag: String = "home_scan_progress",
+    waitingContentDescription: Int = R.string.home_refresh_progress_waiting,
+    refreshingContentDescription: Int = R.string.home_refresh_progress_refreshing,
 ) {
     val progress = remember { Animatable(0f) }
     val cycleStart = state.refreshCycleStartedElapsedMillis
@@ -52,12 +55,12 @@ fun RefreshProgress(
         }
     }
     Column(modifier.fillMaxWidth()) {
-        val progressDescription = if (state.isRefreshing) stringResource(R.string.home_refresh_progress_refreshing)
-            else stringResource(R.string.home_refresh_progress_waiting)
+        val progressDescription = if (state.isRefreshing) stringResource(refreshingContentDescription)
+            else stringResource(waitingContentDescription)
         val progressModifier = Modifier
             .fillMaxWidth()
             .height(3.dp)
-            .testTag("home_scan_progress")
+            .testTag(progressTag)
             .clearAndSetSemantics {
                 contentDescription = progressDescription
                 homeScanProgressFraction = if (cycleStart == null) 0f else progress.value
@@ -74,3 +77,10 @@ fun RefreshProgress(
         )
     }
 }
+
+@Composable
+fun RefreshProgress(
+    state: ScanUiState,
+    modifier: Modifier = Modifier,
+    elapsedRealtime: () -> Long = SystemClock::elapsedRealtime,
+) = SmoothScanProgressIndicator(state, modifier, elapsedRealtime)
