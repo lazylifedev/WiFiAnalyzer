@@ -146,6 +146,7 @@ fun WifiAnalyzerApp(
         mutableStateOf(permissionPreferences.getBoolean("requested_once", false))
     }
     LaunchedEffect(workspaceState.selectedId, workspaceState.selected?.name) {
+        scanViewModel.setWorkspaceId(workspaceState.selectedId)
         workspaceState.selected?.let { kintoneViewModel.selectWorkspace(it.id, it.name, fromAppSelection = true) }
     }
     LaunchedEffect(billingState.entitlement, debugForcePro) {

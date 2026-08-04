@@ -16,7 +16,13 @@ abstract class WifiAnalyzerDatabase : RoomDatabase() {
     abstract fun registryDao(): RegistryDao
 
     companion object {
-        const val VERSION = 4
+        const val VERSION = 5
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DELETE FROM signal_history WHERE id NOT IN (SELECT MIN(id) FROM signal_history GROUP BY workspace_id, bssid, timestamp_millis)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_signal_history_workspace_id_bssid_timestamp_millis` ON `signal_history` (`workspace_id`, `bssid`, `timestamp_millis`)")
+            }
+        }
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS `signal_history` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `workspace_id` INTEGER NOT NULL, `bssid` TEXT NOT NULL, `ssid` TEXT NOT NULL, `timestamp_millis` INTEGER NOT NULL, `rssi` INTEGER NOT NULL, `frequency_mhz` INTEGER NOT NULL, `channel` INTEGER NOT NULL, `band` TEXT NOT NULL)")
@@ -75,7 +81,7 @@ abstract class WifiAnalyzerDatabase : RoomDatabase() {
                 context.applicationContext,
                 WifiAnalyzerDatabase::class.java,
                 "wifi_analyzer.db",
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { instance = it }
         }
     }
 }

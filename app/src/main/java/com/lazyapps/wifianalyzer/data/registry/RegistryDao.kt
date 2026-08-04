@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface RegistryDao {
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertHistory(items: List<SignalHistoryEntity>)
     @Query("SELECT * FROM signal_history WHERE workspace_id = :workspaceId AND bssid = :bssid ORDER BY timestamp_millis ASC")
     fun observeHistory(workspaceId: Long, bssid: String): Flow<List<SignalHistoryEntity>>

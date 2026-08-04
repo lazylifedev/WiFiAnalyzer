@@ -31,7 +31,7 @@ class WorkspaceMigrationTest {
             db.version = 1
         }
         val room = Room.databaseBuilder(context, WifiAnalyzerDatabase::class.java, name)
-            .addMigrations(WifiAnalyzerDatabase.MIGRATION_1_2, WifiAnalyzerDatabase.MIGRATION_2_3).build()
+            .addMigrations(WifiAnalyzerDatabase.MIGRATION_1_2, WifiAnalyzerDatabase.MIGRATION_2_3, WifiAnalyzerDatabase.MIGRATION_3_4, WifiAnalyzerDatabase.MIGRATION_4_5).build()
         val dao = room.registryDao(); val device = dao.getDevice(1)!!; val bssid = dao.getBssids(1).single()
         assertEquals(1L, device.workspaceId); assertEquals(1L, device.groupId); assertEquals(12L, device.lastSeenAt); assertEquals(-55, device.lastSeenRssi)
         assertEquals(1L, bssid.workspaceId); assertEquals("AA:BB:CC:DD:EE:FF", bssid.bssid); assertEquals("default", dao.getWorkspace(1)?.name)

@@ -6,7 +6,7 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "signal_history", indices = [Index(value = ["workspace_id", "bssid", "timestamp_millis"]), Index(value = ["timestamp_millis"])])
+@Entity(tableName = "signal_history", indices = [Index(value = ["workspace_id", "bssid", "timestamp_millis"], unique = true), Index(value = ["timestamp_millis"])])
 data class SignalHistoryEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     @ColumnInfo(name = "workspace_id") val workspaceId: Long,

@@ -62,6 +62,12 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
     private val workspaceRepository = WorkspaceRepository(application, database)
     @Volatile private var access = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Free)
     fun setAccess(policy: FeatureAccessPolicy) { access = policy }
+    private var selectedWorkspaceId: Long = 0L
+    fun setWorkspaceId(workspaceId: Long) {
+        if (selectedWorkspaceId == workspaceId) return
+        selectedWorkspaceId = workspaceId
+        _uiState.value.selectedBssid?.let(::selectAccessPoint)
+    }
     private val repository = WifiScanRepository(application)
     private val preferences = WifiUiPreferencesRepository(application)
     private val _uiState = MutableStateFlow(ScanUiState())
@@ -333,9 +339,9 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
         )
         historyJob?.cancel()
         historyJob = viewModelScope.launch {
-            val workspace = workspaceRepository.snapshot.first()
-            if (workspace.selectedId == 0L) return@launch
-            historyRepository.observe(workspace.selectedId, normalized).collectLatest { rows ->
+            val workspaceId = selectedWorkspaceId.takeIf { it != 0L } ?: workspaceRepository.snapshot.first().selectedId
+            if (workspaceId == 0L) return@launch
+            historyRepository.observe(workspaceId, normalized).collectLatest { rows ->
                 _uiState.value = _uiState.value.copy(signalHistory = rows.takeLast(MAX_HISTORY_SAMPLES).map { SignalSample(it.timestampMillis, it.rssi) })
             }
         }
