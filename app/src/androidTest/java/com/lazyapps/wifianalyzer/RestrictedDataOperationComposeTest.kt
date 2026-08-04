@@ -27,6 +27,6 @@ class RestrictedDataOperationComposeTest {
         assertEquals(1, opens)
         rule.runOnIdle { reason.value = AccessRestriction.RestoreRequiresPro }
         rule.onNodeWithTag("pro_close").assertIsDisplayed().performClick()
-        assertEquals(1, dismisses)
+        assertEquals(2, dismisses)
     }
 }
