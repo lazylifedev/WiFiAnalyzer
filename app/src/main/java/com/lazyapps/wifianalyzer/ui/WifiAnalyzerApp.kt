@@ -536,6 +536,7 @@ fun WifiAnalyzerApp(
                             navController.navigate(OCR_REGISTRATION_ROUTE)
                         },
                         access = accessPolicy,
+                        onOpenPro = openPro,
                         useFeet = scanState.distanceUnit == com.lazyapps.wifianalyzer.data.DistanceUnitPreference.FEET,
                     )
                 }

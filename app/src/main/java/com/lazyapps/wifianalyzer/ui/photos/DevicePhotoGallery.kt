@@ -103,12 +103,13 @@ import com.lazyapps.wifianalyzer.domain.DevicePhoto
 import com.lazyapps.wifianalyzer.domain.DevicePhotoPolicy
 import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import com.lazyapps.wifianalyzer.billing.AccessRestriction
+import com.lazyapps.wifianalyzer.ui.pro.ProRestrictionDialog
 import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 import java.io.File
 
 @Composable
-fun DevicePhotoGallery(deviceId: Long, workspaceId: Long, access: FeatureAccessPolicy = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Free), photoViewModel: DevicePhotoViewModel = viewModel()) {
+fun DevicePhotoGallery(deviceId: Long, workspaceId: Long, access: FeatureAccessPolicy = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Free), onOpenPro: () -> Unit = {}, photoViewModel: DevicePhotoViewModel = viewModel()) {
     LaunchedEffect(access.isPro) { photoViewModel.setAccess(access) }
     LaunchedEffect(deviceId, workspaceId) { photoViewModel.bind(deviceId, workspaceId) }
     val state by photoViewModel.state.collectAsStateWithLifecycle()
@@ -172,7 +173,7 @@ fun DevicePhotoGallery(deviceId: Long, workspaceId: Long, access: FeatureAccessP
         Button(onClick = { showAdd = false; val file = File.createTempFile("device-photo-", ".jpg", context.cacheDir); cameraFile = file; camera.launch(FileProvider.getUriForFile(context, "${context.packageName}.files", file)) }, modifier = Modifier.fillMaxWidth().testTag("photo_take_camera")) { Icon(Icons.Rounded.CameraAlt, null); Text(stringResource(R.string.photo_take_camera)) }
         Button(onClick = { showAdd = false; picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, modifier = Modifier.fillMaxWidth().testTag("photo_choose_gallery")) { Icon(Icons.Rounded.PhotoLibrary, null); Text(stringResource(R.string.photo_choose_gallery)) }
     } }, confirmButton = {}, dismissButton = { TextButton(onClick = { showAdd = false }, modifier = Modifier.testTag("photo_add_cancel")) { Text(stringResource(R.string.photo_cancel)) } })
-    if (showPro) AlertDialog(onDismissRequest = { showPro = false }, title = { Text(stringResource(R.string.pro_limit_title)) }, text = { Text(stringResource(R.string.pro_photo_limit_message)) }, confirmButton = { TextButton(onClick = { showPro = false }, modifier = Modifier.testTag("pro_view")) { Text(stringResource(R.string.view_pro)) } }, dismissButton = { TextButton(onClick = { showPro = false }, modifier = Modifier.testTag("pro_close")) { Text(stringResource(R.string.close)) } })
+    if (showPro) ProRestrictionDialog(AccessRestriction.DevicePhotoLimitReached, { showPro = false; onOpenPro() }) { showPro = false }
     viewerIndex?.let { index -> if (state.photos.isNotEmpty()) PhotoViewer(state.photos, index.coerceAtMost(state.photos.lastIndex), photoViewModel, { viewerIndex = null }, { viewerIndex = it }, { deleteTarget = it }) }
     deleteTarget?.let { photo -> AlertDialog(onDismissRequest = { deleteTarget = null }, title = { Text(stringResource(R.string.photo_delete_title)) }, text = { Text(stringResource(R.string.photo_delete_message)) }, confirmButton = { Button(onClick = { photoViewModel.delete(photo.id); deleteTarget = null; if (state.photos.size <= 1) viewerIndex = null }, modifier = Modifier.testTag("photo_delete_confirm")) { Text(stringResource(R.string.photo_delete)) } }, dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text(stringResource(R.string.photo_cancel)) } }) }
     if (confirmSelectedDelete) AlertDialog(

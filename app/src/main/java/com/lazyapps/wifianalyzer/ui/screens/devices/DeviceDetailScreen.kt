@@ -59,6 +59,7 @@ fun DeviceDetailScreen(
     onOcrUpdate: () -> Unit,
     useFeet: Boolean = false,
     access: FeatureAccessPolicy = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Free),
+    onOpenPro: () -> Unit = {},
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
     var chooseMonitor by remember { mutableStateOf(false) }
@@ -84,7 +85,7 @@ fun DeviceDetailScreen(
                 }
             })
         }
-        item { DevicePhotoGallery(device.id, device.workspaceId, access) }
+        item { DevicePhotoGallery(device.id, device.workspaceId, access, onOpenPro) }
         item {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large),
