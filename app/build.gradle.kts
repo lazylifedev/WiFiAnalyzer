@@ -94,3 +94,16 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.room.testing)
 }
+
+// AGP 9 does not expose the dependency list to the debuggable variant. Reuse
+// the plugin-generated, offline release notices so debug APKs are inspectable too.
+tasks.configureEach {
+    if (name != "debugOssLicensesTask") return@configureEach
+    dependsOn("releaseOssLicensesTask")
+    doLast {
+        copy {
+            from(layout.buildDirectory.dir("generated/res/releaseOssLicensesTask/raw"))
+            into(layout.buildDirectory.dir("generated/res/debugOssLicensesTask/raw"))
+        }
+    }
+}

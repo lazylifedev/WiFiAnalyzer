@@ -120,6 +120,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val packageInfo = remember(context) { context.packageManager.getPackageInfo(context.packageName, 0) }
+    val openSourceLicenseTitle = stringResource(R.string.open_source_licenses)
     var showWorkspaces by remember { mutableStateOf(false) }
     var showRefreshIntervals by remember { mutableStateOf(false) }
     var showDistanceUnits by remember { mutableStateOf(false) }
@@ -335,6 +336,7 @@ fun SettingsScreen(
             Text(stringResource(R.string.package_name_format, context.packageName))
             Text(stringResource(R.string.android_version_support))
             LegalRow(stringResource(R.string.open_source_licenses), onClick = {
+                OssLicensesMenuActivity.setActivityTitle(openSourceLicenseTitle)
                 context.startActivity(Intent(context, OssLicensesMenuActivity::class.java))
             }, testTag = "about_open_source_licenses")
             LegalRow(stringResource(R.string.privacy_policy), onClick = {
