@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.runtime.mutableStateOf
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.lazyapps.wifianalyzer.billing.AccessRestriction
 import com.lazyapps.wifianalyzer.ui.pro.ProRestrictionDialog
@@ -20,10 +21,11 @@ class RestrictedDataOperationComposeTest {
     @Test fun commonDialogProvidesOneProActionAndOneDismissAction() {
         var opens = 0
         var dismisses = 0
-        rule.setContent { WifiAnalyzerTheme { ProRestrictionDialog(AccessRestriction.CsvRequiresPro, { opens++ }, { dismisses++ }) } }
+        val reason = mutableStateOf(AccessRestriction.CsvRequiresPro)
+        rule.setContent { WifiAnalyzerTheme { ProRestrictionDialog(reason.value, { opens++ }, { dismisses++ }) } }
         rule.onNodeWithTag("pro_view").assertIsDisplayed().performClick()
         assertEquals(1, opens)
-        rule.setContent { WifiAnalyzerTheme { ProRestrictionDialog(AccessRestriction.RestoreRequiresPro, { opens++ }, { dismisses++ }) } }
+        rule.runOnIdle { reason.value = AccessRestriction.RestoreRequiresPro }
         rule.onNodeWithTag("pro_close").assertIsDisplayed().performClick()
         assertEquals(1, dismisses)
     }
