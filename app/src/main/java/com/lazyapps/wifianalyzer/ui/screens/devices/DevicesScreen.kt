@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -270,6 +271,27 @@ fun DevicesScreen(
 
 @Composable
 private fun DeviceRow(device: RegisteredDevice, onOpen: () -> Unit, onDelete: () -> Unit, modifier: Modifier = Modifier) {
+    val detected = DetectionPolicy.isDetected(device.lastSeenAt, System.currentTimeMillis())
+    var menu by remember { mutableStateOf(false) }
+    var expanded by rememberSaveable(device.id) { mutableStateOf(false) }
+    Card(modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface), border = CardDefaults.outlinedCardBorder()) {
+        Box(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.medium, vertical = 8.dp)) {
+            Column(Modifier.fillMaxWidth().padding(end = 96.dp).clickable(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(device.displayName, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (device.ssid.isNotBlank()) Text(device.ssid, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.device_group_status, device.groupName ?: stringResource(R.string.uncategorized), stringResource(if (detected) R.string.detected else R.string.not_detected)), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = if (detected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${device.lastSeenRssi?.let { "$it dBm" } ?: stringResource(R.string.rssi_not_available)} ﾂｷ ${relativeTime(device.lastSeenAt)}", maxLines = 1, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (expanded) Column(Modifier.fillMaxWidth().padding(top = 4.dp).testTag("saved_device_details_${device.id}"), verticalArrangement = Arrangement.spacedBy(2.dp)) { DetailLine("BSSID", device.primaryBssid); DetailLine(stringResource(R.string.workspace), device.workspaceId.takeIf { it != 0L }?.toString().orEmpty()); DetailLine(stringResource(R.string.manufacturer), device.manufacturer); DetailLine(stringResource(R.string.model), device.model); DetailLine(stringResource(R.string.serial_number), device.serialNumber); DetailLine(stringResource(R.string.location_label), device.location); DetailLine(stringResource(R.string.notes), device.notes) }
+            }
+            Icon(Icons.Rounded.Wifi, null, tint = if (detected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.align(Alignment.TopEnd).padding(top = 10.dp, end = 76.dp).size(18.dp))
+            Box(Modifier.align(Alignment.TopEnd)) { IconButton({ menu = true }, Modifier.size(48.dp)) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.more_options)) }; DropdownMenu(menu, { menu = false }) { DropdownMenuItem({ Text(stringResource(R.string.open_details)) }, { menu = false; onOpen() }); DropdownMenuItem({ Text(stringResource(R.string.delete)) }, { menu = false; onDelete() }, leadingIcon = { Icon(Icons.Rounded.Delete, null) }) } }
+            IconButton({ expanded = !expanded }, Modifier.align(Alignment.BottomEnd).size(48.dp).testTag("saved_device_expand_${device.id}")) { Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, stringResource(if (expanded) R.string.hide_details else R.string.show_details)) }
+        }
+    }
+}
+
+@Composable
+private fun CompactDeviceRow(device: RegisteredDevice, onOpen: () -> Unit, onDelete: () -> Unit, modifier: Modifier = Modifier) {
     val detected = DetectionPolicy.isDetected(device.lastSeenAt, System.currentTimeMillis())
     var menu by remember { mutableStateOf(false) }
     var expanded by rememberSaveable(device.id) { mutableStateOf(false) }
