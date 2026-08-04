@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -191,8 +192,8 @@ private fun DenseAccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) 
             Column(Modifier.fillMaxWidth().padding(end = 48.dp).testTag("home_access_point_${accessPoint.bssid}"), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Row(Modifier.fillMaxWidth().clickable { onClick(accessPoint.bssid) }, verticalAlignment = Alignment.CenterVertically) {
                     Text(displaySsid, Modifier.weight(1f).testTag("home_ssid_${accessPoint.bssid}"), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium.copy(lineHeight = 20.sp))
-                    Column(horizontalAlignment = Alignment.End) { Text("${accessPoint.rssi} dBm", maxLines = 1, style = MaterialTheme.typography.titleMedium.copy(lineHeight = 20.sp), fontWeight = FontWeight.Bold, color = signalColor, modifier = Modifier.testTag("home_rssi_$stableId")); Text(accessPoint.signalQuality.localizedLabel(), maxLines = 1, style = MaterialTheme.typography.labelSmall.copy(lineHeight = 14.sp), color = signalColor) }
                     Box(Modifier.size(48.dp).testTag("home_registration_slot_$stableId"), contentAlignment = Alignment.Center) { if (accessPoint.isRegistered) Icon(Icons.Rounded.CheckCircle, stringResource(R.string.registered), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp).testTag("home_registered_${accessPoint.bssid}")) else IconButton(onClick = { onRegister(accessPoint) }, modifier = Modifier.size(48.dp).testTag("home_register_device_$stableId")) { Icon(Icons.Rounded.AddCircleOutline, stringResource(R.string.register_as_device), modifier = Modifier.size(24.dp).testTag("home_unregistered_icon_$stableId")) } }
+                    Column(Modifier.widthIn(min = 72.dp), horizontalAlignment = Alignment.End) { Text("${accessPoint.rssi} dBm", maxLines = 1, style = MaterialTheme.typography.titleMedium.copy(lineHeight = 20.sp), fontWeight = FontWeight.Bold, color = signalColor, modifier = Modifier.testTag("home_rssi_$stableId")); Text(accessPoint.signalQuality.localizedLabel(), maxLines = 1, style = MaterialTheme.typography.labelSmall.copy(lineHeight = 14.sp), color = signalColor) }
                 }
                 Row(Modifier.fillMaxWidth().clickable { onClick(accessPoint.bssid) }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { Icon(Icons.Rounded.Wifi, null, tint = signalColor, modifier = Modifier.size(18.dp)); Text(accessPoint.bssid, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall.copy(lineHeight = 15.sp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 Row(Modifier.fillMaxWidth().clickable { onClick(accessPoint.bssid) }, verticalAlignment = Alignment.CenterVertically) { Text("${accessPoint.band.label} · CH ${accessPoint.channel} · ${stringResource(R.string.estimated_prefix, accessPoint.distanceRange.localizedLabel(feet))}", Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
