@@ -15,11 +15,30 @@ class InlineNativeAdPolicyTest {
         assertEquals(4, InlineNativeAdPolicy.insertionIndex(8, InlineNativeAdPolicy.HOME_AFTER_COUNT))
     }
 
-    @Test fun devicesUsesThirdPositionOrEnd() {
-        assertNull(InlineNativeAdPolicy.insertionIndex(0, InlineNativeAdPolicy.DEVICES_AFTER_COUNT))
-        assertEquals(2, InlineNativeAdPolicy.insertionIndex(2, InlineNativeAdPolicy.DEVICES_AFTER_COUNT))
-        assertEquals(3, InlineNativeAdPolicy.insertionIndex(3, InlineNativeAdPolicy.DEVICES_AFTER_COUNT))
-        assertEquals(3, InlineNativeAdPolicy.insertionIndex(8, InlineNativeAdPolicy.DEVICES_AFTER_COUNT))
+    @Test fun devicesUsesFifthAndTenthPositionsWithMaximumTwo() {
+        val expected = mapOf(
+            0 to emptyList(), 1 to emptyList(), 4 to emptyList(),
+            5 to listOf(5), 9 to listOf(5),
+            10 to listOf(5, 10), 11 to listOf(5, 10), 20 to listOf(5, 10),
+        )
+        expected.forEach { (count, indices) ->
+            assertEquals(indices, InlineNativeAdPolicy.deviceInsertionIndices(count))
+        }
+        assertTrue(InlineNativeAdPolicy.deviceInsertionIndices(100).size <= 2)
+    }
+
+    @Test fun insertingDeviceAdsPreservesOrderAndStableKeys() {
+        val source = (1..20).map { "device_$it" }
+        val insertions = InlineNativeAdPolicy.deviceInsertionIndices(source.size)
+        val rendered = buildList {
+            source.forEachIndexed { index, item ->
+                add(item)
+                if (index + 1 in insertions) add("devices_inline_native_ad_${insertions.indexOf(index + 1) + 1}")
+            }
+        }
+        assertEquals(source, rendered.filter { it.startsWith("device_") })
+        assertEquals(rendered.size, rendered.distinct().size)
+        assertEquals(2, rendered.count { it.startsWith("devices_inline_native_ad_") })
     }
 
     @Test fun requestRequiresEveryGate() {

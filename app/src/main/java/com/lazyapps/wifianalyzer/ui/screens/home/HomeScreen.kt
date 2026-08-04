@@ -3,17 +3,23 @@ package com.lazyapps.wifianalyzer.ui.screens.home
 import android.text.format.DateFormat
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material.icons.rounded.AddCircleOutline
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -25,12 +31,15 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
@@ -54,7 +63,6 @@ import com.lazyapps.wifianalyzer.data.DistanceUnitPreference
 import com.lazyapps.wifianalyzer.ui.components.BandSelector
 import com.lazyapps.wifianalyzer.ui.components.ScanStatusCard
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
-import com.lazyapps.wifianalyzer.ui.components.RegisteredBadge
 import com.lazyapps.wifianalyzer.ui.components.RefreshProgress
 import com.lazyapps.wifianalyzer.ui.components.localizedLabel
 import com.lazyapps.wifianalyzer.ui.components.localizedSsid
@@ -178,48 +186,57 @@ private fun AccessPointRow(accessPoint: WifiAccessPoint, onClick: (String) -> Un
     val registeredDescription = if (accessPoint.isRegistered) stringResource(R.string.registered_description_prefix) else ""
     val displaySsid = accessPoint.ssid.localizedSsid()
     val rowDescription = stringResource(R.string.access_point_description, registeredDescription, displaySsid, accessPoint.rssi)
+    val stableId = accessPoint.bssid.replace(Regex("[^A-Za-z0-9]"), "_")
+    var expanded by rememberSaveable(accessPoint.bssid) { mutableStateOf(false) }
+    val detailsDescription = stringResource(if (expanded) R.string.hide_details else R.string.show_details)
     Card(
         modifier = modifier.fillMaxWidth()
-            .testTag("home_access_point_${accessPoint.bssid}")
-            .semantics { contentDescription = rowDescription }
-            .clickable { onClick(accessPoint.bssid) },
+            .testTag("home_access_point_card_$stableId")
+            .semantics { contentDescription = rowDescription },
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = CardDefaults.outlinedCardBorder(),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(AppSpacing.medium),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(AppSpacing.medium),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = AppSpacing.medium, vertical = AppSpacing.small),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(AppSpacing.small),
         ) {
             Icon(Icons.Rounded.Wifi, contentDescription = null, tint = signalColor)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(displaySsid, modifier = Modifier.testTag("home_ssid_${accessPoint.bssid}"), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-                if (accessPoint.isRegistered) RegisteredBadge(Modifier.testTag("home_registered_${accessPoint.bssid}").clearAndSetSemantics { })
-                accessPoint.registeredDeviceName?.let { name ->
-                    Text(stringResource(R.string.saved_name_format, name), maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                    Text(stringResource(R.string.group_format, accessPoint.registeredGroupName ?: stringResource(R.string.uncategorized)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            Column(
+                Modifier.weight(1f).testTag("home_access_point_${accessPoint.bssid}").clickable { onClick(accessPoint.bssid) },
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(displaySsid, modifier = Modifier.weight(1f).testTag("home_ssid_${accessPoint.bssid}"), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+                    Box(Modifier.size(48.dp).testTag("home_registration_slot_$stableId"), contentAlignment = Alignment.Center) {
+                        if (accessPoint.isRegistered) {
+                            Icon(Icons.Rounded.CheckCircle, stringResource(R.string.registered), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp).testTag("home_registered_${accessPoint.bssid}"))
+                        } else {
+                            IconButton(onClick = { onRegister(accessPoint) }, modifier = Modifier.size(48.dp).testTag("home_register_device_$stableId")) {
+                                Icon(Icons.Rounded.AddCircleOutline, stringResource(R.string.register_as_device), modifier = Modifier.size(24.dp).testTag("home_unregistered_icon_$stableId"))
+                            }
+                        }
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("${accessPoint.rssi} dBm", maxLines = 1, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = signalColor, modifier = Modifier.testTag("home_rssi_$stableId"))
+                        Text(accessPoint.signalQuality.localizedLabel(), maxLines = 1, style = MaterialTheme.typography.labelSmall, color = signalColor)
+                    }
                 }
                 Text(accessPoint.bssid, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(
-                    "${accessPoint.securityType.localizedLabel()} · ${accessPoint.band.label} · CH ${accessPoint.channel}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    "${accessPoint.frequencyMhz} MHz · ${accessPoint.channelWidthMhz} MHz · ${accessPoint.wifiStandard.localizedLabel()}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (accessPoint.isRegistered) {
-                    Text(stringResource(R.string.select_for_monitor), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                } else {
-                    TextButton(onClick = { onRegister(accessPoint) }) { Text(stringResource(R.string.save_as_device)) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("${accessPoint.band.label} · CH ${accessPoint.channel} · ${stringResource(R.string.estimated_prefix, accessPoint.distanceRange.localizedLabel(feet))}", modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(48.dp).testTag("home_access_point_expand_$stableId")) {
+                        Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, detailsDescription)
+                    }
                 }
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text("${accessPoint.rssi} dBm", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = signalColor)
-                Text(accessPoint.signalQuality.localizedLabel(), style = MaterialTheme.typography.labelSmall, color = signalColor)
-                Text(stringResource(R.string.estimated_prefix, accessPoint.distanceRange.localizedLabel(feet)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (expanded) {
+                    Column(Modifier.testTag("home_access_point_details_$stableId")) {
+                        Text("${accessPoint.securityType.localizedLabel()} · ${accessPoint.frequencyMhz} MHz", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${accessPoint.channelWidthMhz} MHz · ${accessPoint.wifiStandard.localizedLabel()}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        accessPoint.registeredDeviceName?.let { Text(stringResource(R.string.saved_name_format, it), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall) }
+                        accessPoint.registeredGroupName?.let { Text(stringResource(R.string.group_format, it), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall) }
+                    }
+                }
             }
         }
     }

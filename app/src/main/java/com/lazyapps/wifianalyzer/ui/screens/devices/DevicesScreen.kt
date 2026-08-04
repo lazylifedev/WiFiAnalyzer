@@ -24,6 +24,8 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -87,7 +89,7 @@ fun DevicesScreen(
     onRefresh: () -> Unit = {},
     workspaceName: String? = null,
     showInlineNativeAd: Boolean = false,
-    inlineAdContent: (@Composable (Modifier) -> Unit)? = null,
+    inlineAdContent: (@Composable (Int, Modifier) -> Unit)? = null,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var searchVisible by rememberSaveable { mutableStateOf(false) }
@@ -115,13 +117,19 @@ fun DevicesScreen(
                 DeviceSort.REGISTERED -> sequence.sortedByDescending { it.createdAt }
             }
         }.toList()
-    val nativeAdIndex = InlineNativeAdPolicy.insertionIndex(visible.size, InlineNativeAdPolicy.DEVICES_AFTER_COUNT)
-        ?.takeIf { showInlineNativeAd }
-    val screenNativeAd = if (inlineAdContent == null) rememberInlineNativeAd(
+    val nativeAdIndices = InlineNativeAdPolicy.deviceInsertionIndices(visible.size)
+        .takeIf { showInlineNativeAd }.orEmpty()
+    val firstNativeAd = if (inlineAdContent == null) rememberInlineNativeAd(
         unitId = AdConfiguration.devicesNativeUnitId,
         enabled = showInlineNativeAd,
-        requestEligible = nativeAdIndex != null,
-        debugPlacement = "saved_devices",
+        requestEligible = nativeAdIndices.isNotEmpty(),
+        debugPlacement = "saved_devices_1",
+    ) else null
+    val secondNativeAd = if (inlineAdContent == null) rememberInlineNativeAd(
+        unitId = AdConfiguration.devicesNativeUnitId,
+        enabled = showInlineNativeAd,
+        requestEligible = nativeAdIndices.size >= 2,
+        debugPlacement = "saved_devices_2",
     ) else null
 
     PullToRefreshBox(isRefreshing = isRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
@@ -184,20 +192,24 @@ fun DevicesScreen(
                 }
             }
         }
-        val renderedItemCount = visible.size + if (nativeAdIndex != null) 1 else 0
+        val adListIndices = nativeAdIndices.mapIndexed { adIndex, deviceCount -> deviceCount + adIndex }
+        val renderedItemCount = visible.size + adListIndices.size
         items(
             count = renderedItemCount,
             key = { listIndex ->
-                if (listIndex == nativeAdIndex) "devices_inline_native_ad_item"
-                else "device_${visible[if (nativeAdIndex != null && listIndex > nativeAdIndex) listIndex - 1 else listIndex].id}"
+                val adIndex = adListIndices.indexOf(listIndex)
+                if (adIndex >= 0) "devices_inline_native_ad_${adIndex + 1}"
+                else "device_${visible[listIndex - adListIndices.count { it < listIndex }].id}"
             },
         ) { listIndex ->
-            if (listIndex == nativeAdIndex) {
+            val adIndex = adListIndices.indexOf(listIndex)
+            if (adIndex >= 0) {
                 val adModifier = Modifier.padding(horizontal = AppSpacing.large, vertical = AppSpacing.small)
-                if (inlineAdContent != null) inlineAdContent(adModifier)
-                else InlineNativeAdContent(screenNativeAd, "devices_inline_native_ad", adModifier)
+                val tag = "devices_inline_native_ad_${adIndex + 1}"
+                if (inlineAdContent != null) inlineAdContent(adIndex, adModifier)
+                else InlineNativeAdContent(if (adIndex == 0) firstNativeAd else secondNativeAd, tag, adModifier)
             } else {
-                val deviceIndex = if (nativeAdIndex != null && listIndex > nativeAdIndex) listIndex - 1 else listIndex
+                val deviceIndex = listIndex - adListIndices.count { it < listIndex }
                 val device = visible[deviceIndex]
                 DeviceRow(device, { onOpenDevice(device.id) }, { deleteTarget = device }, Modifier.padding(horizontal = AppSpacing.large))
             }
@@ -260,31 +272,51 @@ fun DevicesScreen(
 private fun DeviceRow(device: RegisteredDevice, onOpen: () -> Unit, onDelete: () -> Unit, modifier: Modifier = Modifier) {
     val detected = DetectionPolicy.isDetected(device.lastSeenAt, System.currentTimeMillis())
     var menu by remember { mutableStateOf(false) }
+    var expanded by rememberSaveable(device.id) { mutableStateOf(false) }
+    val detailsDescription = stringResource(if (expanded) R.string.hide_details else R.string.show_details)
     Card(
-        modifier.fillMaxWidth().clickable(onClick = onOpen),
+        modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = CardDefaults.outlinedCardBorder(),
     ) {
-        Row(Modifier.fillMaxWidth().padding(AppSpacing.medium), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppSpacing.medium)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.medium, vertical = AppSpacing.small)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(AppSpacing.small)) {
             Icon(Icons.Rounded.Wifi, null, tint = if (detected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-            Column(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f).clickable(onClick = onOpen)) {
                 Text(device.displayName, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                val makerModel = listOf(device.manufacturer, device.model).filter { it.isNotBlank() }.joinToString(" / ")
-                if (makerModel.isNotBlank()) Text(makerModel, style = MaterialTheme.typography.bodySmall)
-                if (device.ssid.isNotBlank()) Text("SSID: ${device.ssid}", maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
-                Text("BSSID: ${device.primaryBssid}", maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(stringResource(R.string.device_group_status, device.groupName ?: stringResource(R.string.uncategorized), stringResource(if (detected) R.string.detected else R.string.not_detected)), style = MaterialTheme.typography.labelSmall, color = if (detected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("${device.lastSeenRssi?.let { "$it dBm" } ?: "RSSI —"} · ${relativeTime(device.lastSeenAt)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (device.ssid.isNotBlank()) Text(device.ssid, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.device_group_status, device.groupName ?: stringResource(R.string.uncategorized), stringResource(if (detected) R.string.detected else R.string.not_detected)), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall, color = if (detected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${device.lastSeenRssi?.let { "$it dBm" } ?: stringResource(R.string.rssi_not_available)} · ${relativeTime(device.lastSeenAt)}", maxLines = 1, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Box {
-                IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.device_menu)) }
+                IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, stringResource(R.string.more_options)) }
                 DropdownMenu(menu, { menu = false }) {
                     DropdownMenuItem({ Text(stringResource(R.string.open_details)) }, { menu = false; onOpen() })
                     DropdownMenuItem({ Text(stringResource(R.string.delete)) }, { menu = false; onDelete() }, leadingIcon = { Icon(Icons.Rounded.Delete, null) })
                 }
             }
+            IconButton(onClick = { expanded = !expanded }, modifier = Modifier.testTag("saved_device_expand_${device.id}")) {
+                Icon(if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore, detailsDescription)
+            }
+        }
+        if (expanded) {
+            Column(Modifier.fillMaxWidth().padding(start = 40.dp, top = AppSpacing.small).testTag("saved_device_details_${device.id}")) {
+                DetailLine("BSSID", device.primaryBssid)
+                DetailLine(stringResource(R.string.workspace), device.workspaceId.takeIf { it != 0L }?.toString().orEmpty())
+                DetailLine(stringResource(R.string.manufacturer), device.manufacturer)
+                DetailLine(stringResource(R.string.model), device.model)
+                DetailLine(stringResource(R.string.serial_number), device.serialNumber)
+                DetailLine(stringResource(R.string.location_label), device.location)
+                DetailLine(stringResource(R.string.notes), device.notes)
+            }
+        }
         }
     }
+}
+
+@Composable
+private fun DetailLine(label: String, value: String) {
+    if (value.isNotBlank()) Text("$label: $value", maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Composable

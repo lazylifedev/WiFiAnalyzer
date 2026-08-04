@@ -1,4 +1,10 @@
 <resources>
+    <string name="register_as_device">Register as Device</string>
+    <string name="show_details">Show Details</string>
+    <string name="hide_details">Hide Details</string>
+    <string name="signal_quality">Signal Quality</string>
+    <string name="rssi_not_available">RSSI —</string>
+    <string name="location_label">Location</string>
     <string name="ad_label">Ad</string>
     <string name="app_name">Wi-Fi Analyzer</string>
     <string name="nav_home">Home</string>

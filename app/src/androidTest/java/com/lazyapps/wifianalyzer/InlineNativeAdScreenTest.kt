@@ -57,18 +57,20 @@ class InlineNativeAdScreenTest {
     }
 
     @Test fun devicesCanRenderLoadedAd() {
-        val devices = List(4, ::device)
+        val devices = List(10, ::device)
         rule.setContent {
             WifiAnalyzerTheme {
                 DevicesScreen(devices = devices, groups = emptyList(), errorMessage = null,
                     onAddDevice = {}, onScanLabel = {}, onOpenDevice = {}, onDeleteDevice = {},
                     onCreateGroup = {}, onRenameGroup = { _, _ -> }, onDeleteGroup = {}, onMoveGroup = { _, _ -> },
                     showInlineNativeAd = true,
-                    inlineAdContent = { Box(it.fillMaxWidth().height(72.dp).testTag("devices_inline_native_ad")) })
+                    inlineAdContent = { index, modifier -> Box(modifier.fillMaxWidth().height(72.dp).testTag("devices_inline_native_ad_${index + 1}")) })
             }
         }
-        rule.onNodeWithTag("devices_screen").performScrollToNode(hasTestTag("devices_inline_native_ad"))
-        rule.onNodeWithTag("devices_inline_native_ad").assertExists()
+        rule.onNodeWithTag("devices_screen").performScrollToNode(hasTestTag("devices_inline_native_ad_1"))
+        rule.onNodeWithTag("devices_inline_native_ad_1").assertExists()
+        rule.onNodeWithTag("devices_screen").performScrollToNode(hasTestTag("devices_inline_native_ad_2"))
+        rule.onNodeWithTag("devices_inline_native_ad_2").assertExists()
     }
 
     @Test fun devicesProGateOmitsSlot() {
@@ -79,10 +81,10 @@ class InlineNativeAdScreenTest {
                     onAddDevice = {}, onScanLabel = {}, onOpenDevice = {}, onDeleteDevice = {},
                     onCreateGroup = {}, onRenameGroup = { _, _ -> }, onDeleteGroup = {}, onMoveGroup = { _, _ -> },
                     showInlineNativeAd = false,
-                    inlineAdContent = { Box(it.testTag("devices_inline_native_ad")) })
+                    inlineAdContent = { index, modifier -> Box(modifier.testTag("devices_inline_native_ad_${index + 1}")) })
             }
         }
-        rule.onNodeWithTag("devices_inline_native_ad").assertDoesNotExist()
+        rule.onNodeWithTag("devices_inline_native_ad_1").assertDoesNotExist()
     }
 
     private fun accessPoint(index: Int) = WifiAccessPoint(
