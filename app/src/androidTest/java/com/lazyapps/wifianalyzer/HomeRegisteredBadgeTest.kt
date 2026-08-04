@@ -23,7 +23,7 @@ import java.util.Locale
 class HomeRegisteredBadgeTest {
     @get:Rule val rule = createComposeRule()
 
-    @Test fun registeredIconSharesSsidRowAndIsIncludedInCardSemantics() {
+    @Test fun registeredIconUsesHeaderSlotAndIsIncludedInCardSemantics() {
         val bssid = "12:34:56:78:9A:BC"
         val accessPoint = WifiAccessPoint(
             ssid = "DIRECT-E3-EPSON-VERY-LONG-SSID-THAT-MUST-ELLIPSIZE", bssid = bssid, rssi = -39,
@@ -42,6 +42,7 @@ class HomeRegisteredBadgeTest {
         val ssid = rule.onNodeWithTag("home_ssid_$bssid", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val badge = rule.onNodeWithTag("home_registered_$bssid", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         assert(badge.top < ssid.bottom && badge.bottom > ssid.top)
+        assert(ssid.right <= badge.left)
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         rule.onNodeWithTag("home_registered_$bssid", useUnmergedTree = true)
             .assertContentDescriptionEquals(context.getString(R.string.registered))
@@ -93,8 +94,15 @@ class HomeRegisteredBadgeTest {
         val card = rule.onNodeWithTag("home_access_point_card_$stableId", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val registration = rule.onNodeWithTag("home_register_device_$stableId", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val rssi = rule.onNodeWithTag("home_rssi_$stableId", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val ssid = rule.onNodeWithTag("home_ssid_${accessPoint.bssid}", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val bssid = rule.onNodeWithTag("home_bssid_$stableId", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val quality = rule.onNodeWithTag("home_signal_quality_$stableId", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         assert(registration.left >= card.left && registration.right <= card.right)
         assert(rssi.left >= card.left && rssi.right <= card.right)
+        assert(ssid.right <= registration.left)
+        assert(rssi.top >= ssid.bottom)
+        assert(rssi.top < bssid.bottom && rssi.bottom > bssid.top)
+        assertEquals(rssi.right, quality.right, 0.5f)
     }
 
     private fun accessPoint(bssid: String, registered: Boolean) = WifiAccessPoint(

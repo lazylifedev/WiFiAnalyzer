@@ -30,6 +30,7 @@ fun ScanStatusCard(
     onOpenSettings: (ScanState) -> Unit,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
+    showScanningStatus: Boolean = true,
 ) {
     val content = when (state) {
         ScanState.PERMISSION_REQUIRED -> StatusContent(R.string.scan_permission_required, R.string.grant_permission, onRequestPermission)
@@ -38,7 +39,7 @@ fun ScanStatusCard(
         ScanState.LOCATION_DISABLED -> StatusContent(R.string.location_disabled, R.string.open_location_settings) { onOpenSettings(state) }
         ScanState.WIFI_DISABLED -> StatusContent(R.string.wifi_disabled, R.string.open_wifi_settings) { onOpenSettings(state) }
         ScanState.THROTTLED -> StatusContent(R.string.scan_throttled, null, null)
-        ScanState.SCANNING -> StatusContent(R.string.scan_in_progress, null, null)
+        ScanState.SCANNING -> if (showScanningStatus) StatusContent(R.string.scan_in_progress, null, null) else null
         ScanState.EMPTY -> StatusContent(R.string.scan_empty, R.string.refresh_scan, onRefresh)
         ScanState.ERROR -> StatusContent(R.string.scan_error, R.string.refresh_scan, onRefresh)
         ScanState.READY -> null
