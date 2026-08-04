@@ -581,4 +581,8 @@
     <string name="hidden_network">Hidden network</string>
     <string name="export_column_device_name">Device name</string><string name="export_column_photo_count">Photo count</string><string name="export_column_primary_caption">Main photo caption</string><string name="export_column_band">Frequency band</string><string name="export_column_label">Label</string><string name="export_column_channel">Channel</string><string name="export_column_frequency">Frequency</string><string name="export_column_channel_width">Channel width</string><string name="export_column_security">Security</string><string name="export_column_photo_index">Photo number</string><string name="export_column_mime">MIME type</string><string name="export_column_width">Width</string><string name="export_column_height">Height</string><string name="export_column_file_size">File size</string>
     <string name="bssid">BSSID</string>
+    <string name="open_source_licenses">Open-source licenses</string>
+    <string name="privacy_policy">Privacy Policy</string>
+    <string name="terms_of_service">Terms of Service</string>
+    <string name="external_link_unavailable">No browser is available to open this link.</string>
 </resources>

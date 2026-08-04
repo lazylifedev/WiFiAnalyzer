@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.serialization)
+    id("com.google.android.gms.oss-licenses-plugin")
 }
 
 android {
@@ -82,6 +83,7 @@ dependencies {
     implementation(libs.play.review)
     implementation(libs.play.services.ads)
     implementation(libs.user.messaging.platform)
+    implementation("com.google.android.gms:play-services-oss-licenses:17.5.1")
     implementation(libs.androidx.work.runtime.ktx)
     ksp(libs.androidx.room.compiler)
     debugImplementation(libs.androidx.compose.ui.tooling)
