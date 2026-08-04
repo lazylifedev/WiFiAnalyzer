@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.serialization)
+    id("com.google.android.gms.oss-licenses-plugin")
 }
 
 android {
@@ -82,13 +83,28 @@ dependencies {
     implementation(libs.play.review)
     implementation(libs.play.services.ads)
     implementation(libs.user.messaging.platform)
+    implementation("com.google.android.gms:play-services-oss-licenses:17.5.1")
     implementation(libs.androidx.work.runtime.ktx)
     ksp(libs.androidx.room.compiler)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     testImplementation(libs.junit)
+    testImplementation("org.robolectric:robolectric:4.14.1")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.room.testing)
+}
+
+// AGP 9 does not expose the dependency list to the debuggable variant. Reuse
+// the plugin-generated, offline release notices so debug APKs are inspectable too.
+tasks.configureEach {
+    if (name != "debugOssLicensesTask") return@configureEach
+    dependsOn("releaseOssLicensesTask")
+    doLast {
+        copy {
+            from(layout.buildDirectory.dir("generated/res/releaseOssLicensesTask/raw"))
+            into(layout.buildDirectory.dir("generated/res/debugOssLicensesTask/raw"))
+        }
+    }
 }

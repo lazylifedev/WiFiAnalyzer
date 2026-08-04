@@ -1,7 +1,10 @@
 package com.lazyapps.wifianalyzer.ui.screens.settings
 
+import android.content.Intent
+
 import androidx.compose.foundation.border
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
@@ -10,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
@@ -17,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.PhoneAndroid
@@ -75,6 +80,7 @@ import com.lazyapps.wifianalyzer.domain.Workspace
 import com.lazyapps.wifianalyzer.ui.permissions.PermissionStatus
 import com.lazyapps.wifianalyzer.ui.permissions.PermissionSummary
 import com.lazyapps.wifianalyzer.ui.permissions.AppPermissionPolicy
+import com.google.android.gms.oss.licenses.v2.OssLicensesMenuActivity
 
 @Composable
 fun SettingsScreen(
@@ -114,6 +120,7 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val packageInfo = remember(context) { context.packageManager.getPackageInfo(context.packageName, 0) }
+    val openSourceLicenseTitle = stringResource(R.string.open_source_licenses)
     var showWorkspaces by remember { mutableStateOf(false) }
     var showRefreshIntervals by remember { mutableStateOf(false) }
     var showDistanceUnits by remember { mutableStateOf(false) }
@@ -328,10 +335,16 @@ fun SettingsScreen(
             Text(stringResource(R.string.version_code_format, packageInfo.longVersionCode))
             Text(stringResource(R.string.package_name_format, context.packageName))
             Text(stringResource(R.string.android_version_support))
-            Text(stringResource(R.string.open_source_licenses_coming_soon))
-            Text(stringResource(R.string.privacy_policy_coming_soon))
-            Text(stringResource(R.string.terms_coming_soon))
-            Text(stringResource(R.string.contact_coming_soon))
+            LegalRow(stringResource(R.string.open_source_licenses), onClick = {
+                OssLicensesMenuActivity.setActivityTitle(openSourceLicenseTitle)
+                context.startActivity(Intent(context, OssLicensesMenuActivity::class.java))
+            }, testTag = "about_open_source_licenses")
+            LegalRow(stringResource(R.string.privacy_policy), onClick = {
+                LegalLinks.open(context, LegalLinks.PRIVACY_POLICY_URL)
+            }, testTag = "about_privacy_policy")
+            LegalRow(stringResource(R.string.terms_of_service), onClick = {
+                LegalLinks.open(context, LegalLinks.TERMS_OF_SERVICE_URL)
+            }, testTag = "about_terms_of_service")
         } },
         confirmButton = { TextButton(onClick = { showAbout = false }) { Text(stringResource(R.string.close)) } },
     )
@@ -371,6 +384,16 @@ fun SettingsScreen(
         text = { Text(stringResource(R.string.privacy_summary)) },
         confirmButton = { TextButton(onClick = { showPrivacy = false }) { Text(stringResource(R.string.close)) } },
     )
+}
+
+@Composable private fun LegalRow(title: String, onClick: () -> Unit, testTag: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().testTag(testTag).clickable(onClick = onClick).padding(vertical = AppSpacing.small).then(Modifier.sizeIn(minHeight = 48.dp)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        Icon(Icons.Rounded.OpenInNew, contentDescription = title)
+    }
 }
 
 @Composable private fun PermissionStatus.label() = when (this) {

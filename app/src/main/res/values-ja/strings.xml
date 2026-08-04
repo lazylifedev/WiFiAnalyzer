@@ -561,4 +561,8 @@
     <string name="hidden_network">非公開ネットワーク</string>
     <string name="export_column_device_name">機器名</string><string name="export_column_photo_count">写真枚数</string><string name="export_column_primary_caption">メイン写真説明</string><string name="export_column_band">周波数帯</string><string name="export_column_label">ラベル</string><string name="export_column_channel">チャネル</string><string name="export_column_frequency">周波数</string><string name="export_column_channel_width">チャネル幅</string><string name="export_column_security">セキュリティ</string><string name="export_column_photo_index">写真番号</string><string name="export_column_mime">MIMEタイプ</string><string name="export_column_width">幅</string><string name="export_column_height">高さ</string><string name="export_column_file_size">ファイルサイズ</string>
     <string name="bssid">BSSID</string>
+    <string name="open_source_licenses">オープンソースライセンス</string>
+    <string name="privacy_policy">プライバシーポリシー</string>
+    <string name="terms_of_service">利用規約</string>
+    <string name="external_link_unavailable">リンクを開くブラウザがありません。</string>
 </resources>
