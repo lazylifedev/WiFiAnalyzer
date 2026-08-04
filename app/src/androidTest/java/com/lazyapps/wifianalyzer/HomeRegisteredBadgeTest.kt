@@ -17,7 +17,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 class HomeRegisteredBadgeTest {
     @get:Rule val rule = createComposeRule()
 
-    @Test fun registeredBadgeIsBelowSingleLineSsidAndIncludedInCardSemantics() {
+    @Test fun registeredIconSharesSsidRowAndIsIncludedInCardSemantics() {
         val bssid = "12:34:56:78:9A:BC"
         val accessPoint = WifiAccessPoint(
             ssid = "DIRECT-E3-EPSON-VERY-LONG-SSID-THAT-MUST-ELLIPSIZE", bssid = bssid, rssi = -39,
@@ -35,10 +35,9 @@ class HomeRegisteredBadgeTest {
         rule.onNodeWithTag("home_access_point_list").performScrollToNode(hasTestTag("home_access_point_$bssid"))
         val ssid = rule.onNodeWithTag("home_ssid_$bssid", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val badge = rule.onNodeWithTag("home_registered_$bssid", useUnmergedTree = true).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        assert(badge.top >= ssid.bottom)
+        assert(badge.top < ssid.bottom && badge.bottom > ssid.top)
         val context = InstrumentationRegistry.getInstrumentation().targetContext
-        rule.onNodeWithTag("home_access_point_$bssid").assertContentDescriptionEquals(
-            context.getString(R.string.registered_description_prefix) + context.getString(R.string.access_point_description, "", accessPoint.ssid, -39),
-        )
+        rule.onNodeWithTag("home_registered_$bssid", useUnmergedTree = true)
+            .assertContentDescriptionEquals(context.getString(R.string.registered))
     }
 }
