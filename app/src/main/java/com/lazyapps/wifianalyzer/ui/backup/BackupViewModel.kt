@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lazyapps.wifianalyzer.R
+import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import com.lazyapps.wifianalyzer.data.backup.BackupExportService
 import com.lazyapps.wifianalyzer.data.backup.BackupHistory
 import com.lazyapps.wifianalyzer.data.backup.BackupHistoryRepository
@@ -19,6 +20,7 @@ import com.lazyapps.wifianalyzer.data.registry.WorkspaceRepository
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorMapper
 import com.lazyapps.wifianalyzer.ui.operation.OperationProgress
 import com.lazyapps.wifianalyzer.ui.operation.OperationState
+import com.lazyapps.wifianalyzer.ui.operation.ExternalDataOperationCoordinator
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,6 +43,11 @@ data class BackupUiState(
 }
 
 class BackupViewModel(application: Application) : AndroidViewModel(application) {
+    @Volatile private var access = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Free)
+    private val operationCoordinator = ExternalDataOperationCoordinator(access = { access })
+    fun setAccess(value: FeatureAccessPolicy) { access = value }
+    fun canBackup() = access.canBackup
+    fun canRestore() = access.canRestore
     private val database = WifiAnalyzerDatabase.get(application)
     private val exporter = BackupExportService(application, database)
     private val importer = BackupImportService(application)
@@ -59,6 +66,7 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun export(uri: Uri, workspaceId: Long?) = runTask(R.string.operation_backup, cancellable = true) {
+        operationCoordinator.authorizeBackup().getOrThrow()
         val manifest = exporter.export(
             workspaceId?.let { BackupScope.Workspace(it) } ?: BackupScope.All,
             uri,
@@ -78,6 +86,7 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun inspect(uri: Uri) = runTask(R.string.operation_restore, cancellable = true) {
+        operationCoordinator.authorizeRestore().getOrThrow()
         running(R.string.operation_restore, R.string.restore_stage_verify, cancellable = true)
         val preview = importer.inspect(uri) { stage, current, total -> updateProgress(R.string.operation_restore, stage, current, total, true) }
         mutable.value = mutable.value.copy(preview = preview)
@@ -85,8 +94,10 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun restore(mode: RestoreMode) {
+        if (!access.canRestore) return
         val preview = mutable.value.preview ?: return
         runTask(R.string.operation_restore, cancellable = false) {
+            operationCoordinator.authorizeRestore().getOrThrow()
             running(R.string.operation_restore, R.string.restore_stage_database, cancellable = false)
             val result = restorer.restore(preview, mode) { stage, current, total -> updateProgress(R.string.operation_restore, stage, current, total, false) }
             if (mode == RestoreMode.REPLACE) result.workspaceIds.firstOrNull()?.let { workspaces.select(it) }

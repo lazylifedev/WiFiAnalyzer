@@ -9,6 +9,7 @@ import com.lazyapps.wifianalyzer.data.registry.RegistryValidationException
 import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
 import com.lazyapps.wifianalyzer.data.registry.WorkspaceRepository
 import com.lazyapps.wifianalyzer.data.photos.PhotoRepository
+import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import android.net.Uri
 import java.io.File
 import com.lazyapps.wifianalyzer.domain.DeviceBssidInput
@@ -44,6 +45,8 @@ data class RegistryUiState(
 )
 
 class RegistryViewModel(application: Application) : AndroidViewModel(application) {
+    @Volatile private var access = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Free)
+    fun setAccess(policy: FeatureAccessPolicy) { access = policy }
     private val workspaceRepository = WorkspaceRepository(application, WifiAnalyzerDatabase.get(application))
     private val repository = DeviceRegistryRepository(application, WifiAnalyzerDatabase.get(application), workspaceRepository)
     private val photoRepository = PhotoRepository(application, WifiAnalyzerDatabase.get(application))
@@ -142,7 +145,7 @@ class RegistryViewModel(application: Application) : AndroidViewModel(application
 
     fun save(input: DeviceInput, onSuccess: (Long) -> Unit) = launchAction {
         if (input.pendingPhotoPath != null) photoRepository.ensureCapacity(input.id)
-        val id = repository.save(input)
+        val id = repository.save(input, access)
         val changedWorkspaceId = input.workspaceId.takeIf { it > 0 } ?: _uiState.value.currentWorkspaceId
         input.pendingPhotoPath?.let { path ->
             val source = File(path)

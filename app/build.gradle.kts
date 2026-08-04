@@ -7,6 +7,7 @@ plugins {
 }
 
 android {
+    sourceSets["androidTest"].assets.srcDirs("$projectDir/schemas")
     namespace = "com.lazyapps.wifianalyzer"
     compileSdk {
         version = release(36) {

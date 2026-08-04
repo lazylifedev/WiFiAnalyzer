@@ -49,6 +49,7 @@ import com.lazyapps.wifianalyzer.billing.BillingUiState
 import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import com.lazyapps.wifianalyzer.billing.ProEntitlementState
+import com.lazyapps.wifianalyzer.billing.AccessRestriction
 import com.lazyapps.wifianalyzer.ui.theme.AppSpacing
 import com.lazyapps.wifianalyzer.ui.kintone.KintoneUiState
 import com.lazyapps.wifianalyzer.kintone.KintoneWorkspaceOption
@@ -94,6 +95,27 @@ fun ProScreen(state: BillingUiState, onBack: () -> Unit, onPurchase: () -> Unit,
             }
         }
     }
+}
+
+@Composable
+fun ProRestrictionDialog(reason: AccessRestriction, onOpenPro: () -> Unit, onDismiss: () -> Unit) {
+    val message = when (reason) {
+        AccessRestriction.SavedDeviceLimitReached -> R.string.pro_device_limit_message
+        AccessRestriction.WorkspaceLimitReached -> R.string.pro_workspace_limit_message
+        AccessRestriction.DevicePhotoLimitReached -> R.string.pro_photo_limit_message
+        AccessRestriction.CsvRequiresPro -> R.string.pro_csv_limit_message
+        AccessRestriction.PdfRequiresPro -> R.string.pro_pdf_limit_message
+        AccessRestriction.BackupRequiresPro -> R.string.pro_backup_limit_message
+        AccessRestriction.RestoreRequiresPro -> R.string.pro_restore_limit_message
+        else -> R.string.pro_restriction_message
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.pro_limit_title)) },
+        text = { Text(stringResource(R.string.pro_restriction_message) + "\n" + stringResource(message)) },
+        confirmButton = { TextButton(onClick = { onDismiss(); onOpenPro() }, modifier = Modifier.testTag("pro_view")) { Text(stringResource(R.string.view_pro)) } },
+        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.testTag("pro_close")) { Text(stringResource(R.string.close)) } },
+    )
 }
 
 @Composable

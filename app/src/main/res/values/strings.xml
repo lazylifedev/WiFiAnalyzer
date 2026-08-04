@@ -565,6 +565,18 @@
     <string name="error_duplicate_workspace">A workspace with this name already exists.</string>
     <string name="error_duplicate_value">This value is already registered.</string>
     <string name="error_photo_limit">You can add up to 9 photos.</string>
+    <string name="error_device_limit">Free version supports up to 5 saved devices.</string>
+    <string name="error_workspace_limit">Free version supports one workspace.</string>
+    <string name="pro_limit_title">Available with Pro</string>
+    <string name="pro_photo_limit_message">The free version allows one photo per device.</string>
+    <string name="pro_restriction_message">This feature is available with Pro. Pro removes ads and unlocks device, photo, workspace, history, export, and backup limits.</string>
+    <string name="pro_device_limit_message">The free version supports up to 5 saved devices.</string>
+    <string name="pro_workspace_limit_message">The free version supports one workspace.</string>
+    <string name="pro_csv_limit_message">CSV export is available with Pro.</string>
+    <string name="pro_pdf_limit_message">PDF export is available with Pro.</string>
+    <string name="pro_backup_limit_message">Backup is available with Pro.</string>
+    <string name="pro_restore_limit_message">Restore is available with Pro.</string>
+    <string name="view_pro">View Pro</string>
     <string name="error_device_not_found">The device was not found.</string>
     <string name="error_invalid_photo">The image is damaged or uses an unsupported format.</string>
     <string name="error_photo_too_large">The image file is too large.</string>
@@ -585,4 +597,5 @@
     <string name="privacy_policy">Privacy Policy</string>
     <string name="terms_of_service">Terms of Service</string>
     <string name="external_link_unavailable">No browser is available to open this link.</string>
+    <string name="backup_contents_description">Backs up registered devices, workspaces, photos, and settings. Wi-Fi measurement history is not included.</string>
 </resources>

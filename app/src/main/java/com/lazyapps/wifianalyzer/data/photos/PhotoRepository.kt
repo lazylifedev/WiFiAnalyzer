@@ -12,6 +12,7 @@ import com.lazyapps.wifianalyzer.data.registry.RegistryError
 import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
 import com.lazyapps.wifianalyzer.domain.DevicePhoto
 import com.lazyapps.wifianalyzer.domain.DevicePhotoPolicy
+import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import java.io.File
 import java.io.IOException
 import java.util.UUID
@@ -25,11 +26,11 @@ class PhotoRepository(private val context: Context, private val database: WifiAn
 
     fun observe(deviceId: Long): Flow<List<DevicePhoto>> = dao.observePhotos(deviceId).map { items -> items.map(DevicePhotoEntity::domain) }
     fun file(photo: DevicePhoto): File = File(context.filesDir, "devices/${photo.workspaceId}/${photo.deviceId}/photos/${photo.fileName}")
-    suspend fun ensureCapacity(deviceId: Long) { if (deviceId != 0L && dao.getPhotos(deviceId).size >= DevicePhotoPolicy.MAX_PHOTOS_PER_DEVICE) throw RegistryValidationException(RegistryError.PHOTO_LIMIT) }
+    suspend fun ensureCapacity(deviceId: Long, access: FeatureAccessPolicy = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Pro)) { if (deviceId != 0L && !access.photoDecision(dao.getPhotos(deviceId).size).allowed) throw RegistryValidationException(RegistryError.PHOTO_LIMIT) }
 
-    suspend fun save(deviceId: Long, workspaceId: Long, source: Uri): Long = withContext(Dispatchers.IO) {
+    suspend fun save(deviceId: Long, workspaceId: Long, source: Uri, access: FeatureAccessPolicy = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Pro)): Long = withContext(Dispatchers.IO) {
         val existing = dao.getPhotos(deviceId)
-        if (existing.size >= DevicePhotoPolicy.MAX_PHOTOS_PER_DEVICE) throw RegistryValidationException(RegistryError.PHOTO_LIMIT)
+        if (!access.photoDecision(existing.size).allowed) throw RegistryValidationException(RegistryError.PHOTO_LIMIT)
         val device = dao.getDevice(deviceId) ?: throw RegistryValidationException(RegistryError.DEVICE_NOT_FOUND)
         if (device.workspaceId != workspaceId) throw RegistryValidationException(RegistryError.WORKSPACE_NOT_FOUND)
         val directory = File(context.filesDir, "devices/$workspaceId/$deviceId/photos").apply { mkdirs() }

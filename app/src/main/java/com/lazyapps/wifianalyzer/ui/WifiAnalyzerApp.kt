@@ -75,6 +75,8 @@ import com.lazyapps.wifianalyzer.ui.screens.home.HomeScreen
 import com.lazyapps.wifianalyzer.ui.screens.monitor.MonitorScreen
 import com.lazyapps.wifianalyzer.ui.screens.settings.SettingsScreen
 import com.lazyapps.wifianalyzer.ui.pro.ProScreen
+import com.lazyapps.wifianalyzer.ui.pro.ProRestrictionDialog
+import com.lazyapps.wifianalyzer.billing.AccessRestriction
 import com.lazyapps.wifianalyzer.ui.pro.KintoneScreen
 import com.lazyapps.wifianalyzer.ui.pro.KintonePluginInfoScreen
 import com.lazyapps.wifianalyzer.ui.kintone.KintoneQrScreen
@@ -105,7 +107,6 @@ import com.lazyapps.wifianalyzer.ui.permissions.PermissionSummary
 import kotlinx.coroutines.launch
 import com.lazyapps.wifianalyzer.ads.AdBanner
 import com.lazyapps.wifianalyzer.ads.AdMobManager
-import com.lazyapps.wifianalyzer.ads.InterstitialAdManager
 import com.lazyapps.wifianalyzer.billing.AdVisibilityPolicy
 
 private const val KINTONE_BOOTH_URL = "https://lazylifedev.booth.pm/items/8670244"
@@ -145,12 +146,16 @@ fun WifiAnalyzerApp(
         mutableStateOf(permissionPreferences.getBoolean("requested_once", false))
     }
     LaunchedEffect(workspaceState.selectedId, workspaceState.selected?.name) {
+        scanViewModel.setWorkspaceId(workspaceState.selectedId)
         workspaceState.selected?.let { kintoneViewModel.selectWorkspace(it.id, it.name, fromAppSelection = true) }
     }
     LaunchedEffect(billingState.entitlement, debugForcePro) {
-        InterstitialAdManager.updateEntitlement(billingState.entitlement, debugForcePro)
-        if (billingState.entitlement != com.lazyapps.wifianalyzer.billing.ProEntitlementState.Unknown) InterstitialAdManager.prepare()
-        kintoneViewModel.setAccessAllowed(FeatureAccessPolicy.from(billingState.entitlement, debugForcePro).canUseKintone)
+        val access = FeatureAccessPolicy.from(billingState.entitlement, debugForcePro)
+        scanViewModel.setAccess(access)
+        registryViewModel.setAccess(access)
+        workspaceViewModel.setAccess(access)
+        if (!access.isPro && billingState.entitlement != com.lazyapps.wifianalyzer.billing.ProEntitlementState.Unknown) activity?.let { AdMobManager.initialize(it) }
+        kintoneViewModel.setAccessAllowed(access.canUseKintone)
     }
 
     fun currentPermissionState(): ScanState {
@@ -235,6 +240,10 @@ fun WifiAnalyzerApp(
         }
         val showBottomBar = currentRoute in AppDestination.bottomItems.map { it.route }
         val accessPolicy = FeatureAccessPolicy.from(billingState.entitlement, debugForcePro)
+        var restriction by remember { mutableStateOf<AccessRestriction?>(null) }
+        val openPro = { navController.navigate(PRO_ROUTE) { launchSingleTop = true } }
+        val addDevice = { if (accessPolicy.deviceDecision(registryState.devices.size).allowed) { registryViewModel.startNew(); navController.navigate(REGISTRATION_ROUTE) } else restriction = AccessRestriction.SavedDeviceLimitReached }
+        val createWorkspace: (String) -> Unit = { name -> if (accessPolicy.workspaceDecision(workspaceState.workspaces.size).allowed) workspaceViewModel.create(name) else restriction = AccessRestriction.WorkspaceLimitReached }
         val adPlacement = when (currentRoute) {
             AppDestination.Home.route -> com.lazyapps.wifianalyzer.billing.AdPlacement.HOME
             AppDestination.Channel.route -> com.lazyapps.wifianalyzer.billing.AdPlacement.CHANNEL
@@ -243,13 +252,11 @@ fun WifiAnalyzerApp(
             AppDestination.Settings.route -> com.lazyapps.wifianalyzer.billing.AdPlacement.SETTINGS
             else -> null
         }
-        LaunchedEffect(currentRoute, billingState.entitlement, debugForcePro) {
-            InterstitialAdManager.observeRoute(activity, adPlacement)
-        }
         val showAd = billingState.entitlement != com.lazyapps.wifianalyzer.billing.ProEntitlementState.Unknown &&
             adPlacement != null && AdVisibilityPolicy(accessPolicy).canShow(adPlacement)
 
         Box {
+        restriction?.let { reason -> ProRestrictionDialog(reason, openPro) { restriction = null } }
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets.safeDrawing,
@@ -338,8 +345,8 @@ fun WifiAnalyzerApp(
                         devices = registryState.devices,
                         groups = registryState.groups,
                         errorMessage = registryState.errorMessage,
-                        onAddDevice = { registryViewModel.startNew(); navController.navigate(REGISTRATION_ROUTE) },
-                        onScanLabel = { navController.navigate(OCR_REGISTRATION_ROUTE) },
+                        onAddDevice = addDevice,
+                        onScanLabel = { if (accessPolicy.deviceDecision(registryState.devices.size).allowed) navController.navigate(OCR_REGISTRATION_ROUTE) else restriction = AccessRestriction.SavedDeviceLimitReached },
                         onOpenDevice = { navController.navigate(deviceDetailRoute(it)) },
                         onDeleteDevice = registryViewModel::deleteDevice,
                         onCreateGroup = registryViewModel::createGroup,
@@ -370,7 +377,7 @@ fun WifiAnalyzerApp(
                         onVisibleBandsChange = scanViewModel::setVisibleBands,
                         workspaceState = workspaceState,
                         onSelectWorkspace = workspaceViewModel::select,
-                        onCreateWorkspace = workspaceViewModel::create,
+                        onCreateWorkspace = createWorkspace,
                         onRenameWorkspace = workspaceViewModel::rename,
                         onMoveWorkspace = workspaceViewModel::move,
                         onDeleteWorkspace = workspaceViewModel::delete,
@@ -407,10 +414,12 @@ fun WifiAnalyzerApp(
                         workspaceState = workspaceState,
                         onBack = { navController.popBackStack() },
                         onOpenWorkspace = { id -> workspaceViewModel.select(id); navController.navigateTopLevel(AppDestination.Devices.route) },
-                        onOperationSuccess = { InterstitialAdManager.showAfterSuccessfulOperation(activity) },
+                        onOperationSuccess = {},
+                        access = accessPolicy,
+                        onOpenPro = openPro,
                     )
                 }
-                composable(EXPORT_ROUTE) { ExportScreen(onBack = { navController.popBackStack() }, onOperationSuccess = { InterstitialAdManager.showAfterSuccessfulOperation(activity) }) }
+                composable(EXPORT_ROUTE) { ExportScreen(onBack = { navController.popBackStack() }, onOperationSuccess = {}, access = accessPolicy, onOpenPro = openPro) }
                 composable(IMPORT_ROUTE) { ImportScreen(onBack = { navController.popBackStack() }) }
                 composable(PRO_ROUTE) {
                     ProScreen(
@@ -530,6 +539,8 @@ fun WifiAnalyzerApp(
                             deviceId?.let(registryViewModel::startEdit)
                             navController.navigate(OCR_REGISTRATION_ROUTE)
                         },
+                        access = accessPolicy,
+                        onOpenPro = openPro,
                         useFeet = scanState.distanceUnit == com.lazyapps.wifianalyzer.data.DistanceUnitPreference.FEET,
                     )
                 }

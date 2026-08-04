@@ -10,6 +10,7 @@ import com.lazyapps.wifianalyzer.data.WifiUiPreferencesRepository
 import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
 import com.lazyapps.wifianalyzer.data.registry.WorkspaceRepository
 import com.lazyapps.wifianalyzer.export.*
+import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorMapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +22,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
+import com.lazyapps.wifianalyzer.ui.operation.ExternalDataOperationCoordinator
 
 data class ExportUiState(
     val type: ExportType = ExportType.DEVICES, val scope: ExportScope = ExportScope.CURRENT_WORKSPACE, val workspaceId: Long = 0,
@@ -32,6 +34,11 @@ data class ExportUiState(
 )
 
 class ExportViewModel(application: Application) : AndroidViewModel(application) {
+    @Volatile private var access = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Free)
+    private val operationCoordinator = ExternalDataOperationCoordinator(access = { access })
+    fun setAccess(value: FeatureAccessPolicy) { access = value }
+    fun canExportCsv() = access.canExportCsv
+    fun canExportPdf() = access.canExportPdf
     private val db = WifiAnalyzerDatabase.get(application)
     private val workspaceRepository = WorkspaceRepository(application, db)
     private val repository = ExportRepository(application, db)
@@ -54,15 +61,16 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     fun refresh() { viewModelScope.launch { loadData() } }
 
     suspend fun writeCsv(uri: Uri): Result<Unit> { val initial = mutable.value; mutable.value = initial.copy(busy = true, error = null); return runCatching {
+        operationCoordinator.authorizeCsv().getOrThrow()
         val s = initial; val data = s.dataset ?: error("No export data"); val columns = activeColumns(s); require(columns.isNotEmpty())
         withContext(Dispatchers.IO) { getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { CsvWriter.write(it, columns, data.rows.asSequence()) } ?: error("Unable to open destination") }
         preferences.recordCsv(s.type, data.rows.size, true); mutable.value = mutable.value.copy(busy = false, history = preferences.history(), message = getApplication<Application>().getString(R.string.csv_saved))
     }.onFailure { preferences.recordCsv(initial.type, initial.dataset?.rows?.size ?: 0, false); mutable.value = mutable.value.copy(busy = false, error = userMessage(it)) } }
 
-    suspend fun shareFile(): Result<File> = runCatching { val s = mutable.value; val data = s.dataset ?: error("No export data"); val file = File(getApplication<Application>().cacheDir, suggestedFileName()).also { cleanupShareCache(); it.parentFile?.mkdirs() }; withContext(Dispatchers.IO) { file.outputStream().use { CsvWriter.write(it, activeColumns(s), data.rows.asSequence()) } }; preferences.recordCsv(s.type, data.rows.size, true); file }
-    suspend fun shareReportFile(): Result<File> = runCatching { val html = mutable.value.reportHtml ?: error("Generate a report first"); withContext(Dispatchers.IO) { cleanupShareCache(); File(getApplication<Application>().cacheDir, "WiFiAnalyzer_Report_${ExportFormat.fileStamp(System.currentTimeMillis())}.html").apply { writeText(html, Charsets.UTF_8) } } }
+    suspend fun shareFile(): Result<File> = runCatching { operationCoordinator.authorizeCsv().getOrThrow(); val s = mutable.value; val data = s.dataset ?: error("No export data"); val file = File(getApplication<Application>().cacheDir, suggestedFileName()).also { cleanupShareCache(); it.parentFile?.mkdirs() }; withContext(Dispatchers.IO) { file.outputStream().use { CsvWriter.write(it, activeColumns(s), data.rows.asSequence()) } }; preferences.recordCsv(s.type, data.rows.size, true); file }
+    suspend fun shareReportFile(): Result<File> = runCatching { operationCoordinator.authorizePdf().getOrThrow(); val html = mutable.value.reportHtml ?: error("Generate a report first"); withContext(Dispatchers.IO) { cleanupShareCache(); File(getApplication<Application>().cacheDir, "WiFiAnalyzer_Report_${ExportFormat.fileStamp(System.currentTimeMillis())}.html").apply { writeText(html, Charsets.UTF_8) } } }
     fun deleteAfterSharing(file: File) { viewModelScope.launch(Dispatchers.IO) { delay(SHARE_CACHE_LIFETIME_MS); file.delete() } }
-    fun generateReport() { val s = mutable.value; if (reportJob?.isActive == true) return; mutable.value = s.copy(busy = true, error = null); reportJob = viewModelScope.launch { runCatching { withContext(Dispatchers.IO) { val app = getApplication<Application>(); val unit = wifiPreferences.preferences.first().distanceUnit; val locale = app.resources.configuration.locales[0]; val (label, devices) = repository.reportDevices(target(s), unit, s.reportPhotoMode, locale, app.getString(R.string.report_detecting), app.getString(R.string.report_not_detected), app.getString(R.string.export_all_workspaces)); val labels = ReportLabels(locale.toLanguageTag(), app.getString(R.string.report_created_at), app.getString(R.string.report_workspace), app.getString(R.string.report_group), app.getString(R.string.report_manufacturer), app.getString(R.string.report_model), app.getString(R.string.report_serial), app.getString(R.string.report_bssids), app.getString(R.string.report_location), app.getString(R.string.report_notes), app.getString(R.string.report_detected), app.getString(R.string.report_distance), app.getString(R.string.report_last_seen), app.getString(R.string.report_device_count)); label to ReportGenerator.generate(app.getString(R.string.report_title), ExportFormat.dateTime(System.currentTimeMillis(), locale).orEmpty(), labels, devices.asSequence()) } }.onSuccess { (label, html) -> preferences.recordReport(label, true); mutable.value = s.copy(busy = false, targetLabel = label, reportHtml = html, history = preferences.history()) }.onFailure { if (it is kotlinx.coroutines.CancellationException) return@onFailure; preferences.recordReport(s.targetLabel, false); mutable.value = s.copy(busy = false, error = userMessage(it)) } } }
+    fun generateReport() { if (operationCoordinator.authorizePdf().isFailure) return; val s = mutable.value; if (reportJob?.isActive == true) return; mutable.value = s.copy(busy = true, error = null); reportJob = viewModelScope.launch { runCatching { withContext(Dispatchers.IO) { val app = getApplication<Application>(); val unit = wifiPreferences.preferences.first().distanceUnit; val locale = app.resources.configuration.locales[0]; val (label, devices) = repository.reportDevices(target(s), unit, s.reportPhotoMode, locale, app.getString(R.string.report_detecting), app.getString(R.string.report_not_detected), app.getString(R.string.export_all_workspaces)); val labels = ReportLabels(locale.toLanguageTag(), app.getString(R.string.report_created_at), app.getString(R.string.report_workspace), app.getString(R.string.report_group), app.getString(R.string.report_manufacturer), app.getString(R.string.report_model), app.getString(R.string.report_serial), app.getString(R.string.report_bssids), app.getString(R.string.report_location), app.getString(R.string.report_notes), app.getString(R.string.report_detected), app.getString(R.string.report_distance), app.getString(R.string.report_last_seen), app.getString(R.string.report_device_count)); label to ReportGenerator.generate(app.getString(R.string.report_title), ExportFormat.dateTime(System.currentTimeMillis(), locale).orEmpty(), labels, devices.asSequence()) } }.onSuccess { (label, html) -> preferences.recordReport(label, true); mutable.value = s.copy(busy = false, targetLabel = label, reportHtml = html, history = preferences.history()) }.onFailure { if (it is kotlinx.coroutines.CancellationException) return@onFailure; preferences.recordReport(s.targetLabel, false); mutable.value = s.copy(busy = false, error = userMessage(it)) } } }
     fun cancel() { reportJob?.cancel(); mutable.value = mutable.value.copy(busy = false, message = getApplication<Application>().getString(R.string.operation_cancelled)) }
     fun suggestedFileName(): String { val s = mutable.value; val target = if (s.scope == ExportScope.ALL_WORKSPACES) "All" else ExportFormat.safeFilePart(s.workspaceName); return "WiFiAnalyzer_${s.type.filePart}_${target}_${ExportFormat.fileStamp(System.currentTimeMillis())}.csv" }
     fun activeColumns() = activeColumns(mutable.value)

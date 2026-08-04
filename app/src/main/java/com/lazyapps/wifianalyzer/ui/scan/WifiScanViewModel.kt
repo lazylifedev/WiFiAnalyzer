@@ -7,12 +7,17 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lazyapps.wifianalyzer.BuildConfig
 import com.lazyapps.wifianalyzer.data.WifiScanRepository
+import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
+import com.lazyapps.wifianalyzer.data.registry.SignalHistoryRepository
+import com.lazyapps.wifianalyzer.data.registry.WorkspaceRepository
 import com.lazyapps.wifianalyzer.data.WifiUiPreferencesRepository
 import com.lazyapps.wifianalyzer.data.DistanceUnitPreference
 import com.lazyapps.wifianalyzer.data.ChannelDisplayMode
 import com.lazyapps.wifianalyzer.debug.DebugLogCategory
 import com.lazyapps.wifianalyzer.debug.DebugLogs
 import com.lazyapps.wifianalyzer.domain.WifiAnalysis
+import com.lazyapps.wifianalyzer.domain.HistoryRetentionPolicy
+import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import com.lazyapps.wifianalyzer.model.ChannelOccupancy
 import com.lazyapps.wifianalyzer.model.ScanState
 import com.lazyapps.wifianalyzer.model.SignalSample
@@ -23,6 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -51,6 +57,17 @@ data class ScanUiState(
 }
 
 class WifiScanViewModel(application: Application) : AndroidViewModel(application) {
+    private val database = WifiAnalyzerDatabase.get(application)
+    private val historyRepository = SignalHistoryRepository(database)
+    private val workspaceRepository = WorkspaceRepository(application, database)
+    @Volatile private var access = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Free)
+    fun setAccess(policy: FeatureAccessPolicy) { access = policy }
+    private var selectedWorkspaceId: Long = 0L
+    fun setWorkspaceId(workspaceId: Long) {
+        if (selectedWorkspaceId == workspaceId) return
+        selectedWorkspaceId = workspaceId
+        _uiState.value.selectedBssid?.let(::selectAccessPoint)
+    }
     private val repository = WifiScanRepository(application)
     private val preferences = WifiUiPreferencesRepository(application)
     private val _uiState = MutableStateFlow(ScanUiState())
@@ -58,6 +75,7 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
     private val samplesByBssid = mutableMapOf<String, ArrayDeque<SignalSample>>()
     private var permissionState = ScanState.PERMISSION_REQUIRED
     private var autoRefreshJob: Job? = null
+    private var historyJob: Job? = null
     private var activeSchedule: ScheduledScanRequest? = null
     private var foreground = true
     private val scanSchedule = ScanRequestSchedule { SystemClock.elapsedRealtime() }
@@ -108,13 +126,18 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
                         queue.addLast(SignalSample(ap.observedAtMillis, ap.rssi))
                         addedHistoryCount++
                     }
-                    while (queue.size > MAX_HISTORY_SAMPLES || queue.firstOrNull()?.timestampMillis?.let { now - it > HISTORY_WINDOW_MS } == true) {
+                    while (queue.size > MAX_HISTORY_SAMPLES || queue.firstOrNull()?.let { !HistoryRetentionPolicy.retain(listOf(it), now, access.isPro).contains(it) } == true) {
                         queue.removeFirst()
                     }
                     ap.copy(distanceRange = WifiAnalysis.distanceRange(queue.map { it.rssi }, ap.band))
                 }
+                val newHistory = snapshot.accessPoints.filter { it.bssid in snapshot.newMeasurementBssids }
+                if (newHistory.isNotEmpty()) viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    val workspace = workspaceRepository.snapshot.first()
+                    if (workspace.selectedId != 0L) historyRepository.insert(workspace.selectedId, newHistory, access, now)
+                }
                 samplesByBssid.values.forEach { queue ->
-                    while (queue.firstOrNull()?.timestampMillis?.let { now - it > HISTORY_WINDOW_MS } == true) queue.removeFirst()
+                    while (queue.firstOrNull()?.let { !HistoryRetentionPolicy.retain(listOf(it), now, access.isPro).contains(it) } == true) queue.removeFirst()
                 }
                 val selectedBssid = _uiState.value.selectedBssid
                 val selected = withDistances.firstOrNull { it.bssid == selectedBssid && now - it.observedAtMillis <= DETECTION_TIMEOUT_MS }
@@ -186,6 +209,7 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun clearAccessPointSelection() {
+        historyJob?.cancel(); historyJob = null
         _uiState.value = _uiState.value.copy(
             selectedBssid = null,
             selectedAccessPoint = null,
@@ -313,9 +337,18 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
             selectedDetected = detected,
             signalHistory = samplesByBssid[normalized]?.toList().orEmpty(),
         )
+        historyJob?.cancel()
+        historyJob = viewModelScope.launch {
+            val workspaceId = selectedWorkspaceId.takeIf { it != 0L } ?: workspaceRepository.snapshot.first().selectedId
+            if (workspaceId == 0L) return@launch
+            historyRepository.observeLatest(workspaceId, normalized).collectLatest { rows ->
+                _uiState.value = _uiState.value.copy(signalHistory = rows.asReversed().map { SignalSample(it.timestampMillis, it.rssi) })
+            }
+        }
     }
 
     override fun onCleared() {
+        historyJob?.cancel()
         scanSchedule.stop()
         repository.close()
         super.onCleared()

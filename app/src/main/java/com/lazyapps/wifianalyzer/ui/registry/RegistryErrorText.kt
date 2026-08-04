@@ -7,6 +7,8 @@ import com.lazyapps.wifianalyzer.data.registry.RegistryValidationException
 
 fun Context.registryErrorText(error: RegistryValidationException): String {
     val resource = when (error.error) {
+        RegistryError.DEVICE_LIMIT -> R.string.error_device_limit
+        RegistryError.WORKSPACE_LIMIT -> R.string.error_workspace_limit
         RegistryError.WORKSPACE_NOT_FOUND -> R.string.error_workspace_not_found
         RegistryError.DEVICE_NAME_REQUIRED -> R.string.error_device_name_required
         RegistryError.BSSID_REQUIRED -> R.string.error_bssid_required

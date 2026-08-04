@@ -545,6 +545,18 @@
     <string name="error_duplicate_workspace">同名のワークスペースがあります</string>
     <string name="error_duplicate_value">同じ値が既に登録されています</string>
     <string name="error_photo_limit">写真は9枚まで登録できます</string>
+    <string name="error_device_limit">無料版では登録済みデバイスを5台まで登録できます。</string>
+    <string name="error_workspace_limit">無料版ではワークスペースを1個まで利用できます。</string>
+    <string name="pro_limit_title">Pro版で利用できます</string>
+    <string name="pro_photo_limit_message">無料版では写真を1台につき1枚まで登録できます。</string>
+    <string name="pro_restriction_message">この機能はPro版で利用できます。Pro版では広告が非表示になり、登録台数、写真、ワークスペース、履歴、出力、バックアップの制限が解除されます。</string>
+    <string name="pro_device_limit_message">無料版では登録済みデバイスを5台まで登録できます。</string>
+    <string name="pro_workspace_limit_message">無料版ではワークスペースを1個まで利用できます。</string>
+    <string name="pro_csv_limit_message">CSV出力はPro版で利用できます。</string>
+    <string name="pro_pdf_limit_message">PDF出力はPro版で利用できます。</string>
+    <string name="pro_backup_limit_message">バックアップはPro版で利用できます。</string>
+    <string name="pro_restore_limit_message">復元はPro版で利用できます。</string>
+    <string name="view_pro">Pro版を見る</string>
     <string name="error_device_not_found">対象機器が見つかりません</string>
     <string name="error_invalid_photo">画像が破損しているか、対応していない形式です</string>
     <string name="error_photo_too_large">画像ファイルが大きすぎます</string>
@@ -565,4 +577,5 @@
     <string name="privacy_policy">プライバシーポリシー</string>
     <string name="terms_of_service">利用規約</string>
     <string name="external_link_unavailable">リンクを開くブラウザがありません。</string>
+    <string name="backup_contents_description">登録済みデバイス、ワークスペース、写真、設定をバックアップします。Wi-Fi測定履歴は含まれません。</string>
 </resources>

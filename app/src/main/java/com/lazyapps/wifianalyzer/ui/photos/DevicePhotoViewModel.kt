@@ -12,6 +12,7 @@ import com.lazyapps.wifianalyzer.kintone.KintoneAutoSyncScheduler
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorCategory
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorMapper
 import com.lazyapps.wifianalyzer.R
+import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import com.lazyapps.wifianalyzer.ui.registry.registryErrorText
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +27,8 @@ data class DevicePhotoUiState(
 )
 
 class DevicePhotoViewModel(application: Application) : AndroidViewModel(application) {
+    @Volatile private var access = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Free)
+    fun setAccess(policy: FeatureAccessPolicy) { access = policy }
     val repository = PhotoRepository(application, WifiAnalyzerDatabase.get(application))
     private val autoSync = KintoneAutoSyncScheduler(application)
     private val _state = MutableStateFlow(DevicePhotoUiState())
@@ -33,7 +36,7 @@ class DevicePhotoViewModel(application: Application) : AndroidViewModel(applicat
     private var deviceId = 0L; private var workspaceId = 0L; private var observeJob: Job? = null
     init { viewModelScope.launch { repository.retryPending() } }
     fun bind(deviceId: Long, workspaceId: Long) { if (this.deviceId == deviceId && this.workspaceId == workspaceId) return; this.deviceId = deviceId; this.workspaceId = workspaceId; observeJob?.cancel(); observeJob = viewModelScope.launch { repository.observe(deviceId).collectLatest { _state.value = _state.value.copy(photos = it) } } }
-    fun add(uris: List<Uri>) = action { uris.take(9 - _state.value.photos.size).forEach { uri -> try { repository.save(deviceId, workspaceId, uri) } finally { if (uri.scheme == "file") uri.path?.let { java.io.File(it).delete() } } }; autoSync.requestPhotoChange(workspaceId) }
+    fun add(uris: List<Uri>) = action { uris.take((access.photoDecision(_state.value.photos.size).freeLimit ?: 9) - _state.value.photos.size).forEach { uri -> try { repository.save(deviceId, workspaceId, uri, access) } finally { if (uri.scheme == "file") uri.path?.let { java.io.File(it).delete() } } }; autoSync.requestPhotoChange(workspaceId) }
     fun delete(id: Long) = action { repository.delete(id); autoSync.requestPhotoChange(workspaceId) }
     fun deleteSelected() = action { repository.delete(_state.value.selectedPhotoIds); autoSync.requestPhotoChange(workspaceId); _state.value = _state.value.copy(selectedPhotoIds = emptySet(), selectionMode = false) }
     fun enterSelection(id: Long) { _state.value = _state.value.copy(selectionMode = true, reorderMode = false, selectedPhotoIds = setOf(id)) }
