@@ -10,6 +10,12 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface RegistryDao {
+    @Insert
+    suspend fun insertHistory(items: List<SignalHistoryEntity>)
+    @Query("SELECT * FROM signal_history WHERE workspace_id = :workspaceId AND bssid = :bssid ORDER BY timestamp_millis ASC")
+    fun observeHistory(workspaceId: Long, bssid: String): Flow<List<SignalHistoryEntity>>
+    @Query("DELETE FROM signal_history WHERE timestamp_millis < :cutoff")
+    suspend fun deleteHistoryBefore(cutoff: Long): Int
     @Query("SELECT * FROM kintone_connections WHERE workspace_id = :workspaceId") fun observeKintoneConnection(workspaceId: Long): Flow<KintoneConnectionEntity?>
     @Query("SELECT * FROM kintone_connections WHERE workspace_id = :workspaceId") suspend fun getKintoneConnection(workspaceId: Long): KintoneConnectionEntity?
     @Query("SELECT COUNT(*) FROM kintone_connections WHERE domain = :domain AND app_id = :appId AND workspace_id != :workspaceId") suspend fun countOtherKintoneConnections(domain: String, appId: Long, workspaceId: Long): Int

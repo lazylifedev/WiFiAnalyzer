@@ -6,6 +6,19 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
+@Entity(tableName = "signal_history", indices = [Index(value = ["workspace_id", "bssid", "timestamp_millis"]), Index(value = ["timestamp_millis"])])
+data class SignalHistoryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @ColumnInfo(name = "workspace_id") val workspaceId: Long,
+    val bssid: String,
+    val ssid: String,
+    @ColumnInfo(name = "timestamp_millis") val timestampMillis: Long,
+    val rssi: Int,
+    @ColumnInfo(name = "frequency_mhz") val frequencyMhz: Int,
+    val channel: Int,
+    val band: String,
+)
+
 @Entity(tableName = "workspaces", indices = [Index(value = ["normalized_name"], unique = true)])
 data class WorkspaceEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

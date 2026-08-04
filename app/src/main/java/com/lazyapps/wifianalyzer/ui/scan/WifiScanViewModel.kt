@@ -7,6 +7,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.lazyapps.wifianalyzer.BuildConfig
 import com.lazyapps.wifianalyzer.data.WifiScanRepository
+import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
+import com.lazyapps.wifianalyzer.data.registry.SignalHistoryRepository
+import com.lazyapps.wifianalyzer.data.registry.WorkspaceRepository
 import com.lazyapps.wifianalyzer.data.WifiUiPreferencesRepository
 import com.lazyapps.wifianalyzer.data.DistanceUnitPreference
 import com.lazyapps.wifianalyzer.data.ChannelDisplayMode
@@ -25,6 +28,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -53,6 +57,9 @@ data class ScanUiState(
 }
 
 class WifiScanViewModel(application: Application) : AndroidViewModel(application) {
+    private val database = WifiAnalyzerDatabase.get(application)
+    private val historyRepository = SignalHistoryRepository(database)
+    private val workspaceRepository = WorkspaceRepository(application, database)
     @Volatile private var access = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Free)
     fun setAccess(policy: FeatureAccessPolicy) { access = policy }
     private val repository = WifiScanRepository(application)
@@ -116,6 +123,11 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
                         queue.removeFirst()
                     }
                     ap.copy(distanceRange = WifiAnalysis.distanceRange(queue.map { it.rssi }, ap.band))
+                }
+                val newHistory = snapshot.accessPoints.filter { it.bssid in snapshot.newMeasurementBssids }
+                if (newHistory.isNotEmpty()) viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                    val workspace = workspaceRepository.snapshot.first()
+                    if (workspace.selectedId != 0L) historyRepository.insert(workspace.selectedId, newHistory, access, now)
                 }
                 samplesByBssid.values.forEach { queue ->
                     while (queue.firstOrNull()?.let { !HistoryRetentionPolicy.retain(listOf(it), now, access.isPro).contains(it) } == true) queue.removeFirst()
