@@ -28,13 +28,17 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.export.*
+import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
+import com.lazyapps.wifianalyzer.billing.AccessRestriction
+import com.lazyapps.wifianalyzer.ui.pro.ProRestrictionDialog
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun ExportScreen(onBack: () -> Unit, onOperationSuccess: () -> Unit = {}, viewModel: ExportViewModel = androidx.lifecycle.viewmodel.compose.viewModel()) {
+@Composable fun ExportScreen(onBack: () -> Unit, onOperationSuccess: () -> Unit = {}, access: FeatureAccessPolicy = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Free), onOpenPro: () -> Unit = {}, viewModel: ExportViewModel = androidx.lifecycle.viewmodel.compose.viewModel()) {
+    LaunchedEffect(access.isPro) { viewModel.setAccess(access) }
     val state by viewModel.state.collectAsStateWithLifecycle(); val context = LocalContext.current; val scope = rememberCoroutineScope()
     var showColumns by remember { mutableStateOf(false) }; var warning by remember { mutableStateOf(false) }; var showReport by remember { mutableStateOf(false) }
-    var shareError by remember { mutableStateOf(false) }; val csvChooser = stringResource(R.string.share_csv_title); val reportChooser = stringResource(R.string.share_report_title)
+    var shareError by remember { mutableStateOf(false) }; var restriction by remember { mutableStateOf<AccessRestriction?>(null) }; val csvChooser = stringResource(R.string.share_csv_title); val reportChooser = stringResource(R.string.share_report_title)
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { it?.let { uri -> scope.launch { viewModel.writeCsv(uri).onSuccess { onOperationSuccess() } } } }
     fun share(fileType: String, chooser: String, producer: suspend () -> Result<java.io.File>) { scope.launch { producer().onSuccess { file -> val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file); val intent = Intent(Intent.ACTION_SEND).setType(fileType).putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION); runCatching { context.startActivity(Intent.createChooser(intent, chooser)); viewModel.deleteAfterSharing(file); onOperationSuccess() }.onFailure { file.delete(); shareError = true } }.onFailure { shareError = true } } }
     LaunchedEffect(state.reportHtml) { if (state.reportHtml != null) onOperationSuccess() }
@@ -48,10 +52,10 @@ import kotlinx.coroutines.launch
             if(state.type!=ExportType.REPORT){
                 item{Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text(stringResource(R.string.column_settings),Modifier.weight(1f),style=MaterialTheme.typography.titleMedium);TextButton(onClick={showColumns=true},modifier=Modifier.testTag("column_settings")){Icon(Icons.Rounded.ViewColumn,null);Text(stringResource(R.string.column_count,viewModel.activeColumns().size))}}}
                 item{Text(stringResource(R.string.csv_preview),style=MaterialTheme.typography.titleMedium);Surface(Modifier.fillMaxWidth().heightIn(max=300.dp).horizontalScroll(rememberScrollState()),tonalElevation=1.dp){Text(state.preview.ifBlank{stringResource(R.string.no_data)},Modifier.padding(12.dp),style=MaterialTheme.typography.bodySmall)};Text(stringResource(R.string.csv_format_summary),style=MaterialTheme.typography.bodySmall);Text(stringResource(R.string.estimated_file_size,formatBytes(state.dataset?.estimatedBytes?:0)),style=MaterialTheme.typography.bodySmall)}
-                item{Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End){OutlinedButton(onClick={save.launch(viewModel.suggestedFileName())},modifier=Modifier.testTag("save_csv"),enabled=!state.busy&&state.dataset?.rows?.isNotEmpty()==true){Icon(Icons.Rounded.Save,null);Text(stringResource(R.string.save))};Spacer(Modifier.width(8.dp));Button(onClick={warning=true},modifier=Modifier.testTag("share_csv"),enabled=!state.busy&&state.dataset?.rows?.isNotEmpty()==true){Icon(Icons.Rounded.Share,null);Text(stringResource(R.string.share))}}}
+                item{Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End){OutlinedButton(onClick={if(access.canExportCsv) save.launch(viewModel.suggestedFileName()) else restriction=AccessRestriction.CsvRequiresPro},modifier=Modifier.testTag("save_csv"),enabled=!state.busy&&state.dataset?.rows?.isNotEmpty()==true){Icon(Icons.Rounded.Save,null);Text(stringResource(R.string.save))};Spacer(Modifier.width(8.dp));Button(onClick={if(access.canExportCsv) warning=true else restriction=AccessRestriction.CsvRequiresPro},modifier=Modifier.testTag("share_csv"),enabled=!state.busy&&state.dataset?.rows?.isNotEmpty()==true){Icon(Icons.Rounded.Share,null);Text(stringResource(R.string.share))}}}
             } else {
                 item{Text(stringResource(R.string.report_photos),style=MaterialTheme.typography.titleMedium);ReportPhotoMode.entries.forEach{mode->Row(verticalAlignment=Alignment.CenterVertically){RadioButton(state.reportPhotoMode==mode,{viewModel.setPhotoMode(mode)});Text(photoModeLabel(mode))}};if(state.reportPhotoMode!=ReportPhotoMode.NONE)Text(stringResource(R.string.report_sensitive_photo_warning),color=MaterialTheme.colorScheme.error);if(state.reportPhotoMode==ReportPhotoMode.ALL)Text(stringResource(R.string.report_photo_size,state.dataset?.counts?.photos?:0,formatBytes(state.dataset?.estimatedBytes?:0)),style=MaterialTheme.typography.bodySmall)}
-                item{Button(onClick={viewModel.generateReport();showReport=true},modifier=Modifier.testTag("generate_report"),enabled=!state.busy){Icon(Icons.Rounded.Description,null);Text(stringResource(R.string.report_preview_action))}}
+                item{Button(onClick={if(access.canExportPdf){viewModel.generateReport();showReport=true}else restriction=AccessRestriction.PdfRequiresPro},modifier=Modifier.testTag("generate_report"),enabled=!state.busy){Icon(Icons.Rounded.Description,null);Text(stringResource(R.string.report_preview_action))}}
             }
             item{state.history.lastCsvAt?.let{Text(stringResource(R.string.last_csv_export,ExportFormat.dateTime(it).orEmpty(),exportTypeLabel(state.history.lastCsvType?:ExportType.DEVICES),state.history.lastCsvCount))};state.history.lastReportAt?.let{Text(stringResource(R.string.last_report,ExportFormat.dateTime(it).orEmpty(),state.history.lastReportTarget.orEmpty()))}}
             state.error?.let{item{Text(it,color=MaterialTheme.colorScheme.error)}};state.message?.let{item{Text(it,color=MaterialTheme.colorScheme.primary)}};if(shareError)item{Text(stringResource(R.string.share_failed),color=MaterialTheme.colorScheme.error)}
@@ -60,6 +64,7 @@ import kotlinx.coroutines.launch
     if(showColumns)ColumnDialog(state,viewModel){showColumns=false}
     if(warning)AlertDialog({warning=false},title={Text(stringResource(R.string.share_confirmation))},text={Text(stringResource(R.string.csv_sensitive_warning))},confirmButton={TextButton({warning=false;share("text/csv",csvChooser,viewModel::shareFile)}){Text(stringResource(R.string.continue_sharing))}},dismissButton={TextButton({warning=false}){Text(stringResource(R.string.cancel))}})
     if(showReport)state.reportHtml?.let{html->ReportDialog(html,{share("text/html",reportChooser,viewModel::shareReportFile)},{showReport=false})}
+    restriction?.let { ProRestrictionDialog(it, { restriction=null; onOpenPro() }) { restriction=null } }
 }
 
 @Composable private fun exportTypeLabel(type:ExportType)=stringResource(when(type){ExportType.DEVICES->R.string.export_type_devices;ExportType.BSSIDS->R.string.export_type_bssids;ExportType.PHOTOS->R.string.export_type_photos;ExportType.REPORT->R.string.export_type_report})

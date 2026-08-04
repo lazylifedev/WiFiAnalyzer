@@ -10,6 +10,7 @@ import com.lazyapps.wifianalyzer.data.WifiUiPreferencesRepository
 import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
 import com.lazyapps.wifianalyzer.data.registry.WorkspaceRepository
 import com.lazyapps.wifianalyzer.export.*
+import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorMapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,6 +33,10 @@ data class ExportUiState(
 )
 
 class ExportViewModel(application: Application) : AndroidViewModel(application) {
+    @Volatile private var access = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Free)
+    fun setAccess(value: FeatureAccessPolicy) { access = value }
+    fun canExportCsv() = access.canExportCsv
+    fun canExportPdf() = access.canExportPdf
     private val db = WifiAnalyzerDatabase.get(application)
     private val workspaceRepository = WorkspaceRepository(application, db)
     private val repository = ExportRepository(application, db)
@@ -54,6 +59,7 @@ class ExportViewModel(application: Application) : AndroidViewModel(application) 
     fun refresh() { viewModelScope.launch { loadData() } }
 
     suspend fun writeCsv(uri: Uri): Result<Unit> { val initial = mutable.value; mutable.value = initial.copy(busy = true, error = null); return runCatching {
+        check(access.canExportCsv) { "CSV_REQUIRES_PRO" }
         val s = initial; val data = s.dataset ?: error("No export data"); val columns = activeColumns(s); require(columns.isNotEmpty())
         withContext(Dispatchers.IO) { getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { CsvWriter.write(it, columns, data.rows.asSequence()) } ?: error("Unable to open destination") }
         preferences.recordCsv(s.type, data.rows.size, true); mutable.value = mutable.value.copy(busy = false, history = preferences.history(), message = getApplication<Application>().getString(R.string.csv_saved))

@@ -150,6 +150,7 @@ fun WifiAnalyzerApp(
     }
     LaunchedEffect(billingState.entitlement, debugForcePro) {
         val access = FeatureAccessPolicy.from(billingState.entitlement, debugForcePro)
+        scanViewModel.setAccess(access)
         registryViewModel.setAccess(access)
         workspaceViewModel.setAccess(access)
         if (!access.isPro && billingState.entitlement != com.lazyapps.wifianalyzer.billing.ProEntitlementState.Unknown) activity?.let { AdMobManager.initialize(it) }
@@ -413,9 +414,11 @@ fun WifiAnalyzerApp(
                         onBack = { navController.popBackStack() },
                         onOpenWorkspace = { id -> workspaceViewModel.select(id); navController.navigateTopLevel(AppDestination.Devices.route) },
                         onOperationSuccess = {},
+                        access = accessPolicy,
+                        onOpenPro = openPro,
                     )
                 }
-                composable(EXPORT_ROUTE) { ExportScreen(onBack = { navController.popBackStack() }, onOperationSuccess = {}) }
+                composable(EXPORT_ROUTE) { ExportScreen(onBack = { navController.popBackStack() }, onOperationSuccess = {}, access = accessPolicy, onOpenPro = openPro) }
                 composable(IMPORT_ROUTE) { ImportScreen(onBack = { navController.popBackStack() }) }
                 composable(PRO_ROUTE) {
                     ProScreen(

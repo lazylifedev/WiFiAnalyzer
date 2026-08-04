@@ -572,6 +572,10 @@
     <string name="pro_restriction_message">This feature is available with Pro. Pro removes ads and unlocks device, photo, workspace, history, export, and backup limits.</string>
     <string name="pro_device_limit_message">The free version supports up to 5 saved devices.</string>
     <string name="pro_workspace_limit_message">The free version supports one workspace.</string>
+    <string name="pro_csv_limit_message">CSV export is available with Pro.</string>
+    <string name="pro_pdf_limit_message">PDF export is available with Pro.</string>
+    <string name="pro_backup_limit_message">Backup is available with Pro.</string>
+    <string name="pro_restore_limit_message">Restore is available with Pro.</string>
     <string name="view_pro">View Pro</string>
     <string name="error_device_not_found">The device was not found.</string>
     <string name="error_invalid_photo">The image is damaged or uses an unsupported format.</string>

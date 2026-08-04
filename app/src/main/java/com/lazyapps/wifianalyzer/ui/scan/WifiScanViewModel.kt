@@ -13,6 +13,8 @@ import com.lazyapps.wifianalyzer.data.ChannelDisplayMode
 import com.lazyapps.wifianalyzer.debug.DebugLogCategory
 import com.lazyapps.wifianalyzer.debug.DebugLogs
 import com.lazyapps.wifianalyzer.domain.WifiAnalysis
+import com.lazyapps.wifianalyzer.domain.HistoryRetentionPolicy
+import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import com.lazyapps.wifianalyzer.model.ChannelOccupancy
 import com.lazyapps.wifianalyzer.model.ScanState
 import com.lazyapps.wifianalyzer.model.SignalSample
@@ -51,6 +53,8 @@ data class ScanUiState(
 }
 
 class WifiScanViewModel(application: Application) : AndroidViewModel(application) {
+    @Volatile private var access = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Free)
+    fun setAccess(policy: FeatureAccessPolicy) { access = policy }
     private val repository = WifiScanRepository(application)
     private val preferences = WifiUiPreferencesRepository(application)
     private val _uiState = MutableStateFlow(ScanUiState())
@@ -108,13 +112,13 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
                         queue.addLast(SignalSample(ap.observedAtMillis, ap.rssi))
                         addedHistoryCount++
                     }
-                    while (queue.size > MAX_HISTORY_SAMPLES || queue.firstOrNull()?.timestampMillis?.let { now - it > HISTORY_WINDOW_MS } == true) {
+                    while (queue.size > MAX_HISTORY_SAMPLES || queue.firstOrNull()?.let { !HistoryRetentionPolicy.retain(listOf(it), now, access.isPro).contains(it) } == true) {
                         queue.removeFirst()
                     }
                     ap.copy(distanceRange = WifiAnalysis.distanceRange(queue.map { it.rssi }, ap.band))
                 }
                 samplesByBssid.values.forEach { queue ->
-                    while (queue.firstOrNull()?.timestampMillis?.let { now - it > HISTORY_WINDOW_MS } == true) queue.removeFirst()
+                    while (queue.firstOrNull()?.let { !HistoryRetentionPolicy.retain(listOf(it), now, access.isPro).contains(it) } == true) queue.removeFirst()
                 }
                 val selectedBssid = _uiState.value.selectedBssid
                 val selected = withDistances.firstOrNull { it.bssid == selectedBssid && now - it.observedAtMillis <= DETECTION_TIMEOUT_MS }

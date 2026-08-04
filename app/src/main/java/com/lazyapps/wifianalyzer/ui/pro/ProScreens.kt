@@ -103,6 +103,10 @@ fun ProRestrictionDialog(reason: AccessRestriction, onOpenPro: () -> Unit, onDis
         AccessRestriction.SavedDeviceLimitReached -> R.string.pro_device_limit_message
         AccessRestriction.WorkspaceLimitReached -> R.string.pro_workspace_limit_message
         AccessRestriction.DevicePhotoLimitReached -> R.string.pro_photo_limit_message
+        AccessRestriction.CsvRequiresPro -> R.string.pro_csv_limit_message
+        AccessRestriction.PdfRequiresPro -> R.string.pro_pdf_limit_message
+        AccessRestriction.BackupRequiresPro -> R.string.pro_backup_limit_message
+        AccessRestriction.RestoreRequiresPro -> R.string.pro_restore_limit_message
         else -> R.string.pro_restriction_message
     }
     AlertDialog(
