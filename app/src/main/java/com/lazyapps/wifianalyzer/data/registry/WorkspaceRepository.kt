@@ -8,6 +8,7 @@ import androidx.room.withTransaction
 import com.lazyapps.wifianalyzer.domain.Workspace
 import com.lazyapps.wifianalyzer.domain.WorkspaceCounts
 import com.lazyapps.wifianalyzer.domain.WorkspaceName
+import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -42,11 +43,12 @@ class WorkspaceRepository(private val context: Context, private val database: Wi
         context.workspaceDataStore.edit { it[selectedKey] = id }
     }
 
-    suspend fun create(name: String): Long = database.withTransaction {
+    suspend fun create(name: String, access: FeatureAccessPolicy = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Pro)): Long = database.withTransaction {
         val display = WorkspaceName.display(name)
         val normalized = WorkspaceName.normalized(name)
         if (normalized.isBlank()) throw RegistryValidationException(RegistryError.WORKSPACE_NAME_REQUIRED)
         val all = dao.getWorkspacesOnce()
+        if (!access.workspaceDecision(all.size).allowed) throw RegistryValidationException(RegistryError.WORKSPACE_LIMIT)
         if (all.any { it.normalizedName == normalized }) throw RegistryValidationException(RegistryError.DUPLICATE_WORKSPACE)
         val now = System.currentTimeMillis()
         dao.insertWorkspace(WorkspaceEntity(name = display, normalizedName = normalized, sortOrder = (all.maxOfOrNull { it.sortOrder } ?: -1) + 1, createdAt = now, updatedAt = now))

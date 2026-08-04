@@ -11,6 +11,7 @@ import com.lazyapps.wifianalyzer.domain.DeviceMatching
 import com.lazyapps.wifianalyzer.domain.GroupNameFormat
 import com.lazyapps.wifianalyzer.domain.RegisteredBssid
 import com.lazyapps.wifianalyzer.domain.RegisteredDevice
+import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -25,6 +26,7 @@ data class RegistrySnapshot(
 )
 
 enum class RegistryError {
+    DEVICE_LIMIT, WORKSPACE_LIMIT,
     WORKSPACE_NOT_FOUND, DEVICE_NAME_REQUIRED, BSSID_REQUIRED, INVALID_BSSID,
     DUPLICATE_BSSID_INPUT, BSSID_ALREADY_REGISTERED, GROUP_NOT_FOUND,
     GROUP_NAME_REQUIRED, GROUP_NAME_TOO_LONG, DUPLICATE_GROUP,
@@ -71,7 +73,7 @@ class DeviceRegistryRepository(private val context: Context, private val databas
         )
     } }
 
-    suspend fun save(input: DeviceInput): Long = database.withTransaction {
+    suspend fun save(input: DeviceInput, access: FeatureAccessPolicy = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Pro)): Long = database.withTransaction {
         val selectedWorkspaceId = workspaceRepository.snapshot.first().selectedId
         val workspaceId = input.workspaceId.takeIf { it != 0L } ?: selectedWorkspaceId
         if (dao.getWorkspace(workspaceId) == null) throw RegistryValidationException(RegistryError.WORKSPACE_NOT_FOUND)
@@ -94,6 +96,7 @@ class DeviceRegistryRepository(private val context: Context, private val databas
 
         val now = System.currentTimeMillis()
         val existing = input.id.takeIf { it != 0L }?.let { dao.getDevice(it) }
+        if (existing == null && !access.deviceDecision(dao.getAllDevices().size).allowed) throw RegistryValidationException(RegistryError.DEVICE_LIMIT)
         val entity = RegisteredWifiDeviceEntity(
             id = existing?.id ?: 0,
             displayName = displayName,

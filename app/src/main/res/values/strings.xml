@@ -565,6 +565,11 @@
     <string name="error_duplicate_workspace">A workspace with this name already exists.</string>
     <string name="error_duplicate_value">This value is already registered.</string>
     <string name="error_photo_limit">You can add up to 9 photos.</string>
+    <string name="error_device_limit">Free version supports up to 5 saved devices.</string>
+    <string name="error_workspace_limit">Free version supports one workspace.</string>
+    <string name="pro_limit_title">Available with Pro</string>
+    <string name="pro_photo_limit_message">The free version allows one photo per device.</string>
+    <string name="view_pro">View Pro</string>
     <string name="error_device_not_found">The device was not found.</string>
     <string name="error_invalid_photo">The image is damaged or uses an unsupported format.</string>
     <string name="error_photo_too_large">The image file is too large.</string>

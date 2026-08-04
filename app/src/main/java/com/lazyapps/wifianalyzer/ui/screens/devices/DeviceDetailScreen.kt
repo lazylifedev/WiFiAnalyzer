@@ -40,6 +40,7 @@ import androidx.compose.ui.res.stringResource
 import com.lazyapps.wifianalyzer.R
 import com.lazyapps.wifianalyzer.domain.DetectionPolicy
 import com.lazyapps.wifianalyzer.domain.RegisteredDevice
+import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import com.lazyapps.wifianalyzer.ui.components.localizedLabel
 import com.lazyapps.wifianalyzer.ui.components.ScreenHeader
@@ -57,6 +58,7 @@ fun DeviceDetailScreen(
     onMonitor: (String) -> Unit,
     onOcrUpdate: () -> Unit,
     useFeet: Boolean = false,
+    access: FeatureAccessPolicy = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Free),
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
     var chooseMonitor by remember { mutableStateOf(false) }
@@ -82,7 +84,7 @@ fun DeviceDetailScreen(
                 }
             })
         }
-        item { DevicePhotoGallery(device.id, device.workspaceId) }
+        item { DevicePhotoGallery(device.id, device.workspaceId, access) }
         item {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = AppSpacing.large),

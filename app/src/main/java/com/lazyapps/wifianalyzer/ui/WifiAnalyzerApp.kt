@@ -148,6 +148,8 @@ fun WifiAnalyzerApp(
     }
     LaunchedEffect(billingState.entitlement, debugForcePro) {
         val access = FeatureAccessPolicy.from(billingState.entitlement, debugForcePro)
+        registryViewModel.setAccess(access)
+        workspaceViewModel.setAccess(access)
         if (!access.isPro && billingState.entitlement != com.lazyapps.wifianalyzer.billing.ProEntitlementState.Unknown) activity?.let { AdMobManager.initialize(it) }
         kintoneViewModel.setAccessAllowed(access.canUseKintone)
     }
@@ -526,6 +528,7 @@ fun WifiAnalyzerApp(
                             deviceId?.let(registryViewModel::startEdit)
                             navController.navigate(OCR_REGISTRATION_ROUTE)
                         },
+                        access = accessPolicy,
                         useFeet = scanState.distanceUnit == com.lazyapps.wifianalyzer.data.DistanceUnitPreference.FEET,
                     )
                 }

@@ -8,6 +8,7 @@ import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
 import com.lazyapps.wifianalyzer.data.registry.WorkspaceRepository
 import com.lazyapps.wifianalyzer.domain.Workspace
 import com.lazyapps.wifianalyzer.domain.WorkspaceCounts
+import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorCategory
 import com.lazyapps.wifianalyzer.ui.operation.OperationErrorMapper
 import com.lazyapps.wifianalyzer.kintone.KintoneAutoSyncScheduler
@@ -27,6 +28,7 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
     val repository = WorkspaceRepository(application, WifiAnalyzerDatabase.get(application))
     private val autoSync = KintoneAutoSyncScheduler(application)
     private val _uiState = MutableStateFlow(WorkspaceUiState())
+    @Volatile private var access = FeatureAccessPolicy.from(com.lazyapps.wifianalyzer.billing.ProEntitlementState.Free)
     val uiState: StateFlow<WorkspaceUiState> = _uiState.asStateFlow()
 
     init {
@@ -39,7 +41,8 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun select(id: Long) = action { repository.select(id) }
-    fun create(name: String) = action { repository.select(repository.create(name)) }
+    fun setAccess(policy: FeatureAccessPolicy) { access = policy }
+    fun create(name: String) = action { repository.select(repository.create(name, access)) }
     fun rename(id: Long, name: String) = action { repository.rename(id, name); autoSync.requestChange(id) }
     fun move(id: Long, direction: Int) = action { repository.move(id, direction) }
     fun loadCounts(id: Long) { viewModelScope.launch { _uiState.value = _uiState.value.copy(deleteCounts = _uiState.value.deleteCounts + (id to repository.counts(id))) } }

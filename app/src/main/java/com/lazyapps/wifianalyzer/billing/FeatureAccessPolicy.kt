@@ -8,6 +8,8 @@ data class FeatureLimits(
 
 enum class AccessRestriction { SavedDeviceLimitReached, WorkspaceLimitReached, DevicePhotoLimitReached, CsvRequiresPro, PdfRequiresPro, BackupRequiresPro, RestoreRequiresPro }
 
+data class AccessDecision(val allowed: Boolean, val reason: AccessRestriction? = null, val currentCount: Int, val freeLimit: Int?, val proLimit: Int?)
+
 data class FeatureAccessPolicy(
     val isPro: Boolean,
     val limits: FeatureLimits = FeatureLimits(),
@@ -35,9 +37,13 @@ data class FeatureAccessPolicy(
         )
     }
 
-    fun restrictionForDeviceCount(total: Int) = if (isPro || total < (limits.maxDeviceCount ?: Int.MAX_VALUE)) null else AccessRestriction.SavedDeviceLimitReached
-    fun restrictionForWorkspaceCount(total: Int) = if (isPro || total < (limits.maxWorkspaceCount ?: Int.MAX_VALUE)) null else AccessRestriction.WorkspaceLimitReached
-    fun restrictionForPhotoCount(total: Int) = if (isPro || total < (limits.maxPhotosPerDevice ?: Int.MAX_VALUE)) null else AccessRestriction.DevicePhotoLimitReached
+    fun deviceDecision(total: Int) = decision(total, limits.maxDeviceCount, AccessRestriction.SavedDeviceLimitReached, 5, null)
+    fun workspaceDecision(total: Int) = decision(total, limits.maxWorkspaceCount, AccessRestriction.WorkspaceLimitReached, 1, null)
+    fun photoDecision(total: Int) = decision(total, limits.maxPhotosPerDevice, AccessRestriction.DevicePhotoLimitReached, 1, 9)
+    fun restrictionForDeviceCount(total: Int) = deviceDecision(total).reason
+    fun restrictionForWorkspaceCount(total: Int) = workspaceDecision(total).reason
+    fun restrictionForPhotoCount(total: Int) = photoDecision(total).reason
+    private fun decision(total: Int, freeLimit: Int?, reason: AccessRestriction, free: Int, pro: Int?) = AccessDecision(isPro || freeLimit == null || total < freeLimit, if (!isPro && freeLimit != null && total >= freeLimit) reason else null, total, free, pro)
 }
 
 enum class AdPlacement { HOME, CHANNEL, MONITOR, DEVICE_LIST, SETTINGS }
