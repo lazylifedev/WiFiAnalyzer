@@ -39,6 +39,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.lazyapps.wifianalyzer.R
+import com.lazyapps.wifianalyzer.ads.AdConfiguration
+import com.lazyapps.wifianalyzer.ads.InlineNativeAdContent
+import com.lazyapps.wifianalyzer.ads.InlineNativeAdPolicy
+import com.lazyapps.wifianalyzer.ads.rememberInlineNativeAd
 import com.lazyapps.wifianalyzer.model.DistanceRange
 import com.lazyapps.wifianalyzer.model.ScanState
 import com.lazyapps.wifianalyzer.model.SecurityType
@@ -73,9 +77,19 @@ fun HomeScreen(
     onBandSelected: (WifiBand) -> Unit = {},
     onOpenDevices: () -> Unit = {},
     onOpenOcr: () -> Unit = {},
+    showInlineNativeAd: Boolean = false,
+    inlineAdContent: (@Composable (Modifier) -> Unit)? = null,
 ) {
     val band = selectedBand
     val accessPoints = state.accessPointsFor(band)
+    val nativeAdIndex = InlineNativeAdPolicy.insertionIndex(accessPoints.size, InlineNativeAdPolicy.HOME_AFTER_COUNT)
+        ?.takeIf { showInlineNativeAd }
+    val screenNativeAd = if (inlineAdContent == null) rememberInlineNativeAd(
+        unitId = AdConfiguration.homeNativeUnitId,
+        enabled = showInlineNativeAd,
+        requestEligible = nativeAdIndex != null,
+        debugPlacement = "home",
+    ) else null
     val context = LocalContext.current
     val updated = state.lastUpdatedMillis?.let {
         stringResource(R.string.last_updated_time, DateFormat.getTimeFormat(context).format(Date(it)))
@@ -132,8 +146,22 @@ fun HomeScreen(
                 )
             }
         }
-        items(accessPoints, key = { it.bssid }) { accessPoint ->
-            AccessPointRow(accessPoint, onSelectAccessPoint, onRegisterAccessPoint, state.distanceUnit == DistanceUnitPreference.FEET, Modifier.padding(horizontal = AppSpacing.large))
+        val renderedItemCount = accessPoints.size + if (nativeAdIndex != null) 1 else 0
+        items(
+            count = renderedItemCount,
+            key = { listIndex ->
+                if (listIndex == nativeAdIndex) "home_inline_native_ad_item"
+                else "access_point_${accessPoints[if (nativeAdIndex != null && listIndex > nativeAdIndex) listIndex - 1 else listIndex].bssid}"
+            },
+        ) { listIndex ->
+            if (listIndex == nativeAdIndex) {
+                val adModifier = Modifier.padding(horizontal = AppSpacing.large, vertical = AppSpacing.small)
+                if (inlineAdContent != null) inlineAdContent(adModifier)
+                else InlineNativeAdContent(screenNativeAd, "home_inline_native_ad", adModifier)
+            } else {
+                val accessPointIndex = if (nativeAdIndex != null && listIndex > nativeAdIndex) listIndex - 1 else listIndex
+                AccessPointRow(accessPoints[accessPointIndex], onSelectAccessPoint, onRegisterAccessPoint, state.distanceUnit == DistanceUnitPreference.FEET, Modifier.padding(horizontal = AppSpacing.large))
+            }
         }
         }
         }

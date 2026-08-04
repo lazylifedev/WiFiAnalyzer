@@ -297,6 +297,7 @@ fun WifiAnalyzerApp(
                         onBandSelected = scanViewModel::selectHomeBand,
                         onOpenDevices = { navController.navigateTopLevel(AppDestination.Devices.route) },
                         onOpenOcr = { navController.navigate(OCR_REGISTRATION_ROUTE) },
+                        showInlineNativeAd = showAd,
                     )
                 }
                 composable(AppDestination.Channel.route) {
@@ -351,6 +352,7 @@ fun WifiAnalyzerApp(
                             registryViewModel.reconcile(scanState.accessPoints)
                         },
                         workspaceName = workspaceState.selected?.name,
+                        showInlineNativeAd = showAd,
                     )
                 }
                 composable(AppDestination.Settings.route) {

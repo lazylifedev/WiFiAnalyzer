@@ -1,4 +1,5 @@
 <resources>
+    <string name="ad_label">広告</string>
     <string name="app_name">Wi-Fiアナライザー</string>
     <string name="nav_home">ホーム</string>
     <string name="nav_channel">チャネル</string>

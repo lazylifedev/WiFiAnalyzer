@@ -10,6 +10,7 @@ import com.google.android.ump.UserMessagingPlatform
 
 object AdMobManager {
     val canRequestAds = mutableStateOf(false)
+    val mobileAdsInitialized = mutableStateOf(false)
     val privacyOptionsRequired = mutableStateOf(false)
     private var initialized = false
     var applicationContext: Context? = null
@@ -39,7 +40,9 @@ object AdMobManager {
             ConsentInformation.PrivacyOptionsRequirementStatus.REQUIRED
         if (canRequestAds.value && !initialized) {
             initialized = true
-            MobileAds.initialize(context.applicationContext)
+            MobileAds.initialize(context.applicationContext) {
+                mobileAdsInitialized.value = true
+            }
         }
         if (canRequestAds.value) InterstitialAdManager.prepare()
     }

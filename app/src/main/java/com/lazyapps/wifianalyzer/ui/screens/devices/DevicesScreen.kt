@@ -58,6 +58,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
 import com.lazyapps.wifianalyzer.R
+import com.lazyapps.wifianalyzer.ads.AdConfiguration
+import com.lazyapps.wifianalyzer.ads.InlineNativeAdContent
+import com.lazyapps.wifianalyzer.ads.InlineNativeAdPolicy
+import com.lazyapps.wifianalyzer.ads.rememberInlineNativeAd
 import com.lazyapps.wifianalyzer.domain.DetectionPolicy
 import com.lazyapps.wifianalyzer.domain.DeviceGroup
 import com.lazyapps.wifianalyzer.domain.RegisteredDevice
@@ -82,6 +86,8 @@ fun DevicesScreen(
     isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {},
     workspaceName: String? = null,
+    showInlineNativeAd: Boolean = false,
+    inlineAdContent: (@Composable (Modifier) -> Unit)? = null,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var searchVisible by rememberSaveable { mutableStateOf(false) }
@@ -109,6 +115,14 @@ fun DevicesScreen(
                 DeviceSort.REGISTERED -> sequence.sortedByDescending { it.createdAt }
             }
         }.toList()
+    val nativeAdIndex = InlineNativeAdPolicy.insertionIndex(visible.size, InlineNativeAdPolicy.DEVICES_AFTER_COUNT)
+        ?.takeIf { showInlineNativeAd }
+    val screenNativeAd = if (inlineAdContent == null) rememberInlineNativeAd(
+        unitId = AdConfiguration.devicesNativeUnitId,
+        enabled = showInlineNativeAd,
+        requestEligible = nativeAdIndex != null,
+        debugPlacement = "saved_devices",
+    ) else null
 
     PullToRefreshBox(isRefreshing = isRefreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
     LazyColumn(
@@ -170,8 +184,23 @@ fun DevicesScreen(
                 }
             }
         }
-        items(visible, key = { it.id }) { device ->
-            DeviceRow(device, { onOpenDevice(device.id) }, { deleteTarget = device }, Modifier.padding(horizontal = AppSpacing.large))
+        val renderedItemCount = visible.size + if (nativeAdIndex != null) 1 else 0
+        items(
+            count = renderedItemCount,
+            key = { listIndex ->
+                if (listIndex == nativeAdIndex) "devices_inline_native_ad_item"
+                else "device_${visible[if (nativeAdIndex != null && listIndex > nativeAdIndex) listIndex - 1 else listIndex].id}"
+            },
+        ) { listIndex ->
+            if (listIndex == nativeAdIndex) {
+                val adModifier = Modifier.padding(horizontal = AppSpacing.large, vertical = AppSpacing.small)
+                if (inlineAdContent != null) inlineAdContent(adModifier)
+                else InlineNativeAdContent(screenNativeAd, "devices_inline_native_ad", adModifier)
+            } else {
+                val deviceIndex = if (nativeAdIndex != null && listIndex > nativeAdIndex) listIndex - 1 else listIndex
+                val device = visible[deviceIndex]
+                DeviceRow(device, { onOpenDevice(device.id) }, { deleteTarget = device }, Modifier.padding(horizontal = AppSpacing.large))
+            }
         }
     }
     }
