@@ -75,6 +75,8 @@ import com.lazyapps.wifianalyzer.ui.screens.home.HomeScreen
 import com.lazyapps.wifianalyzer.ui.screens.monitor.MonitorScreen
 import com.lazyapps.wifianalyzer.ui.screens.settings.SettingsScreen
 import com.lazyapps.wifianalyzer.ui.pro.ProScreen
+import com.lazyapps.wifianalyzer.ui.pro.ProRestrictionDialog
+import com.lazyapps.wifianalyzer.billing.AccessRestriction
 import com.lazyapps.wifianalyzer.ui.pro.KintoneScreen
 import com.lazyapps.wifianalyzer.ui.pro.KintonePluginInfoScreen
 import com.lazyapps.wifianalyzer.ui.kintone.KintoneQrScreen
@@ -236,6 +238,10 @@ fun WifiAnalyzerApp(
         }
         val showBottomBar = currentRoute in AppDestination.bottomItems.map { it.route }
         val accessPolicy = FeatureAccessPolicy.from(billingState.entitlement, debugForcePro)
+        var restriction by remember { mutableStateOf<AccessRestriction?>(null) }
+        val openPro = { navController.navigate(PRO_ROUTE) { launchSingleTop = true } }
+        val addDevice = { if (accessPolicy.deviceDecision(registryState.devices.size).allowed) { registryViewModel.startNew(); navController.navigate(REGISTRATION_ROUTE) } else restriction = AccessRestriction.SavedDeviceLimitReached }
+        val createWorkspace: (String) -> Unit = { name -> if (accessPolicy.workspaceDecision(workspaceState.workspaces.size).allowed) workspaceViewModel.create(name) else restriction = AccessRestriction.WorkspaceLimitReached }
         val adPlacement = when (currentRoute) {
             AppDestination.Home.route -> com.lazyapps.wifianalyzer.billing.AdPlacement.HOME
             AppDestination.Channel.route -> com.lazyapps.wifianalyzer.billing.AdPlacement.CHANNEL
@@ -248,6 +254,7 @@ fun WifiAnalyzerApp(
             adPlacement != null && AdVisibilityPolicy(accessPolicy).canShow(adPlacement)
 
         Box {
+        restriction?.let { reason -> ProRestrictionDialog(reason, openPro) { restriction = null } }
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets.safeDrawing,
@@ -336,8 +343,8 @@ fun WifiAnalyzerApp(
                         devices = registryState.devices,
                         groups = registryState.groups,
                         errorMessage = registryState.errorMessage,
-                        onAddDevice = { registryViewModel.startNew(); navController.navigate(REGISTRATION_ROUTE) },
-                        onScanLabel = { navController.navigate(OCR_REGISTRATION_ROUTE) },
+                        onAddDevice = addDevice,
+                        onScanLabel = { if (accessPolicy.deviceDecision(registryState.devices.size).allowed) navController.navigate(OCR_REGISTRATION_ROUTE) else restriction = AccessRestriction.SavedDeviceLimitReached },
                         onOpenDevice = { navController.navigate(deviceDetailRoute(it)) },
                         onDeleteDevice = registryViewModel::deleteDevice,
                         onCreateGroup = registryViewModel::createGroup,
@@ -368,7 +375,7 @@ fun WifiAnalyzerApp(
                         onVisibleBandsChange = scanViewModel::setVisibleBands,
                         workspaceState = workspaceState,
                         onSelectWorkspace = workspaceViewModel::select,
-                        onCreateWorkspace = workspaceViewModel::create,
+                        onCreateWorkspace = createWorkspace,
                         onRenameWorkspace = workspaceViewModel::rename,
                         onMoveWorkspace = workspaceViewModel::move,
                         onDeleteWorkspace = workspaceViewModel::delete,

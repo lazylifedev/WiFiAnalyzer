@@ -93,4 +93,22 @@ class BillingPolicyTest {
     @Test fun normalFreeEntitlementDoesNotBecomePro() {
         assertFalse(FeatureAccessPolicy.from(ProEntitlementState.Free, debugForcePro = false).isPro)
     }
+    @Test fun freeDecisionProvidesReasonAndCounts() {
+        val access = FeatureAccessPolicy.from(ProEntitlementState.Free)
+        assertEquals(AccessRestriction.SavedDeviceLimitReached, access.deviceDecision(5).reason)
+        assertEquals(5, access.deviceDecision(5).currentCount)
+        assertEquals(5, access.deviceDecision(5).freeLimit)
+        assertTrue(access.deviceDecision(4).allowed)
+    }
+    @Test fun proDecisionAllowsAllEntitlementActions() {
+        val access = FeatureAccessPolicy.from(ProEntitlementState.Pro)
+        assertTrue(access.deviceDecision(100).allowed)
+        assertTrue(access.workspaceDecision(100).allowed)
+        assertTrue(access.photoDecision(100).allowed)
+    }
+    @Test fun eachRestrictionHasItsOwnReason() {
+        val access = FeatureAccessPolicy.from(ProEntitlementState.Free)
+        assertEquals(AccessRestriction.WorkspaceLimitReached, access.workspaceDecision(1).reason)
+        assertEquals(AccessRestriction.DevicePhotoLimitReached, access.photoDecision(1).reason)
+    }
 }
