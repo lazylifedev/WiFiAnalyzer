@@ -14,6 +14,8 @@ interface RegistryDao {
     suspend fun insertHistory(items: List<SignalHistoryEntity>)
     @Query("SELECT * FROM signal_history WHERE workspace_id = :workspaceId AND bssid = :bssid ORDER BY timestamp_millis ASC")
     fun observeHistory(workspaceId: Long, bssid: String): Flow<List<SignalHistoryEntity>>
+    @Query("SELECT * FROM signal_history WHERE workspace_id = :workspaceId AND bssid = :bssid ORDER BY timestamp_millis DESC LIMIT :limit")
+    fun observeLatestHistory(workspaceId: Long, bssid: String, limit: Int): Flow<List<SignalHistoryEntity>>
     @Query("DELETE FROM signal_history WHERE timestamp_millis < :cutoff")
     suspend fun deleteHistoryBefore(cutoff: Long): Int
     @Query("SELECT * FROM kintone_connections WHERE workspace_id = :workspaceId") fun observeKintoneConnection(workspaceId: Long): Flow<KintoneConnectionEntity?>

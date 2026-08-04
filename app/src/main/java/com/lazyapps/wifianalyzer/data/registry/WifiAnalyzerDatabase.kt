@@ -20,7 +20,8 @@ abstract class WifiAnalyzerDatabase : RoomDatabase() {
         val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("DELETE FROM signal_history WHERE id NOT IN (SELECT MIN(id) FROM signal_history GROUP BY workspace_id, bssid, timestamp_millis)")
-                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_signal_history_workspace_id_bssid_timestamp_millis` ON `signal_history` (`workspace_id`, `bssid`, `timestamp_millis`)")
+                db.execSQL("DROP INDEX IF EXISTS `index_signal_history_workspace_id_bssid_timestamp_millis`")
+                db.execSQL("CREATE UNIQUE INDEX `index_signal_history_workspace_id_bssid_timestamp_millis` ON `signal_history` (`workspace_id`, `bssid`, `timestamp_millis`)")
             }
         }
         val MIGRATION_3_4 = object : Migration(3, 4) {

@@ -341,8 +341,8 @@ class WifiScanViewModel(application: Application) : AndroidViewModel(application
         historyJob = viewModelScope.launch {
             val workspaceId = selectedWorkspaceId.takeIf { it != 0L } ?: workspaceRepository.snapshot.first().selectedId
             if (workspaceId == 0L) return@launch
-            historyRepository.observe(workspaceId, normalized).collectLatest { rows ->
-                _uiState.value = _uiState.value.copy(signalHistory = rows.takeLast(MAX_HISTORY_SAMPLES).map { SignalSample(it.timestampMillis, it.rssi) })
+            historyRepository.observeLatest(workspaceId, normalized).collectLatest { rows ->
+                _uiState.value = _uiState.value.copy(signalHistory = rows.asReversed().map { SignalSample(it.timestampMillis, it.rssi) })
             }
         }
     }
