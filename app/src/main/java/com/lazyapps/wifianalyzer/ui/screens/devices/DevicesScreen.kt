@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
@@ -58,6 +59,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.pluralStringResource
 import com.lazyapps.wifianalyzer.R
+import com.lazyapps.wifianalyzer.ads.AdConfiguration
+import com.lazyapps.wifianalyzer.ads.InlineNativeAd
+import com.lazyapps.wifianalyzer.ads.InlineNativeAdPolicy
 import com.lazyapps.wifianalyzer.domain.DetectionPolicy
 import com.lazyapps.wifianalyzer.domain.DeviceGroup
 import com.lazyapps.wifianalyzer.domain.RegisteredDevice
@@ -82,6 +86,10 @@ fun DevicesScreen(
     isRefreshing: Boolean = false,
     onRefresh: () -> Unit = {},
     workspaceName: String? = null,
+    showInlineNativeAd: Boolean = false,
+    inlineAdContent: @Composable (Modifier) -> Unit = { modifier ->
+        InlineNativeAd(AdConfiguration.devicesNativeUnitId, "devices_inline_native_ad", modifier)
+    },
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var searchVisible by rememberSaveable { mutableStateOf(false) }
@@ -170,8 +178,15 @@ fun DevicesScreen(
                 }
             }
         }
-        items(visible, key = { it.id }) { device ->
-            DeviceRow(device, { onOpenDevice(device.id) }, { deleteTarget = device }, Modifier.padding(horizontal = AppSpacing.large))
+        val nativeAdIndex = InlineNativeAdPolicy.insertionIndex(visible.size, InlineNativeAdPolicy.DEVICES_AFTER_COUNT)
+            ?.takeIf { showInlineNativeAd }
+        itemsIndexed(visible, key = { _, item -> "device_${item.id}" }) { index, device ->
+            Column {
+                DeviceRow(device, { onOpenDevice(device.id) }, { deleteTarget = device }, Modifier.padding(horizontal = AppSpacing.large))
+                if (nativeAdIndex == index + 1) {
+                    inlineAdContent(Modifier.padding(horizontal = AppSpacing.large, vertical = AppSpacing.small))
+                }
+            }
         }
     }
     }
