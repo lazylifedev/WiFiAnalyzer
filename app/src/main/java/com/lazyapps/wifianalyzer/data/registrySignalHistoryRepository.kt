@@ -6,13 +6,23 @@ import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import kotlinx.coroutines.flow.Flow
 
 class SignalHistoryRepository(private val database: WifiAnalyzerDatabase) {
-    companion object { const val MAX_POINTS = 900 }
+    companion object { const val MAX_POINTS = 900; const val LONG_TERM_RETENTION_MILLIS = 30L * 24 * 60 * 60 * 1000; const val COMPACTION_BUCKET_MILLIS = 5L * 60 * 1000; const val LONG_TERM_MAX_POINTS = 10_000 }
     private val dao = database.registryDao()
+    @Volatile private var lastMaintenanceAt = Long.MIN_VALUE
     suspend fun insert(workspaceId: Long, points: List<WifiAccessPoint>, access: FeatureAccessPolicy, now: Long) = database.withTransaction {
         if (points.isNotEmpty()) dao.insertHistory(points.distinctBy { it.bssid to it.observedAtMillis }.map { SignalHistoryEntity(workspaceId = workspaceId, bssid = it.bssid, ssid = it.ssid, timestampMillis = it.observedAtMillis, rssi = it.rssi, frequencyMhz = it.frequencyMhz, channel = it.channel, band = it.band.name) })
         if (!access.isPro) dao.deleteHistoryBefore(now - 24L * 60L * 60L * 1000L)
+        else if (now - lastMaintenanceAt >= 24L * 60L * 60L * 1000L) { maintainPro(now); lastMaintenanceAt = now }
     }
     fun observe(workspaceId: Long, bssid: String): Flow<List<SignalHistoryEntity>> = dao.observeHistory(workspaceId, bssid)
     fun observeLatest(workspaceId: Long, bssid: String): Flow<List<SignalHistoryEntity>> = dao.observeLatestHistory(workspaceId, bssid, MAX_POINTS)
     suspend fun cleanupFree(now: Long) = dao.deleteHistoryBefore(now - 24L * 60L * 60L * 1000L)
+    suspend fun maintainPro(now: Long): Int = database.withTransaction {
+        val cutoff24 = now - 24L * 60L * 60 * 1000
+        val cutoff30 = now - LONG_TERM_RETENTION_MILLIS
+        dao.deleteHistoryBeforeLongTerm(cutoff30) +
+            dao.deleteUnregisteredHistoryBefore(cutoff24) +
+            dao.compactRegisteredHistory(cutoff24) +
+            dao.capLongTermHistory(cutoff24)
+    }
 }

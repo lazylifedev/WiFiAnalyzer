@@ -5,6 +5,9 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.lazyapps.wifianalyzer.billing.FeatureAccessPolicy
 import com.lazyapps.wifianalyzer.data.registry.SignalHistoryRepository
+import com.lazyapps.wifianalyzer.data.registry.RegisteredWifiDeviceEntity
+import com.lazyapps.wifianalyzer.data.registry.WifiDeviceBssidEntity
+import com.lazyapps.wifianalyzer.data.registry.WorkspaceEntity
 import com.lazyapps.wifianalyzer.data.registry.WifiAnalyzerDatabase
 import com.lazyapps.wifianalyzer.model.DistanceRange
 import com.lazyapps.wifianalyzer.model.SecurityType
@@ -49,6 +52,18 @@ class SignalHistoryRepositoryTest {
         repository.insert(1L, listOf(point(now - 24L * 60 * 60 * 1000 - 1, "one"), point(now - 24L * 60 * 60 * 1000, "two")), FeatureAccessPolicy(isPro = false), now)
         assertEquals(1, repository.observe(1L, "two").first().size)
         assertTrue(repository.observe(1L, "one").first().isEmpty())
+    }
+
+    @Test fun proMaintenanceKeepsRegisteredLongTermBucketsAndDeletesUnregistered() = runBlocking {
+        val now = 40L * 24 * 60 * 60 * 1000
+        val workspace = database.registryDao().insertWorkspace(WorkspaceEntity(name = "Office", normalizedName = "office", sortOrder = 0, createdAt = 1, updatedAt = 1))
+        val device = database.registryDao().insertDevice(RegisteredWifiDeviceEntity(displayName = "Router", primaryBssid = "aa:bb:cc:dd:ee:ff", createdAt = 1, updatedAt = 1, workspaceId = workspace))
+        database.registryDao().insertBssids(listOf(WifiDeviceBssidEntity(deviceId = device, bssid = "aa:bb:cc:dd:ee:ff", band = "BAND_24", createdAt = 1, workspaceId = workspace)))
+        val registered = listOf(point(now - 25L * 60 * 60 * 1000 + 10_000, "aa:bb:cc:dd:ee:ff"), point(now - 25L * 60 * 60 * 1000 + 200_000, "aa:bb:cc:dd:ee:ff"), point(now - 25L * 60 * 60 * 1000 + 400_000, "aa:bb:cc:dd:ee:ff"))
+        repository.insert(workspace, registered + point(now - 25L * 60 * 60 * 1000, "11:22:33:44:55:66"), FeatureAccessPolicy(isPro = true), now)
+        repository.maintainPro(now)
+        assertEquals(2, repository.observe(workspace, "aa:bb:cc:dd:ee:ff").first().size)
+        assertTrue(repository.observe(workspace, "11:22:33:44:55:66").first().isEmpty())
     }
 
     private fun point(timestamp: Long, bssid: String) = WifiAccessPoint("ssid", bssid, -55, 2412, 1, 20, "WPA2", timestamp * 1000, WifiBand.BAND_24, SignalQuality.GOOD, SecurityType.WPA2, WifiStandard.WIFI_4, DistanceRange.ONE_TO_THREE, timestamp)
