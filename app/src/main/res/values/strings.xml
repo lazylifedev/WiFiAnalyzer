@@ -597,4 +597,5 @@
     <string name="privacy_policy">Privacy Policy</string>
     <string name="terms_of_service">Terms of Service</string>
     <string name="external_link_unavailable">No browser is available to open this link.</string>
+    <string name="backup_contents_description">Backs up registered devices, workspaces, photos, and settings. Wi-Fi measurement history is not included.</string>
 </resources>

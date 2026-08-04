@@ -26,6 +26,8 @@ interface RegistryDao {
     suspend fun compactRegisteredHistory(cutoff24: Long): Int
     @Query("DELETE FROM signal_history WHERE timestamp_millis < :cutoff24 AND id NOT IN (SELECT id FROM signal_history h WHERE h.timestamp_millis < :cutoff24 AND h.workspace_id = signal_history.workspace_id AND h.bssid = signal_history.bssid ORDER BY h.timestamp_millis DESC, h.id DESC LIMIT 10000)")
     suspend fun capLongTermHistory(cutoff24: Long): Int
+    @Query("DELETE FROM signal_history WHERE id IN (SELECT id FROM signal_history WHERE timestamp_millis < :cutoff24 ORDER BY timestamp_millis ASC, id ASC LIMIT :limit)")
+    suspend fun deleteOldestLongTermBatch(cutoff24: Long, limit: Int): Int
     @Query("SELECT * FROM kintone_connections WHERE workspace_id = :workspaceId") fun observeKintoneConnection(workspaceId: Long): Flow<KintoneConnectionEntity?>
     @Query("SELECT * FROM kintone_connections WHERE workspace_id = :workspaceId") suspend fun getKintoneConnection(workspaceId: Long): KintoneConnectionEntity?
     @Query("SELECT COUNT(*) FROM kintone_connections WHERE domain = :domain AND app_id = :appId AND workspace_id != :workspaceId") suspend fun countOtherKintoneConnections(domain: String, appId: Long, workspaceId: Long): Int

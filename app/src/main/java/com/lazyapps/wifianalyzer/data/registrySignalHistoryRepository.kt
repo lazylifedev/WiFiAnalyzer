@@ -6,7 +6,7 @@ import com.lazyapps.wifianalyzer.model.WifiAccessPoint
 import kotlinx.coroutines.flow.Flow
 
 class SignalHistoryRepository(private val database: WifiAnalyzerDatabase) {
-    companion object { const val MAX_POINTS = 900; const val LONG_TERM_RETENTION_MILLIS = 30L * 24 * 60 * 60 * 1000; const val COMPACTION_BUCKET_MILLIS = 5L * 60 * 1000; const val LONG_TERM_MAX_POINTS = 10_000 }
+    companion object { const val MAX_POINTS = 900; const val LONG_TERM_RETENTION_MILLIS = 30L * 24 * 60 * 60 * 1000; const val COMPACTION_BUCKET_MILLIS = 5L * 60 * 1000; const val LONG_TERM_MAX_POINTS = 10_000; const val CAPACITY_START_BYTES = 100L * 1024 * 1024; const val CAPACITY_TARGET_BYTES = 90L * 1024 * 1024 }
     private val dao = database.registryDao()
     @Volatile private var lastMaintenanceAt = Long.MIN_VALUE
     suspend fun insert(workspaceId: Long, points: List<WifiAccessPoint>, access: FeatureAccessPolicy, now: Long) = database.withTransaction {
@@ -20,9 +20,21 @@ class SignalHistoryRepository(private val database: WifiAnalyzerDatabase) {
     suspend fun maintainPro(now: Long): Int = database.withTransaction {
         val cutoff24 = now - 24L * 60L * 60 * 1000
         val cutoff30 = now - LONG_TERM_RETENTION_MILLIS
-        dao.deleteHistoryBeforeLongTerm(cutoff30) +
+        var deleted = dao.deleteHistoryBeforeLongTerm(cutoff30) +
             dao.deleteUnregisteredHistoryBefore(cutoff24) +
             dao.compactRegisteredHistory(cutoff24) +
             dao.capLongTermHistory(cutoff24)
+        while (usedBytes() > CAPACITY_START_BYTES) {
+            val before = usedBytes()
+            val removed = dao.deleteOldestLongTermBatch(cutoff24, 1_000)
+            deleted += removed
+            if (removed == 0 || usedBytes() >= before) break
+            if (usedBytes() <= CAPACITY_TARGET_BYTES) break
+        }
+        deleted
+    }
+    private fun usedBytes(): Long {
+        fun pragma(name: String): Long = database.openHelper.writableDatabase.query("PRAGMA $name").use { if (it.moveToFirst()) it.getLong(0) else 0L }
+        return (pragma("page_count") - pragma("freelist_count")).coerceAtLeast(0L) * pragma("page_size")
     }
 }
