@@ -25,6 +25,17 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    val umpTestDeviceHash = providers.gradleProperty("umpTestDeviceHash").orNull ?: ""
+    val umpForceEea = providers.gradleProperty("umpForceEea").orNull == "true"
+    buildTypes.getByName("debug") {
+        buildConfigField("String", "UMP_TEST_DEVICE_HASH", "\"$umpTestDeviceHash\"")
+        buildConfigField("boolean", "UMP_FORCE_EEA", umpForceEea.toString())
+    }
+    buildTypes.getByName("release") {
+        buildConfigField("String", "UMP_TEST_DEVICE_HASH", "\"\"")
+        buildConfigField("boolean", "UMP_FORCE_EEA", "false")
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -42,10 +53,6 @@ android {
         compose = true
         buildConfig = true
     }
-}
-
-configurations.configureEach {
-    resolutionStrategy.force("com.google.android.ump:user-messaging-platform:3.2.0")
 }
 
 ksp {
