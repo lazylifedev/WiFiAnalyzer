@@ -154,7 +154,12 @@ fun WifiAnalyzerApp(
         scanViewModel.setAccess(access)
         registryViewModel.setAccess(access)
         workspaceViewModel.setAccess(access)
-        if (!access.isPro && billingState.entitlement != com.lazyapps.wifianalyzer.billing.ProEntitlementState.Unknown) activity?.let { AdMobManager.initialize(it) }
+        if (!access.isPro &&
+            billingState.entitlement != com.lazyapps.wifianalyzer.billing.ProEntitlementState.Unknown &&
+            lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+        ) {
+            activity?.let { AdMobManager.initialize(it) }
+        }
         kintoneViewModel.setAccessAllowed(access.canUseKintone)
     }
 

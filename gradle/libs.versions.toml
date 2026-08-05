@@ -22,7 +22,7 @@ kotlinxSerialization = "1.9.0"
 billing = "9.1.0"
 playReview = "2.0.2"
 ads = "25.4.0"
-ump = "3.2.0"
+ump = "4.0.0"
 work = "2.10.5"
 
 [libraries]

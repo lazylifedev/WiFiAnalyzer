@@ -44,10 +44,6 @@ android {
     }
 }
 
-configurations.configureEach {
-    resolutionStrategy.force("com.google.android.ump:user-messaging-platform:3.2.0")
-}
-
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
     arg("room.generateKotlin", "true")

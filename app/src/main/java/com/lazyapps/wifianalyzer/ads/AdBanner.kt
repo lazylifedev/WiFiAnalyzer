@@ -19,7 +19,7 @@ import com.google.android.gms.ads.AdListener
 
 @Composable
 fun AdBanner(modifier: Modifier = Modifier) {
-    if (!AdMobManager.canRequestAds.value) return
+    if (!AdMobManager.canRequestAds.value || !AdMobManager.mobileAdsInitialized.value) return
     val context = LocalContext.current
     var loaded by remember { androidx.compose.runtime.mutableStateOf(false) }
     val adView = remember { AdView(context).apply {
