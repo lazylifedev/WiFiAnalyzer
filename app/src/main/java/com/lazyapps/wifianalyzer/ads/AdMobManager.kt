@@ -2,6 +2,7 @@ package com.lazyapps.wifianalyzer.ads
 
 import android.app.Activity
 import androidx.compose.runtime.mutableStateOf
+import com.lazyapps.wifianalyzer.BuildConfig
 import com.google.android.gms.ads.MobileAds
 import com.google.android.ump.ConsentInformation
 import com.google.android.ump.ConsentRequestParameters
@@ -19,7 +20,15 @@ object AdMobManager {
         if (!isUsable(activity) || consentUpdateInFlight || initialized) return
         consentUpdateInFlight = true
         val info = UserMessagingPlatform.getConsentInformation(activity)
-        val params = ConsentRequestParameters.Builder().build()
+        val paramsBuilder = ConsentRequestParameters.Builder()
+        if (BuildConfig.DEBUG && BuildConfig.UMP_FORCE_EEA && BuildConfig.UMP_TEST_DEVICE_HASH.isNotBlank()) {
+            val debugSettings = com.google.android.ump.ConsentDebugSettings.Builder(activity)
+                .setDebugGeography(com.google.android.ump.ConsentDebugSettings.DebugGeography.DEBUG_GEOGRAPHY_EEA)
+                .addTestDeviceHashedId(BuildConfig.UMP_TEST_DEVICE_HASH)
+                .build()
+            paramsBuilder.setConsentDebugSettings(debugSettings)
+        }
+        val params = paramsBuilder.build()
         info.requestConsentInfoUpdate(activity, params, {
             UserMessagingPlatform.loadAndShowConsentFormIfRequired(activity) {
                 finishConsentFlow(activity, info)
